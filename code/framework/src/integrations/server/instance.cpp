@@ -465,6 +465,9 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::RunOnScriptThread(Utils::TaskScheduler::Task task) {
+        // The task runs on the script thread while this one waits, and what runs there asks the world
+        // for entities: one this thread still held would never be given, and neither thread would move.
+        Framework::Networking::Replication::World::RequireNoneHeld("a task was run on the script thread and waited for");
         if (_scriptThread) {
             _scriptThread->Run(std::move(task));
         }

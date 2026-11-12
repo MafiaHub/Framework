@@ -142,6 +142,7 @@ namespace ServerPacketThreadTest {
         std::atomic<int> connects {0};
         std::atomic<int> disconnects {0};
         std::atomic<int> holds {0};
+        std::atomic<int> ranOnScripts {0};
         std::atomic<bool> heldAvatar {false};
         std::atomic<bool> blocked {false};
         std::atomic<bool> release {false};
@@ -178,8 +179,22 @@ namespace ServerPacketThreadTest {
                 sender.Reply(pong);
             });
             net->RegisterRPC<Hold>([this](const Hold &hold, Sender sender, World &world) {
-                const auto avatar = world.Write<Avatar>(sender.Avatar());
-                heldAvatar        = static_cast<bool>(avatar);
+                auto avatar = world.Write<Avatar>(sender.Avatar());
+                heldAvatar  = static_cast<bool>(avatar);
+                // Asking the script thread for something and waiting: only once the handle is let go.
+                if (hold.value == 2) {
+                    const uint64_t id = avatar.Id();
+                    avatar.Reset();
+                    RunOnScriptThread([this, id, &world] {
+                        // There, the entity is asked for again, which the waiting handler no longer keeps.
+                        if (const auto again = world.Write<Avatar>(id)) {
+                            again->counter = 4242;
+                            ++ranOnScripts;
+                        }
+                    });
+                    ++holds;
+                    return;
+                }
                 Framework::Scripting::EngineScope scope(GetScriptingModule()->GetEngine());
                 std::vector<v8::Local<v8::Value>> args {v8pp::to_v8(scope.Isolate(), std::string("held"))};
                 // With the sender itself as an argument, wrapped for script as a mod's event helpers wrap it.
@@ -868,6 +883,36 @@ MODULE(server_packet_thread, {
         }),
             true);
         STREQUALS(refused.c_str(), "yes,yes");
+        server.Stop();
+    });
+
+    IT("lets a handler wait for the script thread once it has let go of its handle", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_run");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        const uint64_t avatarId = server.Replication()->GetViewerId(client.Guid());
+        client.Send<Hold>(2);
+        EQUALS(Pump(server, {&client}, [&] {
+            return server.holds.load() == 1;
+        }),
+            true);
+        EQUALS(server.heldAvatar.load(), true);
+        EQUALS(server.ranOnScripts.load(), 1);
+        uint32_t counter = 0;
+        {
+            const auto avatar = server.Replication()->GetWorld().Read<Avatar>(avatarId);
+            counter           = avatar ? avatar->counter : 0;
+        }
+        EQUALS(counter, 4242u);
         server.Stop();
     });
 

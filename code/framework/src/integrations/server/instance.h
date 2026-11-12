@@ -486,6 +486,8 @@ namespace Framework::Integrations::Server {
         // code. Before Init() and after Shutdown() it runs at once.
         void PostToScripts(Utils::TaskScheduler::Task task);
         // The same, and waits for it. From the tick thread the world may have changed when it returns.
+        // Not from inside a handle's scope: the task may need the entity held, so the call logs and
+        // aborts, as EmitReservedSync does. Let go first (Ref::Reset), or use PostToScripts.
         void RunOnScriptThread(Utils::TaskScheduler::Task task);
 
         // Blocking work goes here instead of into the tick: RunInBackground for the work, with a
