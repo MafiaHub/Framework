@@ -206,7 +206,7 @@ License:
 /* TEST CHECKS */
 #define UNIT_FAIL_WITH(a, relation, b)                                                                                 \
     {                                                                                                                  \
-        _errstr  = unit__failure(#a, unit__describe(a), relation, #b, unit__describe(b), __FILE__, __LINE__);          \
+        _errstr  = unit__failure(#a, unit__describe((a)), relation, #b, unit__describe((b)), __FILE__, __LINE__);          \
         _lasterr = 1;                                                                                                  \
         break;                                                                                                         \
     }
@@ -214,47 +214,47 @@ License:
 #define UFAIL(a, b)   UNIT_FAIL_WITH(a, "==", b)
 #define STRFAIL(a, b) UNIT_FAIL_WITH(a, "equals", b)
 #define EQUALS(a, b)                                                                                                   \
-    if (a != b) {                                                                                                      \
+    if ((a) != (b)) {                                                                                                      \
         UNIT_FAIL_WITH(a, "==", b);                                                                                    \
     }
 #define UEQUALS(a, b)                                                                                                  \
-    if (a != b) {                                                                                                      \
+    if ((a) != (b)) {                                                                                                      \
         UNIT_FAIL_WITH(a, "==", b);                                                                                    \
     }
 #define STREQUALS(a, b)                                                                                                \
-    if (!!strcmp(a, b)) {                                                                                              \
+    if (!!strcmp((a), (b))) {                                                                                              \
         UNIT_FAIL_WITH(a, "equals", b);                                                                                \
     }
 #define STRCEQUALS(a, b, c)                                                                                            \
-    if (!!strncmp(a, b, c)) {                                                                                          \
+    if (!!strncmp((a), (b), (c))) {                                                                                          \
         UNIT_FAIL_WITH(a, "starts like (first " #c " chars)", b);                                                      \
     }
 #define STRCNEQUALS(a, b, c)                                                                                           \
-    if (!strncmp(a, b, c)) {                                                                                           \
+    if (!strncmp((a), (b), (c))) {                                                                                           \
         UNIT_FAIL_WITH(a, "differs from (first " #c " chars)", b);                                                     \
     }
 #define STRNEQUALS(a, b)                                                                                               \
-    if (!strcmp(a, b)) {                                                                                               \
+    if (!strcmp((a), (b))) {                                                                                               \
         UNIT_FAIL_WITH(a, "differs from", b);                                                                          \
     }
 #define NEQUALS(a, b)                                                                                                  \
-    if (a == b) {                                                                                                      \
+    if ((a) == (b)) {                                                                                                      \
         UNIT_FAIL_WITH(a, "!=", b);                                                                                    \
     }
 #define LESSER(a, b)                                                                                                   \
-    if (a >= b) {                                                                                                      \
+    if ((a) >= (b)) {                                                                                                      \
         UNIT_FAIL_WITH(a, "<", b);                                                                                     \
     }
 #define GREATER(a, b)                                                                                                  \
-    if (a <= b) {                                                                                                      \
+    if ((a) <= (b)) {                                                                                                      \
         UNIT_FAIL_WITH(a, ">", b);                                                                                     \
     }
 #define LESSEREQ(a, b)                                                                                                 \
-    if (a > b) {                                                                                                       \
+    if ((a) > (b)) {                                                                                                       \
         UNIT_FAIL_WITH(a, "<=", b);                                                                                    \
     }
 #define GREATEREQ(a, b)                                                                                                \
-    if (a < b) {                                                                                                       \
+    if ((a) < (b)) {                                                                                                       \
         UNIT_FAIL_WITH(a, ">=", b);                                                                                    \
     }
 #define SKIP()                                                                                                         \
