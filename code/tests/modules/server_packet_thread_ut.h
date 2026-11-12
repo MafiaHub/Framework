@@ -725,6 +725,32 @@ MODULE(server_packet_thread, {
         server.Stop();
     });
 
+    IT("leaves an entity the tick creates out of the resource whose script was stopped for that tick", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_tick_owner");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        PumpFor(server, {}, 50ms);
+        // A script stopped at a safe point for a tick is still, as far as the scripting side says, the one
+        // running: said here for it, for the length of a tick in which the mod creates entities.
+        auto *resources = server.GetScriptingModule()->GetResourceManager();
+        resources->SetCurrentResourceContext("demo");
+        server.spawnProps = 3;
+        server.Update();
+        const bool spawned = Pump(server, {}, [&] {
+            return server.spawnProps == 0;
+        });
+        resources->SetCurrentResourceContext("");
+        EQUALS(spawned, true);
+        EQUALS(server.Count(Framework::Networking::Replication::EntityTypeId<Prop>()), static_cast<size_t>(3));
+        // Stopping the resource takes what it owns with it, and these are not its.
+        (void)resources->StopAll();
+        EQUALS(server.Count(Framework::Networking::Replication::EntityTypeId<Prop>()), static_cast<size_t>(3));
+        server.Stop();
+    });
+
     IT("keeps ticking while a handler takes its time", {
         Server server;
         const bool up = server.Start("fw_packet_thread_slow");

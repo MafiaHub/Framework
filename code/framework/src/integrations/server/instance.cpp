@@ -410,12 +410,7 @@ namespace Framework::Integrations::Server {
         // A resource owns the entities it spawns; they are destroyed when it stops.
         if (replication) {
             auto *resourceManager = _scriptingModule->GetResourceManager();
-            replication->SetOnEntityCreated([this, resourceManager](uint64_t networkId) {
-                // The owner is the resource whose script is running, which says nothing about an
-                // entity a packet handler makes at that moment: no script runs on that thread.
-                if (_packetThread.OnPacketThread()) {
-                    return;
-                }
+            replication->SetOnEntityCreated([resourceManager](uint64_t networkId) {
                 resourceManager->OnEntityCreated(networkId);
             });
             replication->SetOnEntityDestroyed([resourceManager](uint64_t networkId) {

@@ -1401,6 +1401,19 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::OnEntityCreated(uint64_t networkId) {
+        // An entity is its creator's only when the creating thread is running that resource. The
+        // current-resource context says which script the script thread is in the middle of, and stays
+        // set while that script is stopped for a tick: it says nothing about what the tick thread, a
+        // packet handler or a worker creates meanwhile. Off the script thread, only a resource's
+        // runtime this thread has itself entered counts (one it is starting, say).
+        ScriptGate *gate = ScriptGate::Get();
+        if (gate != nullptr && !gate->OnScriptThread()) {
+            const std::string entered = ResourceOfIsolate(v8::Isolate::TryGetCurrent());
+            if (Resource *resource = entered.empty() ? nullptr : GetResourceMutable(entered)) {
+                resource->TrackEntity(networkId);
+            }
+            return;
+        }
         // The stack fallback touches V8; CreateEntity also fires for avatars outside a JS context.
         v8::Isolate *isolate = _jsEngine ? _jsEngine->GetIsolate() : nullptr;
         Resource *resource   = (isolate && isolate->InContext()) ? GetCurrentResourceWithStackFallback(isolate) : GetCurrentResource();
