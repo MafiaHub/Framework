@@ -71,8 +71,10 @@ MODULE(lua_exports, {
 
         EQUALS(bus.Lua("consumer", "add(2, 3)"), "5");
         EQUALS(bus.Lua("consumer", "bank.name .. '|' .. bank.limits[2] .. '|' .. bank.origin:toString()"), "bank|20|" + bus.Lua("provider", "Vector3.new(1, 2, 3):toString()"));
-        EQUALS(bus.Lua("consumer", "bank.deposit(5) + bank.deposit(5)"), "15");
+        // Called on the table it arrived in or off it, an export gets the same arguments.
+        EQUALS(bus.Lua("consumer", "bank.deposit(5) + bank:deposit(5)"), "15");
         EQUALS(bus.Lua("provider", "balance()"), "10");
+        EQUALS(bus.Lua("consumer", "Imports.get('provider').bank:deposit(5)"), "15");
         // A function given to an export is called back in the resource that made it.
         EQUALS(bus.Lua("consumer", "bank.each(function(n) return n * 10 end)"), "30");
 
@@ -184,10 +186,12 @@ MODULE(lua_exports, {
 
         EQUALS(bus.Lua("consumer", "add(2, 3)"), "5");
         EQUALS(bus.Lua("consumer", "api.version .. '|' .. api.list[2] .. '|' .. api.origin.z"), "3|2|" + bus.Lua("consumer", "Vector3.new(1, 2, 3).z"));
-        EQUALS(bus.Lua("consumer", "api.deposit(5) + api.deposit(5)"), "15");
+        // Called on the table it arrived in or off it, an export gets the same arguments.
+        EQUALS(bus.Lua("consumer", "api.deposit(5) + api:deposit(5)"), "15");
         EQUALS(bus.Js("provider", "balance()"), "10");
-        EQUALS(bus.Lua("consumer", "api.each(function(n) return n * 10 end)"), "30");
-        // A function called from Lua is called on nothing, however it was exported.
+        EQUALS(bus.Lua("consumer", "Imports.get('provider').api:deposit(5)"), "15");
+        EQUALS(bus.Lua("consumer", "api:each(function(n) return n * 10 end)"), "30");
+        // The JavaScript function is called on nothing all the same: a method that uses `this` has none.
         EQUALS(bus.Lua("consumer", "api.receiver()"), "none");
         EQUALS(bus.Lua("consumer", "api:receiver()"), "none");
 
@@ -296,6 +300,16 @@ MODULE(lua_exports, {
         bus.server.files.Resource("js-consumer", {{"main.js", R"(
             globalThis.luaAdd = Exports.get('lua-provider', 'add');
             globalThis.attempt = (run) => { try { return String(run()); } catch (error) { return error.message; } };
+            // How a call ended, whether it threw at once or gave a promise that was rejected.
+            globalThis.outcome = 'pending';
+            globalThis.settle = (run) => {
+                try {
+                    Promise.resolve(run()).then((value) => { outcome = 'returned ' + value; }, (error) => { outcome = 'rejected ' + error.message; });
+                } catch (error) {
+                    outcome = 'threw ' + error.message;
+                }
+                return 'called';
+            };
         )"}});
         EQUALS(bus.Init(), true);
         EQUALS(bus.StartAll({"lua-provider", "js-provider", "lua-consumer", "js-consumer"}), true);
@@ -314,13 +328,54 @@ MODULE(lua_exports, {
 
         // A function taken before the stop no longer runs anything.
         EQUALS(bus.Lua("lua-consumer", "select(1, pcall(luaAdd, 1, 2))"), "false");
+        EQUALS(Contains(bus.Lua("lua-consumer", "select(2, pcall(luaAdd, 1, 2))"), Bind::kRuntimeStopped), true);
         EQUALS(bus.Lua("lua-consumer", "select(1, pcall(jsAdd, 1, 2))"), "false");
-        EQUALS(bus.Js("js-consumer", "attempt(() => luaAdd(1, 2))") != "3", true);
+        EQUALS(Contains(bus.Lua("lua-consumer", "select(2, pcall(jsAdd, 1, 2))"), Bind::kRuntimeStopped), true);
+        EQUALS(bus.Js("js-consumer", "settle(() => luaAdd(1, 2))"), "called");
+        EQUALS(bus.Until([&] {
+            return bus.Js("js-consumer", "outcome") != "pending";
+        }),
+            true);
+        const std::string outcome = bus.Js("js-consumer", "outcome");
+        const bool failed = outcome.starts_with("threw ") || outcome.starts_with("rejected ");
+        EQUALS(failed, true);
+        EQUALS(Contains(outcome, Bind::kRuntimeStopped), true);
 
         // Started again, it exports again.
         EQUALS(bus.Start("lua-provider"), "");
         EQUALS(bus.Lua("lua-consumer", "Exports.get('lua-provider', 'add')(1, 2)"), "3");
         EQUALS(bus.Js("js-consumer", "attempt(() => Exports.get('lua-provider', 'add')(1, 2))"), "3");
+
+        // So does a JavaScript one, whose exports live in a new isolate: the function Lua kept stays dead, and
+        // what it imports now is of the new runtime.
+        EQUALS(bus.Start("js-provider"), "");
+        EQUALS(bus.Lua("lua-consumer", "Exports.get('js-provider', 'add')(1, 2)"), "3");
+        EQUALS(bus.Lua("lua-consumer", "Imports.get('js-provider').api:deposit(4)"), "4");
+        EQUALS(bus.Js("js-provider", "balance()"), "4");
+        EQUALS(bus.Lua("lua-consumer", "select(1, pcall(jsAdd, 1, 2))"), "false");
+    });
+
+    IT("has no exports for a resource that failed to start", {
+        Bus bus;
+        bus.server.files.Resource("broken-js", {{"main.js", "Exports.register('add', (a, b) => a + b); throw new Error('broken on purpose');"}}, R"(,"exports":["add"])");
+        bus.server.files.Resource("broken-lua", {{"main.lua", "Exports.register('add', function(a, b) return a + b end) error('broken on purpose')"}}, R"(,"exports":["add"])");
+        bus.server.files.Resource("lua-consumer", {{"main.lua", ""}});
+        bus.server.files.Resource("js-consumer", {{"main.js", "globalThis.attempt = (run) => { try { return String(run()); } catch (error) { return error.message; } };"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"lua-consumer", "js-consumer"}), true);
+        EQUALS(bus.Start("broken-js") != "", true);
+        EQUALS(bus.Start("broken-lua") != "", true);
+        EQUALS(bus.Manager().GetResource("broken-js")->HasError(), true);
+        EQUALS(bus.Manager().GetResource("broken-lua")->HasError(), true);
+        EQUALS(bus.Manager().GetResource("broken-js")->GetRegisteredExportNames().size(), 0u);
+        EQUALS(bus.Manager().GetResource("broken-lua")->GetRegisteredExportNames().size(), 0u);
+
+        for (const std::string resource : {"broken-js", "broken-lua"}) {
+            EQUALS(bus.Lua("lua-consumer", "select(2, pcall(Exports.get, '" + resource + "', 'add'))"), "Exports.get: resource '" + resource + "' is not running");
+            EQUALS(bus.Lua("lua-consumer", "select(2, pcall(Imports.get, '" + resource + "'))"), "Imports.get: resource '" + resource + "' is not running");
+            EQUALS(bus.Js("js-consumer", "attempt(() => Exports.get('" + resource + "', 'add'))"), "Exports.get: resource '" + resource + "' is not running");
+            EQUALS(bus.Js("js-consumer", "attempt(() => Imports.get('" + resource + "'))"), "Imports.get: resource '" + resource + "' is not running");
+        }
     });
 
     IT("words a wrong call from Lua as JavaScript does", {
@@ -345,6 +400,8 @@ MODULE(lua_exports, {
         // A value that cannot leave its runtime is refused when it is registered.
         EQUALS(Contains(failure("Exports.register, 'thread', coroutine.create(function() end)"), "Exports.register: value"), true);
         EQUALS(bus.Manager().GetResource("provider")->HasRegisteredExport("thread"), false);
+        // Declared or not.
+        EQUALS(failure("Exports.register, 'undeclared', coroutine.create(function() end)"), failure("Exports.register, 'thread', coroutine.create(function() end)"));
     });
 
     IT("refuses a JavaScript export that cannot be copied for Lua", {

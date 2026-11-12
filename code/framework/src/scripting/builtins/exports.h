@@ -18,6 +18,8 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace Framework::Scripting {
     class LuaRuntime;
@@ -33,8 +35,13 @@ namespace Framework::Scripting::Builtins {
     // importer gets it as it always did: the value itself in the same isolate, a copy whose functions are function
     // references from another one, a method running on the owner's object. What a Lua script registers is copied
     // when it is registered, its functions as callables, and every importer gets a rebuild of that copy. A Lua
-    // importer gets a copy of a JavaScript export made the same way. A function that crossed as a callable is
-    // called on nothing: no `this`, no receiver.
+    // importer gets a copy of a JavaScript export made the same way.
+    //
+    // A function that crossed as a callable is called on nothing: no `this`, no receiver. In Lua a function that
+    // arrived as a member of a table takes a call on that table for a method call and drops the table
+    // (Bind::LuaNoteHolder), so `api:deposit(5)` and `api.deposit(5)` are the same call. The JavaScript function
+    // behind it still runs with `this` undefined: a JavaScript export whose methods use `this` does not work from
+    // Lua.
     class Exports final {
       public:
         static const Bind::Namespace &Definition();
@@ -44,9 +51,16 @@ namespace Framework::Scripting::Builtins {
 
         static void RegisterLua(LuaRuntime &runtime);
 
-        // A copy of an export the resource registered from JavaScript, made inside the isolate that holds it, for
-        // an importer that is not JavaScript: its functions cross as callables. The error says why there is none:
-        // the isolate cannot be entered, the name is not registered there, or where in the value the copy gave up.
+        using Copies = std::vector<std::pair<std::string, TransferredValue>>;
+
+        // Copies of the exports `names` that the resource registered from JavaScript, in that order, made inside
+        // the isolate that holds them, which is entered once: for an importer that is not JavaScript. Their
+        // functions cross as callables. The error is "export '<name>' of resource '<resource>': <why>" for the
+        // first that has no copy: the isolate cannot be entered, the name is not registered there, or where in
+        // the value the copy gave up.
+        static Utils::Result<Copies, std::string> CopyJavaScriptExports(const Resource &resource, const std::vector<std::string> &names);
+
+        // The same for one export.
         static Utils::Result<TransferredValue, std::string> CopyJavaScriptExport(const Resource &resource, std::string_view name);
 
       private:

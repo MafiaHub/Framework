@@ -1455,6 +1455,11 @@ namespace Framework::Scripting {
         return "";
     }
 
+    bool ResourceManager::RegisterExportCopy(std::string_view resourceName, std::string_view exportName, TransferredValue value) {
+        Resource *resource = GetResourceMutable(resourceName);
+        return resource != nullptr && resource->RegisterExport(exportName, std::move(value));
+    }
+
     Resource *ResourceManager::GetCurrentResource() {
         std::string name = GetCurrentResourceContext();
         if (name.empty()) {

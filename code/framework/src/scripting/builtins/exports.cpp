@@ -20,6 +20,7 @@
 #include <logging/logger.h>
 
 #include <utility>
+#include <vector>
 
 namespace Framework::Scripting::Builtins {
 
@@ -45,29 +46,36 @@ namespace Framework::Scripting::Builtins {
             const bool javaScript        = call.GetLanguage() == Language::JavaScript;
 
             // Get the current resource context (use stack fallback for async ES modules). A Lua runtime is its
-            // resource's own; the manager hands out its resources for reading only, though they are its own to
-            // change, as the one it gives a JavaScript call is.
-            Resource *currentResource = nullptr;
-            if (javaScript) {
-                currentResource = manager->GetCurrentResourceWithStackFallback(v8::Isolate::GetCurrent());
-            }
-            else if (const std::string resourceName = call.ResourceName(); !resourceName.empty()) {
-                currentResource = const_cast<Resource *>(std::as_const(*manager).GetResource(resourceName));
-            }
-            if (!currentResource) {
+            // resource's own.
+            Resource *javaScriptResource = javaScript ? manager->GetCurrentResourceWithStackFallback(v8::Isolate::GetCurrent()) : nullptr;
+            const std::string luaName    = javaScript ? std::string() : call.ResourceName();
+            const Resource *resource     = javaScript ? javaScriptResource : (luaName.empty() ? nullptr : manager->GetResource(luaName));
+            if (!resource) {
                 call.ThrowError("Exports.register: no resource context");
                 return;
             }
 
+            // Copied now: every importer is given the value as it was when it was registered. What cannot be
+            // copied is refused whether or not the manifest declares the name.
+            TransferredValue copy;
+            if (!javaScript) {
+                auto copied = call.Arg(1).ToTransfer();
+                if (!copied) {
+                    call.ThrowTypeError("Exports.register: value: " + copied.GetError());
+                    return;
+                }
+                copy = std::move(copied).GetValue();
+            }
+
             // Check if this export is declared in the manifest
-            const bool isInManifest = currentResource->HasExport(exportName);
+            const bool isInManifest = resource->HasExport(exportName);
             if (!isInManifest) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Registering undeclared export '{}' - add to package.json exports array", currentResource->GetName(), exportName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Registering undeclared export '{}' - add to package.json exports array", resource->GetName(), exportName);
             }
 
             // A name is registered once where Lua has a part in it: by the script that registers it now, or by the
             // one that did. JavaScript replacing what JavaScript registered is what it always did.
-            if (isInManifest && (javaScript ? currentResource->GetExportCopy(exportName) != nullptr : currentResource->HasRegisteredExport(exportName))) {
+            if (isInManifest && (javaScript ? resource->GetExportCopy(exportName) != nullptr : resource->HasRegisteredExport(exportName))) {
                 call.ThrowError("Exports.register: export '" + exportName + "' is already registered");
                 return;
             }
@@ -78,39 +86,33 @@ namespace Framework::Scripting::Builtins {
                 const v8::Local<v8::Value> exportValue = Bind::V8ValueOf(call, call.Arg(1));
 
                 // Set the isolate for the resource (needed for storing exports)
-                currentResource->SetIsolate(isolate);
+                javaScriptResource->SetIsolate(isolate);
 
                 // A function registered directly is reported by this name when it has none of its own.
                 if (exportValue->IsFunction()) {
                     FunctionReferences::NameExport(isolate, isolate->GetCurrentContext(), exportValue.As<v8::Function>(), exportName);
                 }
 
-                registered = currentResource->RegisterExport(exportName, exportValue);
+                registered = javaScriptResource->RegisterExport(exportName, exportValue);
             }
             else if (isInManifest) {
-                // Copied now: every importer is given the value as it was when it was registered.
-                auto copied = call.Arg(1).ToTransfer();
-                if (!copied) {
-                    call.ThrowTypeError("Exports.register: value: " + copied.GetError());
-                    return;
-                }
-                registered = currentResource->RegisterExport(exportName, std::move(copied).GetValue());
+                registered = manager->RegisterExportCopy(luaName, exportName, std::move(copy));
             }
 
             if (!registered) {
                 if (!isInManifest) {
                     // RegisterExport failed because it's not in the manifest - this is permissive
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered (not in manifest)", currentResource->GetName(), exportName);
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered (not in manifest)", resource->GetName(), exportName);
                     call.Return(true);
                 }
                 else {
                     // Export is in manifest but RegisterExport still failed - real error (isolate issue)
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Failed to register export '{}' - isolate initialization issue", currentResource->GetName(), exportName);
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Failed to register export '{}' - isolate initialization issue", resource->GetName(), exportName);
                     call.ThrowError("Exports.register: failed to register export '" + exportName + "' - internal error");
                 }
             }
             else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered", currentResource->GetName(), exportName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered", resource->GetName(), exportName);
                 call.Return(true);
             }
         }
@@ -169,7 +171,7 @@ namespace Framework::Scripting::Builtins {
                 }
                 auto copied = CopyJavaScriptExport(*resource, exportName);
                 if (!copied) {
-                    call.ThrowError(crossing + copied.GetError());
+                    call.ThrowError("Exports.get: " + copied.GetError());
                     return;
                 }
                 auto rebuilt = call.FromTransfer(copied.GetValue());
@@ -256,33 +258,58 @@ namespace Framework::Scripting::Builtins {
         Definition().RegisterLuaGlobal(runtime.State(), runtime.Options().side);
     }
 
-    Utils::Result<TransferredValue, std::string> Exports::CopyJavaScriptExport(const Resource &resource, std::string_view name) {
-        using Result = Utils::Result<TransferredValue, std::string>;
+    Utils::Result<Exports::Copies, std::string> Exports::CopyJavaScriptExports(const Resource &resource, const std::vector<std::string> &names) {
+        using Result = Utils::Result<Copies, std::string>;
+        Copies copies;
+        if (names.empty()) {
+            return Result::Ok(std::move(copies));
+        }
+        const auto failed = [&resource](const std::string &name, const std::string &why) {
+            return Result::Err("export '" + name + "' of resource '" + resource.GetName() + "': " + why);
+        };
 
         v8::Isolate *isolate = resource.GetIsolate();
         if (isolate == nullptr) {
-            return Result::Err("it is not registered");
+            return failed(names.front(), "it is not registered");
         }
 
-        // Entered from outside its JavaScript, as EngineScope enters an engine: what reading the value queues there
-        // runs as the callback scope closes.
+        // Entered from outside its JavaScript, as EngineScope enters an engine: what reading the values queues
+        // there runs as the callback scope closes.
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
         const v8::Local<v8::Context> context = resource.GetExportContext();
         if (context.IsEmpty()) {
-            return Result::Err("its runtime is not reachable from here");
+            return failed(names.front(), "its runtime is not reachable from here");
         }
         v8::Context::Scope contextScope(context);
         const std::unique_ptr<CallbackScope> callbackScope = OpenCallbackScope(isolate);
 
-        const v8::Local<v8::Value> value = resource.GetExportValue(name);
-        if (value.IsEmpty()) {
-            return Result::Err("it is not registered");
+        copies.reserve(names.size());
+        for (const std::string &name : names) {
+            const v8::Local<v8::Value> value = resource.GetExportValue(name);
+            if (value.IsEmpty()) {
+                return failed(name, "it is not registered");
+            }
+            // A getter of the script may throw while the value is read: the copy says so, and nothing stays
+            // pending.
+            v8::TryCatch tryCatch(isolate);
+            auto copied = ValueTransfer::Copy(isolate, context, value, Bind::V8CallableTransfer());
+            if (!copied) {
+                return failed(name, copied.GetError());
+            }
+            copies.emplace_back(name, std::move(copied).GetValue());
         }
-        // A getter of the script may throw while the value is read: the copy says so, and nothing stays pending.
-        v8::TryCatch tryCatch(isolate);
-        return ValueTransfer::Copy(isolate, context, value, Bind::V8CallableTransfer());
+        return Result::Ok(std::move(copies));
+    }
+
+    Utils::Result<TransferredValue, std::string> Exports::CopyJavaScriptExport(const Resource &resource, std::string_view name) {
+        using Result = Utils::Result<TransferredValue, std::string>;
+        auto copies  = CopyJavaScriptExports(resource, {std::string(name)});
+        if (!copies) {
+            return Result::Err(copies.GetError());
+        }
+        return Result::Ok(std::move(std::move(copies).GetValue().front().second));
     }
 
 } // namespace Framework::Scripting::Builtins

@@ -335,6 +335,13 @@ namespace Framework::Scripting {
         std::string ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler = {}) const;
 
         /**
+         * Register an export of a resource as a copy (Resource::RegisterExport), for a script that is not the
+         * JavaScript the manager names the current resource for: a Lua script, whose runtime names its resource.
+         * @return False when there is no such resource or its manifest does not declare the export
+         */
+        bool RegisterExportCopy(std::string_view resourceName, std::string_view exportName, TransferredValue value);
+
+        /**
          * Get the currently executing resource.
          * @return Pointer to current resource, or nullptr if none
          */

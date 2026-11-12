@@ -99,27 +99,38 @@ namespace Framework::Scripting::Builtins {
             }
 
             // What JavaScript did not get above: the exports registered from Lua, and for a Lua importer those
-            // registered from JavaScript too. Copies, their functions as callables.
+            // registered from JavaScript too, copied in one visit to their isolate. Copies, their functions as
+            // callables.
             const std::vector<std::string> exportNames = resource->GetRegisteredExportNames();
-            for (const std::string &exportName : exportNames) {
-                const std::string crossing                         = "Imports.get: export '" + exportName + "' of resource '" + resourceName + "': ";
-                const std::shared_ptr<const TransferredValue> copy = resource->GetExportCopy(exportName);
-                if (copy == nullptr && javaScript) {
-                    continue;
-                }
-                auto rebuilt = Utils::Result<Bind::Value, std::string>::Err(std::string());
-                if (copy != nullptr) {
-                    rebuilt = call.FromTransfer(*copy);
-                }
-                else {
-                    const auto copied = Exports::CopyJavaScriptExport(*resource, exportName);
-                    rebuilt           = copied ? call.FromTransfer(copied.GetValue()) : Utils::Result<Bind::Value, std::string>::Err(copied.GetError());
-                }
+            const auto add                             = [&](const std::string &exportName, const TransferredValue &copy) {
+                auto rebuilt = call.FromTransfer(copy);
                 if (!rebuilt) {
-                    call.ThrowError(crossing + rebuilt.GetError());
-                    return;
+                    call.ThrowError("Imports.get: export '" + exportName + "' of resource '" + resourceName + "': " + rebuilt.GetError());
+                    return false;
                 }
                 imports.Set(exportName, rebuilt.GetValue());
+                return true;
+            };
+            std::vector<std::string> fromJavaScript;
+            for (const std::string &exportName : exportNames) {
+                if (const std::shared_ptr<const TransferredValue> copy = resource->GetExportCopy(exportName)) {
+                    if (!add(exportName, *copy)) {
+                        return;
+                    }
+                }
+                else if (!javaScript) {
+                    fromJavaScript.push_back(exportName);
+                }
+            }
+            const auto copies = Exports::CopyJavaScriptExports(*resource, fromJavaScript);
+            if (!copies) {
+                call.ThrowError("Imports.get: " + copies.GetError());
+                return;
+            }
+            for (const auto &[exportName, copy] : copies.GetValue()) {
+                if (!add(exportName, copy)) {
+                    return;
+                }
             }
 
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, exportNames.size(), resourceName);
