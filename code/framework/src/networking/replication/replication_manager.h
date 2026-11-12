@@ -422,7 +422,7 @@ namespace Framework::Networking::Replication {
         // by the tick before it next looks at either.
         struct Pending {
             enum class Kind : uint8_t {
-                Reown,      // the entity's owner changed
+                Resync,     // the index takes its view of the entity afresh: its owner or audience changed
                 Reevaluate, // every viewer decides on the entity again
                 Invalidate, // the connection of `guid` recomputes its interest
                 Unview      // the entity may have stopped being a viewer
@@ -438,6 +438,13 @@ namespace Framework::Networking::Replication {
         void InvalidateInterestOf(MafiaNet::PeerGuid guid);
         // Queues the entity for every viewer to decide on again (see ReevaluationBase).
         void Reevaluate(NetworkEntity *entity);
+        // Takes the index's view of one entity afresh, between two syncs of them all. The caller
+        // holds the entity, and ReplicaManager3's world.
+        void SyncInterestOf(NetworkEntity *entity) {
+            if (!entity->_leaving) {
+                _interest.Sync(entity);
+            }
+        }
         // The entity is leaving: out of the index and out of every viewer's set, before its pointer
         // can be handed out again. From its teardown, and from ~NetworkEntity for any other way out.
         void ForgetEntity(NetworkEntity *entity);

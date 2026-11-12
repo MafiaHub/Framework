@@ -437,6 +437,31 @@ MODULE(interest_grid, {
         EQUALS(out.contains(car), false);
     });
 
+    IT("answers from what the last sync took of an entity, not from the entity", {
+        InterestGrid grid;
+        freshGrid(grid);
+
+        NetworkEntity *viewer   = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range = 250.0f;
+        NetworkEntity *walker   = make(typeA, 50.0f, 0.0f);
+        rebuild(grid, {viewer, walker});
+
+        // Written since, as another thread may while a query runs: the query does not look.
+        walker->position          = glm::vec3(3000.0f, 0.0f, 0.0f);
+        walker->streaming.visible = false;
+        walker->streaming.viewers = std::make_unique<Framework::Networking::Replication::ViewerFilter>();
+        walker->streaming.viewers->except.insert(viewerGuid);
+        std::unordered_set<NetworkEntity *> out;
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(walker), true);
+        EQUALS(grid.Evaluate(viewer, viewerGuid, grid.SlotOf(walker), true) == InterestGrid::Verdict::In, true);
+
+        rebuild(grid, {viewer, walker});
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(walker), false);
+        EQUALS(grid.Evaluate(viewer, viewerGuid, grid.SlotOf(walker), true) == InterestGrid::Verdict::Out, true);
+    });
+
     IT("skips an entity destroyed since the last rebuild", {
         InterestGrid grid;
         freshGrid(grid);
@@ -640,7 +665,9 @@ MODULE(interest_grid, {
 
         rebuild(grid, {viewer, nearby, global});
 
+        // A query reads what the last sync took of each entity, so each change is synced first.
         const auto sees = [&](NetworkEntity *entity) {
+            rebuild(grid, {viewer, nearby, global});
             return collect(grid, viewer, nothingBefore).contains(entity);
         };
 

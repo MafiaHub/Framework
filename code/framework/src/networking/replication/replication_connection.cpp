@@ -8,6 +8,8 @@
 
 #include "replication_connection.h"
 
+#include "world.h"
+
 #include "entity_registry.h"
 #include "network_entity.h"
 #include "replication_manager.h"
@@ -41,6 +43,11 @@ namespace Framework::Networking::Replication {
         return _manager ? _manager->GetViewer(_viewerGUID) : nullptr;
     }
 
+    MafiaNet::VirtualWorldId ReplicationConnection::ViewerWorld(const NetworkEntity *viewer) const {
+        const InterestGrid &interest = _manager->Interest();
+        return interest.WorldOf(interest.SlotOf(viewer));
+    }
+
     bool ReplicationConnection::IsRelevant(const NetworkEntity *entity) const {
         if (!_manager || !entity) {
             return false;
@@ -56,7 +63,7 @@ namespace Framework::Networking::Replication {
         }
         // Dimension changes, ownership changes and lifecycle invalidation bypass the turn; so does
         // having missed re-evaluations the manager has since discarded.
-        return !_relevantValid || _interestStale || _relevantViewer != viewer || GetVirtualWorld() != viewer->GetVirtualWorld() || _reevaluationsSeen < _manager->ReevaluationBase();
+        return !_relevantValid || _interestStale || _relevantViewer != viewer || GetVirtualWorld() != ViewerWorld(viewer) || _reevaluationsSeen < _manager->ReevaluationBase();
     }
 
     void ReplicationConnection::ComputeInterest(InterestGrid::Scratch &scratch) {
@@ -67,7 +74,7 @@ namespace Framework::Networking::Replication {
         const InterestGrid &interest = _manager->Interest();
         _interestStale               = false;
         _computedViewer              = viewer;
-        _computedWorld               = viewer->GetVirtualWorld();
+        _computedWorld               = ViewerWorld(viewer);
         interest.CollectVisible(viewer, _viewerGUID, _relevant, scratch, _computedSlots);
         _computed.clear();
         for (const uint32_t slot : _computedSlots) {
@@ -132,8 +139,14 @@ namespace Framework::Networking::Replication {
         }
 
         // A result computed earlier this tick is stale if what it was computed for changed since.
-        const bool recompute = _computedReady ? (_interestStale || _computedViewer != viewer || _computedWorld != viewer->GetVirtualWorld()) : InterestUrgent();
-        SetVirtualWorld(viewer->GetVirtualWorld());
+        // The viewer as it is now, not as the last sync left it: a change to a player's own avatar
+        // reaches that player before its turn. Read under the avatar's lock, on the pass's thread.
+        {
+            const Detail::EntityGuard held(*viewer, false);
+            _manager->SyncInterestOf(viewer);
+        }
+        const bool recompute = _computedReady ? (_interestStale || _computedViewer != viewer || _computedWorld != ViewerWorld(viewer)) : InterestUrgent();
+        SetVirtualWorld(ViewerWorld(viewer));
         if (recompute) {
             FW_PROFILE_SCOPE_N("Replication::CollectInterest");
             ComputeInterest(_manager->MainScratch());
@@ -245,9 +258,8 @@ namespace Framework::Networking::Replication {
                 // and has just come to depend on something.
                 const uint32_t dependency = interest.DependencyOf(slot);
                 if (dependency != InterestGrid::kNoSlot && !_relevant.Test(dependency)) {
-                    NetworkEntity *needed = interest.EntityAt(dependency);
-                    if (needed->streaming.visible && needed->streaming.Admits(_viewerGUID)) {
-                        Admit(needed, dependency, create);
+                    if (interest.Shows(dependency, _viewerGUID)) {
+                        Admit(interest.EntityAt(dependency), dependency, create);
                     }
                 }
                 break;

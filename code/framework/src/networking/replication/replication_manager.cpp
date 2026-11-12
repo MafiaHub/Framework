@@ -363,14 +363,22 @@ namespace Framework::Networking::Replication {
                 continue;
             }
             switch (entry.kind) {
-            case Pending::Kind::Reown: {
+            case Pending::Kind::Resync: {
                 const Detail::EntityGuard held(*entity, false);
-                // See InterestGrid::Reown for what a stale owned index costs the peer that just
-                // gained authority.
-                _interest.Reown(entity, MafiaNet::UNASSIGNED_PEER_GUID);
+                // An owner among it: see InterestGrid::Reown for what a stale owned index costs the
+                // peer that just gained authority.
+                SyncInterestOf(entity);
                 break;
             }
-            case Pending::Kind::Reevaluate: Reevaluate(entity); break;
+            case Pending::Kind::Reevaluate: {
+                // What changed is what the viewers are about to be asked about.
+                {
+                    const Detail::EntityGuard held(*entity, false);
+                    SyncInterestOf(entity);
+                }
+                Reevaluate(entity);
+                break;
+            }
             case Pending::Kind::Unview: {
                 const Detail::EntityGuard held(*entity, true);
                 const std::lock_guard guard(_mutex);
@@ -407,6 +415,7 @@ namespace Framework::Networking::Replication {
             Queue({Pending::Kind::Reevaluate, entity.GetNetworkID()});
         }
         else {
+            Queue({Pending::Kind::Resync, entity.GetNetworkID()});
             const ViewerFilter *sides[] {&before, &filter};
             for (const ViewerFilter *side : sides) {
                 if (side->only) {
@@ -450,6 +459,7 @@ namespace Framework::Networking::Replication {
             }
         }
         if (viewers->Admits(guid) != wasAdmitted) {
+            Queue({Pending::Kind::Resync, entity.GetNetworkID()});
             Queue({Pending::Kind::Invalidate, 0, guid});
         }
         if (viewers->Empty()) {
@@ -467,6 +477,7 @@ namespace Framework::Networking::Replication {
             Queue({Pending::Kind::Reevaluate, entity.GetNetworkID()});
         }
         else {
+            Queue({Pending::Kind::Resync, entity.GetNetworkID()});
             Queue({Pending::Kind::Invalidate, 0, previous});
             Queue({Pending::Kind::Invalidate, 0, guid});
         }
@@ -500,7 +511,7 @@ namespace Framework::Networking::Replication {
         // Owned entities bypass range and budget, so the two owners' sets changed and nobody else's
         // did: only they skip their refresh phase. Applied before anything queries relevance again.
         if (previousOwner != guid) {
-            Queue({Pending::Kind::Reown, entity->GetNetworkID()});
+            Queue({Pending::Kind::Resync, entity->GetNetworkID()});
             Queue({Pending::Kind::Invalidate, 0, previousOwner});
             Queue({Pending::Kind::Invalidate, 0, guid});
         }
@@ -798,10 +809,10 @@ namespace Framework::Networking::Replication {
             const WorldGuard world(*this);
             Reference(entity);
             if (_isServer) {
-                // Into the index now, so it can be handed out before the next sync; every viewer
-                // decides on it at its next query, by which time the caller has placed it.
+                // Into the index now, so it has its slot; every viewer decides on it at its next
+                // query, from what the index takes of it then: by that time the caller has placed it.
                 _interest.Sync(entity);
-                Reevaluate(entity);
+                Queue({Pending::Kind::Reevaluate, entity->GetNetworkID()});
             }
         }
         if (_onEntityCreated) {

@@ -88,6 +88,8 @@ namespace Framework::Networking::Replication {
         };
 
         NetworkEntity *Viewer() const;
+        // The viewer's virtual world as the interest index last took it under the viewer's lock.
+        MafiaNet::VirtualWorldId ViewerWorld(const NetworkEntity *viewer) const;
         // The second half of ComputeInterest: the pending set against the constructed replicas.
         void PrepareDiff();
         // Whether nothing a prepared diff was taken against has changed since.
