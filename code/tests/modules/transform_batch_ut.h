@@ -13,6 +13,8 @@
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/transform_batch.h"
 
+#include <chrono>
+#include <future>
 #include <vector>
 
 MODULE(transform_batch, {
@@ -233,6 +235,52 @@ MODULE(transform_batch, {
         deliver(owner, 101, 3, 10.0f);
         EQUALS(entity.position.x, 10.0f);
         // The stack replica detaches before the peer tears down its connections.
+    });
+
+    IT("applies a batch while another thread holds ReplicaManager3's world, as a pass does", {
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            Framework::Networking::Replication::ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        const MafiaNet::RakNetGUID owner(1001);
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        Framework::Networking::Replication::NetworkEntity entity;
+        entity.SetNetworkID(7);
+        entity.ownerGUID = MafiaNet::ToPeerGuid(owner);
+        TestWorld::Rm3(manager)->Reference(&entity);
+
+        Harness h;
+        h.pose.Reset();
+        h.pose.Write(entity.stateEpoch);
+        Framework::Networking::Replication::NetworkEntity source;
+        source.position.x = 4.0f;
+        Framework::Networking::Replication::FieldSerializer fields(&h.pose, true);
+        source.SerializeTransform(fields);
+        h.Queue(7, 100);
+        h.Flush();
+        MafiaNet::Packet packet {};
+        packet.data   = h.packets[0].data.data();
+        packet.length = static_cast<unsigned int>(h.packets[0].data.size());
+        packet.guid   = owner;
+
+        bool applied = false;
+        std::future<void> delivery;
+        {
+            const MafiaNet::ReplicaManager3::WorldGuard world(*TestWorld::Rm3(manager));
+            delivery = std::async(std::launch::async, [&] {
+                TestWorld::OnReceive(manager, &packet);
+            });
+            // Only a batch that waits for the world waits this out; it is then delivered once the guard goes.
+            applied = delivery.wait_for(std::chrono::seconds(3)) == std::future_status::ready;
+        }
+        delivery.wait();
+        EQUALS(applied, true);
+        EQUALS(entity.position.x, 4.0f);
     });
 
     IT("resets the reused pose stream between entities and packets", {

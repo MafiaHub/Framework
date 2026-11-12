@@ -202,34 +202,27 @@ namespace Framework::Networking::Replication {
         MafiaNet::Time timestamp;
         MafiaNet::WorldId worldId;
         TransformBatch::Entries entries;
-        if (!TransformBatch::Read(input, timestamp, worldId, entries) || worldsArray[worldId] == nullptr) {
+        if (!TransformBatch::Read(input, timestamp, worldId, entries)) {
             return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
         }
-        // ReplicaManager3 delivers a state message under the sender's lock and the replica set's,
-        // neither of which a subclass can take. Its world stands in for both: no connection closes
-        // and no replica is dereferenced while it is held, at the price of waiting for a pass.
-        const WorldGuard world(*this);
-        MafiaNet::Connection_RM3 *connection = GetConnectionByGUID(packet->guid, worldId);
-        if (connection == nullptr) {
+        // Delivered as ReplicaManager3 delivers a state message: under the sender's lock, and each
+        // entity's from inside Deserialize. Never the world, so a batch does not wait for a pass.
+        StateDelivery delivery(*this, packet->guid, worldId);
+        if (delivery.GetConnection() == nullptr) {
             return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
         }
         // One set of parameters for the whole packet: its pose stream keeps whatever capacity a large
         // pose grew it to.
         MafiaNet::DeserializeParameters parameters {};
         parameters.timeStamp             = timestamp; // RakPeer already shifted ID_TIMESTAMP to local time.
-        parameters.sourceConnection      = connection;
         parameters.bitstreamWrittenTo[0] = true;
         for (const TransformBatch::Entry &entry : entries) {
-            auto *replica = GetNetworkIDManager(worldId)->GET_OBJECT_FROM_ID<MafiaNet::Replica3 *>(entry.networkId);
-            if (replica == nullptr) {
-                // Construction still in flight, or a destruction overtook this unreliable batch; the
-                // other entries are unaffected.
-                continue;
-            }
             parameters.serializationBitstream[0].Reset();
             parameters.serializationBitstream[0].WriteBits(input.GetData() + BITS_TO_BYTES(entry.offset), entry.bits, false);
-            // The same owner, epoch and per-entity timestamp gates as an RM3 serialize message.
-            replica->Deserialize(&parameters);
+            // The same owner, epoch and per-entity timestamp gates as an RM3 serialize message. An
+            // entity that is not there has its construction still in flight, or a destruction
+            // overtook this unreliable batch; the other entries are unaffected.
+            delivery.Deserialize(entry.networkId, &parameters);
         }
         return MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE;
     }
@@ -1092,7 +1085,7 @@ namespace Framework::Networking::Replication {
             // produced a player-connect notification, so gate the disconnect notification on the
             // replication connection that PushReplicationConnection creates alongside it — keeping
             // the connect/disconnect callbacks paired for the game.
-            if (_onClientDisconnect && GetConnectionByGUID(rakNetGUID) != nullptr) {
+            if (_onClientDisconnect && HasConnection(rakNetGUID)) {
                 _onClientDisconnect(guid);
             }
             // Before the blanket hand-back below, so entities this peer was *simulating* go through
@@ -1118,7 +1111,14 @@ namespace Framework::Networking::Replication {
         ReplicaManager3::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
     }
 
+    bool ReplicationManager::HasConnection(MafiaNet::RakNetGUID guid) const {
+        // Only whether there is one: ReplicaManager3 looks it up under its list lock, and the
+        // pointer, which another thread may pop, is not kept.
+        return GetConnectionByGUID(guid) != nullptr;
+    }
+
     void ReplicationManager::StartReplication(const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid) {
+        World::RequireNoneHeld("replication to a connection was started");
         const WorldGuard world(*this);
         if (GetConnectionByGUID(guid) != nullptr) {
             return; // already started (a client could send ClientIdentity twice)

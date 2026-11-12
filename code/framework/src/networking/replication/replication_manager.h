@@ -103,11 +103,11 @@ namespace Framework::Networking::Replication {
         using MafiaNet::ReplicaManager3::GetConnectionCount;
         using MafiaNet::ReplicaManager3::SetAutoManageConnections;
         using MafiaNet::ReplicaManager3::SetAutoSerializeInterval;
-        // Whether replication to this peer has started, and starting it (idempotent). See
-        // NetworkServer::PushReplicationConnection.
-        bool HasConnection(MafiaNet::RakNetGUID guid) const {
-            return GetConnectionByGUID(guid) != nullptr;
-        }
+        // Whether replication to this peer has started, from any thread, and starting it (idempotent;
+        // takes ReplicaManager3's world, so not from inside a handle's scope). Connections are started
+        // and closed where packets are handled: asked anywhere else, the answer may already be old.
+        // See NetworkServer::PushReplicationConnection.
+        bool HasConnection(MafiaNet::RakNetGUID guid) const;
         void StartReplication(const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid);
 
         ReplicationManager();
