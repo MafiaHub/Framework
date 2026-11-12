@@ -55,18 +55,6 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
 
-            // Copied now: every importer is given the value as it was when it was registered. What cannot be
-            // copied is refused whether or not the manifest declares the name.
-            TransferredValue copy;
-            if (!javaScript) {
-                auto copied = call.Arg(1).ToTransfer();
-                if (!copied) {
-                    call.ThrowTypeError("Exports.register: value: " + copied.GetError());
-                    return;
-                }
-                copy = std::move(copied).GetValue();
-            }
-
             // Check if this export is declared in the manifest
             const bool isInManifest = resource->HasExport(exportName);
             if (!isInManifest) {
@@ -78,6 +66,20 @@ namespace Framework::Scripting::Builtins {
             if (isInManifest && (javaScript ? resource->GetExportCopy(exportName) != nullptr : resource->HasRegisteredExport(exportName))) {
                 call.ThrowError("Exports.register: export '" + exportName + "' is already registered");
                 return;
+            }
+
+            // Copied now, once nothing cheaper refuses the call: every importer is given the value as it was when
+            // it was registered. What cannot be copied is refused whether or not the manifest declares the name;
+            // only the copy can tell, and the copy of an undeclared export is let go of as the call returns, with
+            // the callables of its functions.
+            TransferredValue copy;
+            if (!javaScript) {
+                auto copied = call.Arg(1).ToTransfer();
+                if (!copied) {
+                    call.ThrowTypeError("Exports.register: value: " + copied.GetError());
+                    return;
+                }
+                copy = std::move(copied).GetValue();
             }
 
             bool registered = false;

@@ -10,6 +10,7 @@
 
 #include "lua_events_ut.h"
 
+#include "scripting/bind/lua_callable.h"
 #include "scripting/resource/resource.h"
 
 #include <string>
@@ -85,6 +86,8 @@ MODULE(lua_exports, {
 
         EQUALS(bus.Lua("consumer", "(function() local keys = {} for key in pairs(Imports.get('provider')) do keys[#keys + 1] = key end table.sort(keys) return table.concat(keys, ',') end)()"), "add,bank,fail");
         EQUALS(bus.Lua("consumer", "Imports.get('provider').add(4, 4)"), "8");
+        // The table of imports is the table its functions arrived in.
+        EQUALS(bus.Lua("consumer", "Imports.get('provider'):add(4, 4)"), "8");
     });
 
     IT("gives a JavaScript resource what a Lua resource exports", {
@@ -201,6 +204,8 @@ MODULE(lua_exports, {
 
         EQUALS(bus.Lua("consumer", "(function() local keys = {} for key in pairs(Imports.get('provider')) do keys[#keys + 1] = key end table.sort(keys) return table.concat(keys, ',') end)()"), "add,api");
         EQUALS(bus.Lua("consumer", "Imports.get('provider').add(4, 4)"), "8");
+        // The table of imports is the table its functions arrived in.
+        EQUALS(bus.Lua("consumer", "Imports.get('provider'):add(4, 4)"), "8");
     });
 
     IT("makes a Lua caller wait for the promise of a JavaScript export, and raises its rejection", {
@@ -262,6 +267,8 @@ MODULE(lua_exports, {
         // As in JavaScript: the call answers true, and nothing is registered.
         EQUALS(bus.Lua("provider", "registered"), "true");
         EQUALS(bus.Manager().GetResource("provider")->HasRegisteredExport("hidden"), false);
+        // Nor is the function it was called with.
+        EQUALS(Bind::LuaCallableCount(*bus.server.module.GetLuaEngine()->GetRuntime("provider")), 0u);
         EQUALS(bus.Lua("lua-consumer", "select(2, pcall(Exports.get, 'provider', 'hidden'))"), "Exports.get: export 'hidden' not found in resource 'provider'");
         EQUALS(bus.Js("js-consumer", "attempt()"), "Exports.get: export 'hidden' not found in resource 'provider'");
         EQUALS(bus.Lua("lua-consumer", "next(Imports.get('provider'))"), "nil");
