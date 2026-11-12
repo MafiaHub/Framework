@@ -49,11 +49,18 @@ connection and ignores any client-supplied `author`/`color`.
 to two virtuals a mod overrides:
 
 ```cpp
-virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text);
+virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text,
+                           Framework::Networking::Replication::World &world);
 virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text,
                            const std::string &command,
-                           const std::vector<std::string> &args);
+                           const std::vector<std::string> &args,
+                           Framework::Networking::Replication::World &world);
 ```
+
+Both are called on the packet thread, where the chat packet is handled, with
+no entity held. An override reaches the sender through
+`world.Read<T>(senderNetworkId)` and anything else of the mod's only if it
+is registered with the world or guards itself (`docs/server_threading.md`).
 
 Lines beginning with `/` go to `OnChatCommand` (command + whitespace-split
 args); everything else to `OnChatMessage`. The framework defaults are no-ops —
