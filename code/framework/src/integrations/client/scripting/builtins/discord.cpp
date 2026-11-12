@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
-#include <cmath>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -71,16 +70,6 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 return static_cast<char>(std::tolower(c));
             });
             return s;
-        }
-
-        // ToInt32 of JavaScript, which is how an enum value and a party size were always read: the whole
-        // part, wrapped to 32 bits. 0 for what is not finite.
-        std::int32_t ToInt32(double number) {
-            if (!std::isfinite(number)) {
-                return 0;
-            }
-            const double wrapped = std::fmod(std::trunc(number), 4294967296.0);
-            return static_cast<std::int32_t>(static_cast<std::uint32_t>(static_cast<std::int64_t>(wrapped)));
         }
 
         // One of the two sizes of a party, which JavaScript always converted to a number first: a boolean is

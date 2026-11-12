@@ -11,6 +11,7 @@
 #include <scripting/bind/call.h>
 #include <scripting/bind/value.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -39,6 +40,16 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         }
         // Of what is left only a bigint can be false, and only zero is spelled "0".
         return flag.Kind() != Framework::Scripting::Bind::ValueKind::Other || flag.ToDisplayString() != "0";
+    }
+
+    // ToInt32 of JavaScript, which is how the client builtins always read an enum value, a size or the id of a
+    // view from it: the whole part, wrapped to 32 bits. 0 for what is not finite.
+    inline std::int32_t ToInt32(double number) {
+        if (!std::isfinite(number)) {
+            return 0;
+        }
+        const double wrapped = std::fmod(std::trunc(number), 4294967296.0);
+        return static_cast<std::int32_t>(static_cast<std::uint32_t>(static_cast<std::int64_t>(wrapped)));
     }
 
     // The whole part of a number that is an id, a timestamp or a mask, held to what 64 bits have, which is how
