@@ -111,6 +111,10 @@ namespace ServerPacketThreadTest {
     struct Block: Value {
         static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::Block");
     };
+    // Writes `value` into the sender's state bag, under a handle.
+    struct Mood: Value {
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::Mood");
+    };
     // Reports what the handler is given for its sender.
     struct Who: Value {
         static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::Who");
@@ -143,6 +147,9 @@ namespace ServerPacketThreadTest {
         std::atomic<int> disconnects {0};
         std::atomic<int> holds {0};
         std::atomic<int> ranOnScripts {0};
+        // Where a script's native call (noteThread) ran, and how long the handler that wrote a state bag took.
+        std::vector<std::thread::id> scriptCallThreads;
+        std::atomic<double> moodHandlerMs {-1.0};
         std::atomic<bool> heldAvatar {false};
         std::atomic<bool> blocked {false};
         std::atomic<bool> release {false};
@@ -205,6 +212,19 @@ namespace ServerPacketThreadTest {
                 GetScriptingModule()->GetResourceManager()->GetEvents().EmitReserved(scope.Isolate(), scope.Context(), "heldEvent", args);
                 ++holds;
             });
+            net->RegisterRPC<Mood>([this](const Mood &mood, Sender sender, World &world) {
+                const auto before = Clock::now();
+                {
+                    const auto avatar = world.Write<Avatar>(sender.Avatar());
+                    if (avatar) {
+                        avatar->state.Set("mood", Number(mood.value));
+                    }
+                }
+                // The handle is gone, so whoever listens for the change has been told, or sent for.
+                moodHandlerMs = std::chrono::duration<double, std::milli>(Clock::now() - before).count();
+                const std::lock_guard guard(mutex);
+                noteThreads.push_back(std::this_thread::get_id());
+            });
             net->RegisterRPC<Block>([this](const Block &, Sender, World &) {
                 blocked             = true;
                 const auto deadline = Clock::now() + std::chrono::seconds(20);
@@ -222,6 +242,35 @@ namespace ServerPacketThreadTest {
                 whoHandleEmpty      = emptyNow && emptyOld;
                 ++whos;
             });
+        }
+
+        static Framework::Networking::Replication::StateValue Number(double number) {
+            Framework::Networking::Replication::StateValue value;
+            value.type   = Framework::Networking::Replication::StateValue::Type::Number;
+            value.number = number;
+            return value;
+        }
+
+        // noteThread(): a native that records which thread the script calling it runs on.
+        void ModuleRegister(Framework::Scripting::Engine *engine) override {
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = isolate->GetCurrentContext();
+            if (context.IsEmpty()) {
+                return;
+            }
+            v8::MaybeLocal<v8::Function> note = v8::Function::New(
+                context,
+                [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                    auto *self = static_cast<Server *>(info.Data().As<v8::External>()->Value());
+                    const std::lock_guard guard(self->mutex);
+                    self->scriptCallThreads.push_back(std::this_thread::get_id());
+                },
+                v8::External::New(isolate, this));
+            context->Global()->Set(context, v8pp::to_v8(isolate, "noteThread"), note.ToLocalChecked()).Check();
+            // The handle classes as globals, which is a mod's to decide: scripts here write `new Entity(id)`.
+            Framework::Scripting::Builtins::Entity::Register(isolate, context->Global());
+            Framework::Scripting::Builtins::Player::Register(isolate, context->Global());
         }
 
         void OnPlayerConnect(const Framework::Integrations::Server::PlayerConnectionData &data, World &world) override {
@@ -837,9 +886,9 @@ MODULE(server_packet_thread, {
         Server server;
         const bool up = server.Start("fw_packet_thread_ghost", R"(
             const fs = require('node:fs');
-            let refused = 'no';
-            try { new Entity(999999); } catch (error) { refused = 'yes'; }
-            try { new Player(999999); refused += ',no'; } catch (error) { refused += ',yes'; }
+            // Refused for the id, not for a class that is not there.
+            const why = (make) => { try { make(); return 'no'; } catch (error) { return String(error.message).includes('is not valid') ? 'yes' : 'other'; } };
+            const refused = why(() => new Entity(999999)) + ',' + why(() => new Player(999999));
             fs.writeFileSync('$ROOT/refused', refused);
         )");
         EQUALS(up, true);
@@ -913,6 +962,90 @@ MODULE(server_packet_thread, {
             counter           = avatar ? avatar->counter : 0;
         }
         EQUALS(counter, 4242u);
+        server.Stop();
+    });
+
+    IT("runs a resource's state-bag listener on the script thread, whoever wrote the bag", {
+        Server server;
+        // A resource that listens to one entity's bag, and computes for most of its time.
+        const bool up = server.Start("fw_packet_thread_listener", R"(
+            const fs = require('node:fs');
+            Events.on('watch', (id) => {
+                new Entity(id).state.onChange('mood', (key, value) => {
+                    noteThread();
+                    fs.writeFileSync('$ROOT/mood', String(value));
+                });
+                fs.writeFileSync('$ROOT/watching', 'yes');
+            });
+
+            setInterval(() => { const end = Date.now() + 300; while (Date.now() < end) {} }, 350);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        const uint64_t avatarId = server.Replication()->GetViewerId(client.Guid());
+        {
+            Framework::Scripting::EngineScope scope(server.GetScriptingModule()->GetEngine());
+            std::vector<v8::Local<v8::Value>> args {v8pp::to_v8(scope.Isolate(), static_cast<double>(avatarId))};
+            server.GetScriptingModule()->GetResourceManager()->GetEvents().EmitReserved(scope.Isolate(), scope.Context(), "watch", args);
+        }
+        const auto marker = [&](const char *name) {
+            std::string text;
+            std::ifstream(server.Marker(name)) >> text;
+            return text;
+        };
+        EQUALS(Pump(server, {&client}, [&] {
+            return marker("watching") == "yes";
+        }),
+            true);
+
+        // Written by a packet handler, under its handle.
+        client.Send<Mood>(1);
+        EQUALS(Pump(server, {&client}, [&] {
+            return marker("mood") == "1";
+        }),
+            true);
+        // And by the tick thread, which is this one.
+        const auto before = Clock::now();
+        {
+            const auto avatar = server.Replication()->GetWorld().Write<Avatar>(avatarId);
+            if (avatar) {
+                avatar->state.Set("mood", Server::Number(2));
+            }
+        }
+        const double tickWriteMs = std::chrono::duration<double, std::milli>(Clock::now() - before).count();
+        EQUALS(Pump(server, {&client}, [&] {
+            return marker("mood") == "2";
+        }),
+            true);
+
+        std::vector<std::thread::id> listeners;
+        std::vector<std::thread::id> handlers;
+        {
+            const std::lock_guard guard(server.mutex);
+            listeners = server.scriptCallThreads;
+            handlers  = server.noteThreads;
+        }
+        EQUALS(listeners.size(), static_cast<size_t>(2));
+        EQUALS(handlers.size(), static_cast<size_t>(1));
+        if (listeners.size() != 2 || handlers.size() != 1) {
+            break;
+        }
+        // Both times on one thread, which is neither the packet thread nor this one.
+        EQUALS(listeners[0] == listeners[1], true);
+        EQUALS(listeners[0] != handlers[0], true);
+        EQUALS(listeners[0] != std::this_thread::get_id(), true);
+        fprintf(stderr, "server_packet_thread: writing a listened state-bag key took %.2f ms in a packet handler and %.2f ms on the tick thread, beside a busy script\n", server.moodHandlerMs.load(), tickWriteMs);
+        // Neither writer waited for the script, which computes 300 ms at a time.
+        LESSER(server.moodHandlerMs.load(), 300.0);
+        LESSER(tickWriteMs, 300.0);
         server.Stop();
     });
 

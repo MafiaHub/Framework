@@ -156,6 +156,15 @@ namespace Framework::Scripting::Builtins {
     }
 
     void StateBag::Dispatch(v8::Isolate *isolate, uint32_t id, const Networking::Replication::StateChange &change) {
+        // A listener is a resource's script, and scripts run on the script thread. A change made on
+        // another (a packet handler, the tick) is copied and handed over, like the entityStateChange
+        // event: the writer does not wait for a script, and runs none while it holds what it holds.
+        if (ScriptGate *gate = ScriptGate::Get(); gate != nullptr && !gate->OnScriptThread()) {
+            gate->Post([isolate, id, later = change] {
+                Dispatch(isolate, id, later);
+            });
+            return;
+        }
         {
             // Gone since the change was raised: not worth entering the runtime for.
             const std::lock_guard guard(_subscriptionsMutex);
