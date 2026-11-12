@@ -244,11 +244,13 @@ MODULE(network_packets, {
         int calls = 0;
         MafiaNet::PeerGuid seenGuid = MafiaNet::UNASSIGNED_PEER_GUID;
         uint64_t seenAvatar = 0;
+        const Replication::World *seenWorld = nullptr;
         bool seenSlot       = false;
         std::string seenText;
         net.server.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &message, Sender sender, Replication::World &handlerWorld) {
             ++calls;
             seenGuid   = sender.Guid();
+            seenWorld  = &handlerWorld;
             // The connection as MafiaNet names it carries the slot the ready event is keyed on.
             seenSlot   = sender.Connection().systemIndex == net.server.GetPeer()->GetGuidFromSystemAddress(net.server.GetPeer()->GetSystemAddressFromGuid(sender.Connection())).systemIndex && sender.Connection().systemIndex != static_cast<MafiaNet::SystemIndex>(-1);
             seenAvatar = sender.Avatar();
@@ -268,7 +270,7 @@ MODULE(network_packets, {
         EQUALS(seenAvatar, avatarId);
         EQUALS(seenSlot, true);
         STREQUALS(seenText.c_str(), "Lumos");
-        EQUALS(&world == &net.server.GetReplicationManager()->GetWorld(), true);
+        EQUALS(seenWorld == &world, true);
         auto avatar = world.Read<NetworkPacketsTest::Avatar>(avatarId);
         EQUALS(static_cast<bool>(avatar), true);
         EQUALS(avatar->messages, 1);
@@ -309,12 +311,14 @@ MODULE(network_packets, {
         RPC::ChatMessage message {};
         message.text = "Lumos";
 
-        // Under the threshold: nothing to say.
-        net.server.SetSlowHandlerWarnMs(10);
+        // Under the threshold, which is far above what a stalled runner adds to a handler that does nothing:
+        // nothing to say.
+        net.server.SetSlowHandlerWarnMs(5000);
         sleepMs = 0;
         net.client.BroadcastRPC(message);
         EQUALS(net.rig.PumpUntil([&] { return calls == 1; }), true);
         EQUALS(slowWarnings(), 0);
+        net.server.SetSlowHandlerWarnMs(10);
 
         // Three slow ones in a row are one line, which carries the digest of the RPC's identifier.
         sleepMs = 30;

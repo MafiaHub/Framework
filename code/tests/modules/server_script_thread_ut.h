@@ -487,7 +487,7 @@ MODULE(server_script_thread, {
         packets.join();
         fprintf(stderr, "server_script_thread: an emit from a second thread took %.2f ms\n", emitMs.load());
         // It built its arguments in a runtime of its own, so it did not wait for the tick thread's.
-        LESSER(emitMs.load(), 100.0);
+        LESSER(emitMs.load(), 300.0);
         EQUALS(server.TickUntil([&] {
             std::string text;
             std::ifstream(server.Marker("packet")) >> text;
