@@ -1262,8 +1262,8 @@ MODULE(server_packet_thread, {
                     }
                     each.client.Update();
                     const int stage = (each.round + i) % 3;
-                    const bool far  = (stage == 0 && each.client.connected) || (stage == 1 && each.client.joined) || (stage == 2 && each.client.ready);
-                    if (far || each.client.disconnected) {
+                    const bool reached = (stage == 0 && each.client.connected) || (stage == 1 && each.client.joined) || (stage == 2 && each.client.ready);
+                    if (reached || each.client.disconnected) {
                         (void)each.client.net.Disconnect();
                         each.waiting = false;
                         ++each.round;
