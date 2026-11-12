@@ -72,6 +72,10 @@ namespace Framework::Scripting {
 
         // The message of an error keeps half of what an error text may hold, which leaves the traceback its room.
         constexpr size_t kMaxTracedMessageBytes = LuaRuntime::kMaxErrorBytes / 2;
+
+        // An error that leaves the runtime for the log of the manager is held to what it is held to here.
+        static_assert(kMaxScriptErrorsPerSecond == LuaRuntime::kMaxLinesPerSecond);
+        static_assert(kMaxScriptErrorBytes == LuaRuntime::kMaxErrorBytes);
     } // namespace
 
     LuaRuntime::LuaRuntime(LuaRuntimeOptions options): _options(std::move(options)) {

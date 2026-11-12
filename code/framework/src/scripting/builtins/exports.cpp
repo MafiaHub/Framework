@@ -14,6 +14,7 @@
 #include "../lua/lua_runtime.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
+#include "../script_log.h"
 #include "../scripting_catalog.h"
 #include "../value_transfer.h"
 
@@ -58,7 +59,7 @@ namespace Framework::Scripting::Builtins {
             // Check if this export is declared in the manifest
             const bool isInManifest = resource->HasExport(exportName);
             if (!isInManifest) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Registering undeclared export '{}' - add to package.json exports array", resource->GetName(), exportName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Registering undeclared export '{}' - add to package.json exports array", resource->GetName(), BlankedLine(exportName));
             }
 
             // A name is registered once where Lua has a part in it: by the script that registers it now, or by the
@@ -104,7 +105,7 @@ namespace Framework::Scripting::Builtins {
             if (!registered) {
                 if (!isInManifest) {
                     // RegisterExport failed because it's not in the manifest - this is permissive
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered (not in manifest)", resource->GetName(), exportName);
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered (not in manifest)", resource->GetName(), BlankedLine(exportName));
                     call.Return(true);
                 }
                 else {
@@ -114,7 +115,7 @@ namespace Framework::Scripting::Builtins {
                 }
             }
             else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered", resource->GetName(), exportName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Export '{}' registered", resource->GetName(), BlankedLine(exportName));
                 call.Return(true);
             }
         }

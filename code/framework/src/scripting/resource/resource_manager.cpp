@@ -245,6 +245,7 @@ namespace Framework::Scripting {
         StopAll();
         // A runtime a builtin was registered in with this manager may outlive it.
         Bind::ForgetCallResourceManager(this);
+        ForgetScriptErrorBudgets(this);
         Builtins::StateBag::ForgetManager(this);
         Builtins::Messages::ForgetManager(this);
         if (_jsEngine) {
@@ -477,7 +478,7 @@ namespace Framework::Scripting {
             }
             else {
                 failed.push_back(name);
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource {}: {}", name, result.GetError());
+                LogScriptError(this, name, "Failed to start resource: " + result.GetError());
             }
         }
 
@@ -576,6 +577,9 @@ namespace Framework::Scripting {
             }
         } chainGuard {_startChain};
 
+        // What the run before this one wrote to the log is not held against the new one.
+        ResetScriptErrorBudget(this, name);
+
         // Start dependencies first
         auto deps = GetDependencies(name);
         for (const auto &depName : deps) {
@@ -591,7 +595,7 @@ namespace Framework::Scripting {
                 if (!result) {
                     // Installed-but-broken has to degrade like missing, or 'optional' means two things.
                     if (optional) {
-                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' continues without optional dependency '{}': {}", name, depName, result.GetError());
+                        LogScriptError(this, name, "Continues without optional dependency '" + std::string(depName) + "': " + result.GetError(), OutputLevel::Warning);
                         continue;
                     }
                     return ResourceOperationResult("Failed to start dependency '" + depName + "': " + result.GetError());
@@ -685,7 +689,7 @@ namespace Framework::Scripting {
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
             NotifyStoppedIfStillFailed(resource, std::string(name));
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource '{}': {}", name, error);
+            LogScriptError(this, name, "Failed to start resource: " + error);
             return ResourceOperationResult(error);
         }
 
@@ -753,7 +757,7 @@ namespace Framework::Scripting {
         const bool hasJavaScript = _jsEngine && _jsEngine->IsInitialized();
         const auto stopLifecycle = hasJavaScript ? AwaitLifecyclePromise(_jsEngine, _luaEngine, _events, stopPromise, _config.resourceStopTimeoutMs) : EmitLifecycleWithoutJavaScript(_luaEngine, _events, "resourceStop", std::string(name), _config.resourceStopTimeoutMs);
         if (stopLifecycle.status == LifecyclePromiseStatus::Rejected) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' rejected; forcing cleanup: {}", name, stopLifecycle.error);
+            LogScriptError(this, name, "resourceStop rejected; forcing cleanup: " + stopLifecycle.error);
         }
         else if (stopLifecycle.status == LifecyclePromiseStatus::TimedOut) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' timed out after {}ms; forcing cleanup", name, std::max(_config.resourceStopTimeoutMs, 1));
@@ -1119,11 +1123,11 @@ namespace Framework::Scripting {
         Builtins::StateBag::CleanupResource(this, std::string(resourceName));
 
         // What its handlers failed with is no longer acted on: the resource is going anyway.
-        std::erase_if(_handlerFailures, [resourceName](const HandlerFailure &failure) {
+        std::erase_if(_handlerFailures, [this, resourceName](const HandlerFailure &failure) {
             if (failure.resourceName != resourceName) {
                 return false;
             }
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {} (the resource is stopping)", failure.resourceName, failure.message);
+            LogScriptError(this, failure.resourceName, failure.message + " (the resource is stopping)");
             return true;
         });
 
@@ -1544,7 +1548,7 @@ namespace Framework::Scripting {
 
         // The text is the script's own: no control character of it reaches the log, and not more of it than a
         // resource may write in a second.
-        LogScriptError(resourceName, "Runtime error: " + error);
+        LogScriptError(this, resourceName, "Runtime error: " + error);
 
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
         v8::Isolate *failedIsolate      = resource->GetIsolate();
@@ -1595,7 +1599,7 @@ namespace Framework::Scripting {
                 HandleResourceRuntimeError(failure.resourceName, failure.message);
             }
             else {
-                LogScriptError(failure.resourceName, failure.message + " (the resource is not running)");
+                LogScriptError(this, failure.resourceName, failure.message + " (the resource is not running)");
             }
         }
     }

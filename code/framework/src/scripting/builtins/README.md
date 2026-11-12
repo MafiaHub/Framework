@@ -107,10 +107,13 @@ what it needs, and nothing else diverges:
   still running. Never `HandleResourceRuntimeError` from the handler's
   `done`: a script may be executing, or the resource stopping. A builtin
   that logs what a handler failed with itself does it with
-  `LogScriptError` (`scripting/script_log.h`), as the manager does: the
-  text is the script's, so control characters are blanked, every line is
-  put under the name of the resource, and a resource gets 200 entries a
-  second.
+  `LogScriptError(manager, resource, text)` (`scripting/script_log.h`), as
+  the manager does: the text is the script's, so it is cut to 16384
+  bytes, control characters are blanked, every line is put under the
+  name of the resource, and a resource gets 200 entries a second. No
+  builtin and no engine writes an error of a script to the logger
+  directly. A name a script chose (an event, a message type, an export)
+  goes into any other log line through `BlankedLine`.
   Every builtin that keeps a script function follows these three rules.
 
   `Player` and `TextLabel` are declared the same way, each inheriting

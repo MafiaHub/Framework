@@ -14,6 +14,7 @@
 #include "../lua/lua_runtime.h"
 #include "../resource/resource.h"
 #include "../resource/resource_manager.h"
+#include "../script_log.h"
 #include "../scripting_catalog.h"
 
 #include <logging/logger.h>
@@ -59,7 +60,7 @@ namespace Framework::Scripting::Builtins {
             if (!callerResource.empty()) {
                 const Resource *caller = manager->GetResource(callerResource);
                 if (caller && !caller->DependsOn(resourceName)) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Importing from '{}' without declaring dependency", callerResource, resourceName);
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Importing from '{}' without declaring dependency", callerResource, BlankedLine(resourceName));
                 }
             }
 
@@ -133,7 +134,7 @@ namespace Framework::Scripting::Builtins {
                 }
             }
 
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, exportNames.size(), resourceName);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Imported {} exports from '{}'", callerResource, exportNames.size(), BlankedLine(resourceName));
 
             call.Return(imports);
         }

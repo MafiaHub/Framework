@@ -79,8 +79,9 @@ namespace Framework::Scripting::Builtins {
             return {manager != nullptr ? &manager->GetEvents() : nullptr, manager};
         }
 
-        void LogHandlerError(const std::string &resourceName, const std::string &eventName, const std::string &error) {
-            LogScriptError(resourceName, "Event '" + eventName + "' handler error: " + error);
+        // `manager` is the one the handler's resource belongs to, as the key of its share of the log.
+        void LogHandlerError(const void *manager, const std::string &resourceName, const std::string &eventName, const std::string &error) {
+            LogScriptError(manager, resourceName, "Event '" + BlankedLine(eventName) + "' handler error: " + error);
         }
 
         // What a handler that was called through its callable failed with, for the emitter. A handler whose runtime
@@ -111,7 +112,7 @@ namespace Framework::Scripting::Builtins {
 
         // Copies `args` out of the emitter's isolate the first time it is asked. False when they cannot cross,
         // which is logged that first time, once for the emission, under the resource of the handler that asked.
-        bool Ensure(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<v8::Local<v8::Value>> &args, std::string_view api, const std::string &resourceName, const std::string &eventName) {
+        bool Ensure(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<v8::Local<v8::Value>> &args, std::string_view api, const void *manager, const std::string &resourceName, const std::string &eventName) {
             if (!copied) {
                 copied = true;
                 values.reserve(args.size());
@@ -120,7 +121,7 @@ namespace Framework::Scripting::Builtins {
                     if (!value) {
                         error = ArgumentError(api, i, value.GetError());
                         values.clear();
-                        LogHandlerError(resourceName, eventName, error);
+                        LogHandlerError(manager, resourceName, eventName, error);
                         break;
                     }
                     values.push_back(std::move(value).GetValue());
@@ -186,7 +187,7 @@ namespace Framework::Scripting::Builtins {
             entry.resourceName = std::move(resourceName);
             entry.once         = once;
             if (call.GetLanguage() == Language::JavaScript) {
-                entry.isolate = v8::Isolate::GetCurrent();
+                entry.isolate  = v8::Isolate::GetCurrent();
                 entry.callback = std::make_shared<v8::Global<v8::Function>>(entry.isolate, Bind::V8ValueOf(call, call.Arg(1)).As<v8::Function>());
             }
             return entry;
@@ -348,7 +349,7 @@ namespace Framework::Scripting::Builtins {
             }
 
             Bind::Deferred deferred = call.Defer();
-            EmitCopied(collect(), args, eventName, [deferred, failureMessage](std::vector<std::string> &&errors) mutable {
+            EmitCopied(events._resourceManager, collect(), args, eventName, [deferred, failureMessage](std::vector<std::string> &&errors) mutable {
                 if (errors.empty()) {
                     deferred.Resolve();
                 }
@@ -659,7 +660,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8::Local<v8::Value> Events::InvokeCallable(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, CallableArguments &copied, const std::string &eventName, std::string_view api) {
-        if (!copied.Ensure(isolate, context, args, api, handler.resourceName, eventName)) {
+        if (!copied.Ensure(isolate, context, args, api, _resourceManager, handler.resourceName, eventName)) {
             v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
             errResolver->Reject(context, v8::Exception::Error(v8pp::to_v8(isolate, copied.error))).Check();
             return errResolver->GetPromise();
@@ -672,13 +673,13 @@ namespace Framework::Scripting::Builtins {
         if (settled == nullptr) {
             return v8::Undefined(isolate);
         }
-        handler.callable->Invoke(copied.values, Bind::ReturnMode::Outcome, [settled, resourceName = handler.resourceName, eventName](Bind::CallOutcome &&outcome) {
+        handler.callable->Invoke(copied.values, Bind::ReturnMode::Outcome, [settled, manager = static_cast<const void *>(_resourceManager), resourceName = handler.resourceName, eventName](Bind::CallOutcome &&outcome) {
             if (!outcome.threw) {
                 settled->Resolve(std::move(outcome.value));
                 return;
             }
             if (outcome.error != Bind::kRuntimeStopped) {
-                LogHandlerError(resourceName, eventName, outcome.error);
+                LogHandlerError(manager, resourceName, eventName, outcome.error);
             }
             settled->Reject(FailureOf(outcome, resourceName));
         });
@@ -717,7 +718,7 @@ namespace Framework::Scripting::Builtins {
                 // so the script author can see where the throw actually happened
                 // instead of just the bare error string.
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
+                LogHandlerError(_resourceManager, logContext, eventName, errorStr);
 
                 // Create rejected promise for this handler
                 v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
@@ -1085,7 +1086,7 @@ namespace Framework::Scripting::Builtins {
         }
     };
 
-    Events::EmissionToken Events::EmitCopied(std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done) {
+    Events::EmissionToken Events::EmitCopied(const void *manager, std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done) {
         if (handlers.empty()) {
             if (done) {
                 done({});
@@ -1115,13 +1116,13 @@ namespace Framework::Scripting::Builtins {
             auto *monitor        = isolate != nullptr ? ResourceMonitor::Current() : nullptr;
             const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
 
-            handler.callable->Invoke(args, Bind::ReturnMode::Outcome, [emission, i, resourceName = handler.resourceName, eventName](Bind::CallOutcome &&outcome) {
+            handler.callable->Invoke(args, Bind::ReturnMode::Outcome, [emission, i, manager, resourceName = handler.resourceName, eventName](Bind::CallOutcome &&outcome) {
                 if (!outcome.threw) {
                     emission->Settle(i, std::nullopt);
                     return;
                 }
                 if (outcome.error != Bind::kRuntimeStopped) {
-                    LogHandlerError(resourceName, eventName, outcome.error);
+                    LogHandlerError(manager, resourceName, eventName, outcome.error);
                 }
                 emission->Settle(i, FailureOf(outcome, resourceName));
             });
@@ -1134,7 +1135,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     Events::EmissionToken Events::EmitReserved(const std::string &eventName, std::vector<TransferredValue> args, EmissionDone done) {
-        return EmitCopied(CollectHandlers(eventName, "", HandlerScope::Global), args, eventName, std::move(done));
+        return EmitCopied(_resourceManager, CollectHandlers(eventName, "", HandlerScope::Global), args, eventName, std::move(done));
     }
 
     void Events::CancelPendingEmission(const EmissionToken &emission) {
@@ -1168,7 +1169,7 @@ namespace Framework::Scripting::Builtins {
                 if (!handler.callable->IsAlive()) {
                     continue;
                 }
-                if (!copiedForCallables.Ensure(isolate, context, args, "Events::EmitReservedSync", logContext, eventName)) {
+                if (!copiedForCallables.Ensure(isolate, context, args, "Events::EmitReservedSync", _resourceManager, logContext, eventName)) {
                     continue;
                 }
                 struct Verdict final {
@@ -1176,10 +1177,10 @@ namespace Framework::Scripting::Builtins {
                     bool veto      = false;
                 };
                 const auto verdict = std::make_shared<Verdict>();
-                handler.callable->Invoke(copiedForCallables.values, Bind::ReturnMode::Outcome, [verdict, logContext, eventName](Bind::CallOutcome &&outcome) {
+                handler.callable->Invoke(copiedForCallables.values, Bind::ReturnMode::Outcome, [verdict, manager = static_cast<const void *>(_resourceManager), logContext, eventName](Bind::CallOutcome &&outcome) {
                     if (outcome.threw) {
                         if (outcome.error != Bind::kRuntimeStopped) {
-                            LogHandlerError(logContext, eventName, outcome.error);
+                            LogHandlerError(manager, logContext, eventName, outcome.error);
                         }
                         return;
                     }
@@ -1201,7 +1202,7 @@ namespace Framework::Scripting::Builtins {
 
             if (tryCatch.HasCaught()) {
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
+                LogHandlerError(_resourceManager, logContext, eventName, errorStr);
                 tryCatch.Reset();
                 continue;
             }

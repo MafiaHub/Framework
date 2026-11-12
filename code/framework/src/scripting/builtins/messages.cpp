@@ -43,8 +43,9 @@ namespace Framework::Scripting::Builtins {
             return "Messages.request: resource '" + resourceName + "' stopped before reply";
         }
 
-        void LogHandlerError(const std::string &resourceName, const std::string &messageType, const std::string &error) {
-            LogScriptError(resourceName, "Message handler '" + messageType + "' error: " + error);
+        // `manager` is the one the handler's resource belongs to, as the key of its share of the log.
+        void LogHandlerError(const void *manager, const std::string &resourceName, const std::string &messageType, const std::string &error) {
+            LogScriptError(manager, resourceName, "Message handler '" + BlankedLine(messageType) + "' error: " + error);
         }
     } // namespace
 
@@ -245,7 +246,7 @@ namespace Framework::Scripting::Builtins {
                     if (const RequestNode request = TakeUnanswered(requestId); !request.empty()) {
                         const bool stopped = *error == Bind::kRuntimeStopped;
                         if (!stopped) {
-                            LogHandlerError(targetResource, messageType, *error);
+                            LogHandlerError(manager, targetResource, messageType, *error);
                         }
                         const v8::Local<v8::String> text = v8pp::to_v8(isolate, stopped ? StoppedBeforeReply(targetResource) : *error).As<v8::String>();
                         resolver->Reject(context, stopped ? text.As<v8::Value>() : v8::Exception::Error(text)).Check();
@@ -313,8 +314,7 @@ namespace Framework::Scripting::Builtins {
             v8::MaybeLocal<v8::Value> result = CallHandler(isolate, context, manager, handler, payload, replyFn, messageType);
 
             if (tryCatch.HasCaught()) {
-                v8::String::Utf8Value error(isolate, tryCatch.Exception());
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Message handler '{}' error: {}", targetResource, messageType, *error ? *error : "Unknown error");
+                LogHandlerError(manager, targetResource, messageType, FormatV8Exception(isolate, tryCatch, "Unknown error"));
 
                 // Only reject the promise if reply() wasn't already called before the error
                 std::scoped_lock lock(_pendingRequestsMutex);
@@ -391,7 +391,7 @@ namespace Framework::Scripting::Builtins {
                     v8::TryCatch tryCatch(isolate);
                     auto copied = ValueTransfer::Copy(isolate, context, payload, Bind::V8CallableTransfer());
                     if (!copied) {
-                        LogHandlerError(targetResource, messageType, "Messages.send: payload: " + copied.GetError());
+                        LogHandlerError(manager, targetResource, messageType, "Messages.send: payload: " + copied.GetError());
                         return;
                     }
                     copy = std::move(copied).GetValue();
@@ -417,8 +417,7 @@ namespace Framework::Scripting::Builtins {
             (void)CallHandler(isolate, context, manager, handler, payload, replyFn, messageType);
 
             if (tryCatch.HasCaught()) {
-                v8::String::Utf8Value error(isolate, tryCatch.Exception());
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Message handler '{}' error: {}", targetResource, messageType, *error ? *error : "Unknown error");
+                LogHandlerError(manager, targetResource, messageType, FormatV8Exception(isolate, tryCatch, "Unknown error"));
             }
 
             // Restore previous resource context
@@ -703,7 +702,7 @@ namespace Framework::Scripting::Builtins {
             Reject(request.mapped(), StoppedBeforeReply(targetResource), false);
             return;
         }
-        LogHandlerError(targetResource, messageType, error);
+        LogHandlerError(manager != nullptr ? manager->manager : nullptr, targetResource, messageType, error);
         Reject(request.mapped(), error, true);
     }
 
@@ -716,7 +715,7 @@ namespace Framework::Scripting::Builtins {
             manager->manager->ReportHandlerFailure(targetResource, "Message handler '" + messageType + "' error: " + error);
             return;
         }
-        LogHandlerError(targetResource, messageType, error);
+        LogHandlerError(manager != nullptr ? manager->manager : nullptr, targetResource, messageType, error);
     }
 
     void Messages::Reject(PendingRequest &request, const std::string &message, bool asError) {

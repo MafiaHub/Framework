@@ -256,8 +256,9 @@ namespace Framework::Scripting::Builtins {
             std::string_view api);
 
         // Calls `handlers` for an emitter that has no isolate, a Lua script or a host without JavaScript, each
-        // through its callable, and tells `done` when all have settled.
-        static EmissionToken EmitCopied(std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done);
+        // through its callable, and tells `done` when all have settled. `manager` is the key of the share of the log
+        // a handler that fails gets (LogScriptError); it is not read through.
+        static EmissionToken EmitCopied(const void *manager, std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done);
 
         // Helper: invoke handlers and collect results as promises in the emitter's isolate. A handler's resource name
         // is its log context.

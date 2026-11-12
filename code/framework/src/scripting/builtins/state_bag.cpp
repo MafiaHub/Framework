@@ -12,6 +12,7 @@
 #include "../engine_helpers.h"
 #include "../lua/lua_runtime.h"
 #include "../resource_monitor.h"
+#include "../script_log.h"
 #include "../scripting_catalog.h"
 #include "../transferred_value.h"
 
@@ -212,7 +213,7 @@ namespace Framework::Scripting::Builtins {
                 manager->ReportHandlerFailure(resourceName, message);
                 return;
             }
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {}", resourceName, message);
+            LogScriptError(nullptr, resourceName, message);
         }
     } // namespace
 

@@ -15,6 +15,7 @@
 #include <scripting/engine_helpers.h>
 #include <scripting/engine_scope.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/script_log.h>
 #include <scripting/scripting_catalog.h>
 
 #include <core_modules.h>
@@ -23,6 +24,8 @@
 #include <utils/key_names.h>
 
 #include <v8pp/convert.hpp>
+
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <cctype>
@@ -440,7 +443,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 (void)p.fn->Call(context, context->Global(), 2, argv);
                 if (tryCatch.HasCaught()) {
                     const std::string error = Framework::Scripting::FormatV8Exception(isolate, tryCatch, "Unknown error in key bind handler");
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Key '{}' ({}) handler error: {}", p.resourceName, edge.keyName, stateStr, error);
+                    Framework::Scripting::LogScriptError(nullptr, p.resourceName, fmt::format("Key '{}' ({}) handler error: {}", edge.keyName, stateStr, error));
                 }
             }
         }

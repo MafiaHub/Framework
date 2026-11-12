@@ -10,6 +10,7 @@
 #include "builtins/builtins.h"
 #include "builtins/messages.h"
 #include "engine_helpers.h"
+#include "script_log.h"
 #include "v8_engine_callbacks.h"
 
 #include <logging/logger.h>
@@ -409,7 +410,7 @@ namespace Framework::Scripting {
 
             if (tryCatch.HasCaught()) {
                 std::string error = FormatV8Exception(_isolate, tryCatch, "Timer callback error");
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error);
+                LogScriptError(_resourceManager, owner, error);
                 if (!owner.empty())
                     _runtimeErrors.push_back({owner, std::move(error), {}, generation});
             }
@@ -728,7 +729,7 @@ namespace Framework::Scripting {
         _runtimeErrors.clear();
         std::vector<std::string> reported;
         for (const auto &error : errors) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error.message);
+            LogScriptError(_resourceManager, error.resource, error.message);
             if (!_resourceManager || error.resource.empty() || error.generation != GetResourceGeneration(error.resource) || std::ranges::contains(reported, error.resource))
                 continue;
             reported.push_back(error.resource);

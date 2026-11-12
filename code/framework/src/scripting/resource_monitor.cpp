@@ -8,6 +8,8 @@
 
 #include "resource_monitor.h"
 
+#include "script_log.h"
+
 #include <logging/logger.h>
 
 #include <fmt/format.h>
@@ -191,7 +193,8 @@ namespace Framework::Scripting {
             return SlowOutcome::Suppressed;
         }
 
-        const std::string subject = detail.empty() ? std::string(what) : fmt::format("{} '{}'", what, detail);
+        // The detail is a name a script chose, an event or a message as a rule.
+        const std::string subject = detail.empty() ? std::string(what) : fmt::format("{} '{}'", what, BlankedLine(detail));
         if (report.suppressed > 0) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] {} took {:.0f} ms ({} more over {:.0f} ms since the last report)", slot.name, subject, ms, report.suppressed, _slowThresholdMs);
         }

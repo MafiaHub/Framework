@@ -19,9 +19,12 @@
 #include <scripting/engine_scope.h>
 #include <scripting/resource/resource.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/script_log.h>
 #include <scripting/scripting_catalog.h>
 
 #include <logging/logger.h>
+
+#include <fmt/format.h>
 
 #include <v8pp/convert.hpp>
 
@@ -474,7 +477,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             }
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Created web view {} ({})", owner, id, url);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Created web view {} ({})", owner, id, Framework::Scripting::BlankedLine(url));
         args.GetReturnValue().Set(id);
     }
 
@@ -962,7 +965,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             (void)fn->Call(context, context->Global(), 1, argv);
             if (tryCatch.HasCaught()) {
                 const std::string error = Framework::Scripting::FormatV8Exception(isolate, tryCatch, "Unknown error in web view event handler");
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Web view {} event '{}' handler error: {}", resourceName, viewId, eventName, error);
+                Framework::Scripting::LogScriptError(nullptr, resourceName, fmt::format("Web view {} event '{}' handler error: {}", viewId, Framework::Scripting::BlankedLine(eventName), error));
             }
         }
     }
