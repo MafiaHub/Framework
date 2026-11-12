@@ -96,8 +96,9 @@ namespace Framework::Networking {
         uint64_t _slowHandlers = 0;
         std::chrono::steady_clock::time_point _nextSlowHandlerWarning {};
         void NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed);
-        // RPCs dropped for a payload that did not read whole since the last warning, which is written
+        // RPCs dropped for a payload that was cut short, in all and since the last warning, which is written
         // at most once a second: a peer can send them as fast as it likes. The draining thread's own.
+        std::atomic<uint64_t> _shortPayloadsDropped {0};
         uint64_t _shortPayloads = 0;
         std::chrono::steady_clock::time_point _nextShortPayloadWarning {};
         void NoteShortPayload(RPC::Identifier identifier, MafiaNet::RakNetGUID guid);
@@ -117,6 +118,11 @@ namespace Framework::Networking {
 
         // A handler that takes at least this long is logged, at most once a second, with the digest
         // of its RPC identifier (the name is not in the binary). 0 turns the warning off.
+        // Typed RPCs dropped since the server started because their payload was cut short.
+        uint64_t ShortPayloadsDropped() const {
+            return _shortPayloadsDropped.load(std::memory_order_relaxed);
+        }
+
         void SetSlowHandlerWarnMs(int32_t ms) {
             _slowHandlerWarnMs.store(ms, std::memory_order_relaxed);
         }
@@ -125,16 +131,16 @@ namespace Framework::Networking {
 
         // Register a handler for RPC payload type T. It receives the decoded payload, the connection
         // that sent it and the world, through which it reaches entities by handle (see
-        // replication/world.h). A payload the client did not send whole (truncated, or not what
-        // T::Serialize writes: see RPC::ReadWhole) is dropped before the handler, counted and logged at
-        // most once a second. Handlers run where packets are drained, on a server its packet
+        // replication/world.h). A payload whose Serialize read past the end of what the client sent
+        // (see RPC::ReadChecked) is dropped before the handler, counted (ShortPayloadsDropped) and
+        // logged at most once a second. Handlers run where packets are drained, on a server its packet
         // thread, one at a time; register them before it starts (an instance's PostInit or
         // PostScriptInit), since the table they go in is read there without a lock.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
             RegisterRawRPC(T::kIdentifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
                 T payload {};
-                if (!RPC::ReadWhole(bs, payload)) {
+                if (!RPC::ReadChecked(bs, payload)) {
                     NoteShortPayload(T::kIdentifier, sender.Connection());
                     return;
                 }

@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -38,6 +39,31 @@ namespace NetworkPacketsTest {
     struct Avatar final: Framework::Networking::Replication::NetworkEntity {
         static constexpr const char *kTypeName = "Test::NetworkPackets::Avatar";
         int messages                           = 0;
+    };
+
+    // A payload of values that are quantized on the wire: a compressed float and a normalized quaternion.
+    struct Quantized {
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::NetworkPackets::Quantized");
+        std::uint32_t sequence = 0;
+        float ratio            = 0.0f;
+        float w = 1.0f, x = 0.0f, y = 0.0f, z = 0.0f;
+
+        // A distinct ratio in [-1, 1] and a distinct unit quaternion for every sequence number.
+        void Set(std::uint32_t value) {
+            sequence          = value;
+            ratio             = static_cast<float>(value) / 500.0f - 1.0f;
+            const float angle = 0.003f * static_cast<float>(value) + 0.1f;
+            const float tilt  = 0.0017f * static_cast<float>(value);
+            w                 = std::cos(angle);
+            x                 = std::sin(angle) * std::cos(tilt);
+            y                 = std::sin(angle) * std::sin(tilt);
+            z                 = 0.0f;
+        }
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
+            bs->Serialize(write, sequence);
+            bs->SerializeCompressed(write, ratio);
+            bs->SerializeNormQuat(write, w, x, y, z);
+        }
     };
 
     // A loopback server with one connected client, as the admission tests stand them up.
@@ -300,7 +326,7 @@ MODULE(network_packets, {
         EQUALS(slowWarnings(), 1);
     });
 
-    IT("tells a payload that was read whole from one that was cut short", {
+    IT("tells a payload whose read ran past what was sent from one that was all there", {
         using namespace Framework::Networking;
         RPC::ChatMessage sent {};
         sent.text   = "Lumos";
@@ -310,16 +336,17 @@ MODULE(network_packets, {
         const unsigned int bytes = whole.GetNumberOfBytesUsed();
 
         RPC::ChatMessage read {};
-        EQUALS(RPC::ReadWhole(&whole, read), true);
+        EQUALS(RPC::ReadChecked(&whole, read), true);
         STREQUALS(read.text.c_str(), "Lumos");
         STREQUALS(read.author.c_str(), "Hermione");
+        EQUALS(whole.GetNumberOfUnreadBits(), 0u);
 
-        // Cut anywhere, it is not whole; no length reads as one by accident.
+        // Cut anywhere, a read runs past the end; no length passes by accident.
         unsigned int accepted = 0;
         for (unsigned int length = 0; length < bytes; ++length) {
-            MafiaNet::BitStream cut(whole.GetData(), length, false);
+            MafiaNet::BitStream cut(whole.GetData(), length, true);
             RPC::ChatMessage partial {};
-            accepted += RPC::ReadWhole(&cut, partial) ? 1 : 0;
+            accepted += RPC::ReadChecked(&cut, partial) ? 1 : 0;
         }
         EQUALS(accepted, 0u);
 
@@ -329,19 +356,95 @@ MODULE(network_packets, {
         const MafiaNet::BitSize_t end = followed.GetNumberOfBitsUsed();
         followed.Write(static_cast<std::uint32_t>(42));
         RPC::ChatMessage again {};
-        EQUALS(RPC::ReadWhole(&followed, again), true);
+        EQUALS(RPC::ReadChecked(&followed, again), true);
         EQUALS(followed.GetReadOffset(), end);
         std::uint32_t tail = 0;
         EQUALS(followed.Read(tail), true);
         EQUALS(tail, 42u);
 
-        // A payload with nothing in it is whole in an empty stream.
+        // A payload with nothing in it is all there in an empty stream.
         MafiaNet::BitStream empty;
         RPC::ClientJoin join {};
-        EQUALS(RPC::ReadWhole(&empty, join), true);
+        EQUALS(RPC::ReadChecked(&empty, join), true);
+
+        // Decoding starts where the stream's reader stands, not at its first bit.
+        MafiaNet::BitStream prefixed;
+        prefixed.Write(true);
+        sent.Serialize(&prefixed, true);
+        bool flag = false;
+        prefixed.Read(flag);
+        RPC::ChatMessage after {};
+        EQUALS(RPC::ReadChecked(&prefixed, after), true);
+        STREQUALS(after.text.c_str(), "Lumos");
+
+        // A decode leaves nothing behind for the next one on this thread to read as its own.
+        MafiaNet::BitStream nothing;
+        RPC::ChatMessage fromNothing {};
+        EQUALS(RPC::ReadChecked(&nothing, fromNothing), false);
+        STREQUALS(fromNothing.text.c_str(), "");
     });
 
-    IT("drops an RPC whose payload was cut short before its handler, and says so once for a burst", {
+    IT("accepts a payload of quantized values, which do not write back the bits they were read from", {
+        using namespace Framework::Networking;
+        // A compressed float keeps 16 bits and a normalized quaternion three 16-bit components: decoded and
+        // written again, neither gives the same bits for every input, and a Serialize that changes what it
+        // writes gives the handler something else than was sent. Only the read counts.
+        unsigned int refusedWhole = 0;
+        unsigned int acceptedCut  = 0;
+        unsigned int cuts         = 0;
+        for (int i = 0; i < 1000; ++i) {
+            NetworkPacketsTest::Quantized sent;
+            sent.Set(static_cast<std::uint32_t>(i));
+            MafiaNet::BitStream whole;
+            sent.Serialize(&whole, true);
+            NetworkPacketsTest::Quantized read;
+            refusedWhole += RPC::ReadChecked(&whole, read) && read.sequence == static_cast<std::uint32_t>(i) ? 0 : 1;
+            for (unsigned int length = 0; length < whole.GetNumberOfBytesUsed(); ++length) {
+                MafiaNet::BitStream cut(whole.GetData(), length, true);
+                NetworkPacketsTest::Quantized partial;
+                acceptedCut += RPC::ReadChecked(&cut, partial) ? 1 : 0;
+                ++cuts;
+            }
+        }
+        EQUALS(refusedWhole, 0u);
+        EQUALS(acceptedCut, 0u);
+        GREATER(cuts, 10000u);
+    });
+
+    IT("hands a handler every quantized payload a client sends", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        std::vector<bool> seen(1000, false);
+        int calls      = 0;
+        int mismatched = 0;
+        net.server.RegisterRPC<NetworkPacketsTest::Quantized>([&](const NetworkPacketsTest::Quantized &payload, Sender, Replication::World &) {
+            ++calls;
+            NetworkPacketsTest::Quantized expected;
+            expected.Set(payload.sequence);
+            // As far as 16 bits carry them; w is not sent but worked out from the other three, so it is the
+            // coarsest where it is smallest.
+            const bool close = std::abs(payload.ratio - expected.ratio) < 0.001f && std::abs(payload.w - expected.w) < 0.02f && std::abs(payload.x - expected.x) < 0.001f && std::abs(payload.y - expected.y) < 0.001f
+                            && std::abs(payload.z - expected.z) < 0.001f;
+            mismatched += close ? 0 : 1;
+            if (payload.sequence < seen.size()) {
+                seen[payload.sequence] = true;
+            }
+        });
+        for (std::uint32_t i = 0; i < 1000; ++i) {
+            NetworkPacketsTest::Quantized payload;
+            payload.Set(i);
+            net.client.BroadcastRPC(payload);
+        }
+        EQUALS(net.rig.PumpUntil([&] { return calls >= 1000; }), true);
+        EQUALS(calls, 1000);
+        EQUALS(static_cast<int>(std::count(seen.begin(), seen.end(), true)), 1000);
+        EQUALS(mismatched, 0);
+        EQUALS(net.server.ShortPayloadsDropped(), std::uint64_t {0});
+    });
+
+    IT("drops an RPC whose payload was cut short before its handler, counts it and says so", {
         using namespace Framework::Networking;
         NetworkPacketsTest::Loopback net;
         EQUALS(net.Connect(), true);
@@ -388,17 +491,21 @@ MODULE(network_packets, {
         STREQUALS(texts.empty() ? "" : texts.front().c_str(), "Lumos");
         // A raw handler decodes for itself, and is handed even an empty stream.
         EQUALS(rawCalls, 1);
+        // All three are counted, however the warnings fell: those are at most one a second, so how many
+        // lines three drops make depends on how long the drain took. The first names the RPC.
+        EQUALS(net.server.ShortPayloadsDropped(), std::uint64_t {3});
         int warnings = 0;
         bool named   = false;
         char digest[32];
         snprintf(digest, sizeof(digest), "%016llx", static_cast<unsigned long long>(RPC::ChatMessage::kIdentifier.digest));
         for (const std::string &line : logs->last_formatted()) {
-            if (line.find("whose payload did not read whole") != std::string::npos) {
+            if (line.find("whose payload was cut short") != std::string::npos) {
                 ++warnings;
                 named = named || line.find(digest) != std::string::npos;
             }
         }
-        EQUALS(warnings, 1);
+        GREATEREQ(warnings, 1);
+        LESSEREQ(warnings, 3);
         EQUALS(named, true);
     });
 
