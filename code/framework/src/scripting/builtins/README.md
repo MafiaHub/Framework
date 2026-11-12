@@ -94,29 +94,6 @@ what it needs, and nothing else diverges:
   (`Transfer(&Entity::GetId)`); a handle a project derives by hand from
   `Player` or `Entity` still registers through `RegisterHandleTransfer`.
 
-  `Player` and `TextLabel` are declared the same way, each inheriting
-  `Entity` in both languages (`Inherit<Entity>()`): a Lua `Player` passes
-  where an `Entity` is expected. What only the server has of a player (`kick`,
-  `emit`, the nametag setters, the identity of the connection) is tagged
-  `Bind::Side::Server`. In JavaScript a game publishes the two itself
-  (`Player::Register`, `TextLabel::Register`); a Lua state gets both from the
-  server scripting module.
-
-  `TextLabel` shows what a context function needs when an API gives
-  JavaScript's `null` a meaning:
-
-  - A `Bind::Value` reads `null` and `undefined` as `Nil`. Where the two
-    differ (`attachTo: null` detaches, `showTo: null` is everyone, a key left
-    out changes nothing), the function asks the copy of the value, whose
-    kind is `Null` for a JavaScript `null` (`IsNull` in `text_label.cpp`).
-  - A Lua table cannot hold `nil`, so an option that takes `null` takes
-    `false` from Lua: `showTo = false`.
-  - What answers `null` (`getOptions()` of a destroyed label, the `attachTo`
-    of a label that follows nothing) uses `Call::Null()`, which is no value
-    and no key in Lua.
-  - A resource owns the labels it creates. `TextLabel.create` names the
-    owner from its call (`ResourceManager::AssignEntity`), since the
-    manager's own hook on entity creation only sees running JavaScript.
   A function `StateBag.onChange` keeps is a `Bind::ScriptCallable`, owned by
   the resource `Call::OwnerOf(function)` names and kept with that resource's
   manager. It is dropped when the manager stops the resource
@@ -130,6 +107,35 @@ what it needs, and nothing else diverges:
   still running. Never `HandleResourceRuntimeError` from the handler's
   `done`: a script may be executing, or the resource stopping.
   Every builtin that keeps a script function follows these three rules.
+
+  `Player` and `TextLabel` are declared the same way, each inheriting
+  `Entity` in both languages (`Inherit<Entity>()`): a Lua `Player` passes
+  where an `Entity` is expected. What only the server has of a player (`kick`,
+  `emit`, the nametag setters, the identity of the connection) is tagged
+  `Bind::Side::Server`. In JavaScript a game publishes the two itself
+  (`Player::Register`, `TextLabel::Register`); a Lua state gets both from the
+  server scripting module.
+
+  `TextLabel` shows what a context function does where an API reads more of
+  a value than its kind:
+
+  - **`null` with a meaning.** `Value::IsNull()` tells JavaScript's `null`
+    from `undefined`, which are both `Nil`: `attachTo: null` detaches and
+    `showTo: null` is everyone, while a key left out changes nothing. Lua has
+    no `null` and a table cannot hold `nil`, so such an option takes `false`
+    from Lua (`showTo = false`).
+  - **`null` as an answer** (`getOptions()` of a destroyed label, the
+    `attachTo` of a label that follows nothing) is `Call::Null()`: no value,
+    and no key, in Lua.
+  - **"Anything with an id".** `Value::Member("id")` reads a member the way
+    a script's `value.id` does: the key of a plain object or table, the
+    property of a bound object of any class, a project's own included.
+    `Get` reads plain objects and tables only.
+  - **Ownership.** A resource owns the labels it creates, and they are
+    destroyed when it stops. `TextLabel.create` names the owner from its
+    call (`ResourceManager::AssignEntity`), because the manager's own hook
+    on entity creation names it from the running JavaScript and so misses a
+    Lua script outside the load of its file.
 
 - **Service APIs** — need the context and the `ResourceManager`:
 

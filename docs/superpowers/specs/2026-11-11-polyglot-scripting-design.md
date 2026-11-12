@@ -180,10 +180,12 @@ class Value {
   public:
     ValueKind Kind() const;   // Nil, Boolean, Number, String, Function, Array, Object, Bound, Other
     bool IsList() const;      // an Array, or an Object without a key: the check for "a list was passed"
+    bool IsNull() const;      // JavaScript's null, which is Nil like undefined; never true in Lua
     bool AsBoolean() const;  double AsNumber() const;  std::optional<int64_t> AsInteger() const;
     std::string AsString() const;  std::string ToDisplayString() const;
     template <typename T> T *AsBound() const;
     Value Get(std::string_view key) const;  void Set(std::string_view key, Value value);
+    Value Member(std::string_view key) const;                  // as a script's value.key: a bound object's property too
     std::vector<std::string> Keys() const;
     size_t Length() const;  Value At(size_t zeroBased) const;  void Append(Value value);
     std::shared_ptr<ScriptCallable> ToCallable() const;         // outlives the call
@@ -222,11 +224,17 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
   `Register` was given (`Bind::SetCallResourceManager`), which is forgotten when the isolate is
   unregistered or the manager is destroyed, and otherwise the scripting module's.
 
-Where the meaning of an API hangs on JavaScript's `null`, which a `Value` reads as `Nil` like `undefined`, the
-function asks the copy: `ToTransfer()` of a JavaScript `null` is `Kind::Null`. `TextLabel` does so for its options,
-where `attachTo: null` detaches and `showTo: null` is everyone while a key left out changes nothing. A Lua table
-cannot hold `nil`, so such an option takes `false` from Lua. What these functions answer `null` with is
-`Call::Null()`, and so no key in Lua.
+- `IsNull()` is true of JavaScript's `null` and of nothing else, for an API that gives `null` a meaning a value
+  left out does not have (`attachTo: null` detaches a label, `showTo: null` shows it to everyone, a key left out
+  changes nothing). `IsNil()` stays true of both. It is never true in Lua, which has the one `nil` and whose
+  tables cannot hold it: where such an API takes `null` inside an object, a Lua script passes `false` and the
+  function accepts it there. What a function answers `null` with is `Call::Null()`, and so no key in Lua.
+- `Member(key)` reads what a script reads as `value.key`, for a parameter that is "anything with an id". On an
+  `Object` or an `Array` it is `Get`. On a bound object it is the property: in JavaScript whatever the object
+  answers under that name, as for a script, so a class a project bound by hand and a script's subclass are read
+  too; in Lua what the getter of a property its class declares for the runtime gives, a method not being one.
+  What an accessor throws is thrown by the call once the function has returned, in both languages
+  (`HasThrown()` tells). Anything else, a function included, has no members.
 
 `Call::OwnerOf(function)` names the resource a function belongs to, for a builtin that keeps it beyond the
 call and drops it when that resource stops. In JavaScript it is `ResourceManager::ResolveResourceContext`
