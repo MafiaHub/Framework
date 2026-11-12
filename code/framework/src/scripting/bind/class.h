@@ -311,6 +311,59 @@ namespace Framework::Scripting::Bind {
                     return true;
                 });
         }
+
+        // The two above for a class that says itself what it crosses as: `write` fills the bytes from an object and
+        // `read` builds one again from them.
+        template <typename T, typename W, typename R>
+        void V8RegisterTransferAs(const std::string &name, W write, R read) {
+            ValueTransfer::RegisterHostType(
+                name,
+                [write](v8::Isolate *isolate, v8::Local<v8::Object> object, std::vector<uint8_t> &bytes) {
+                    V8EnsureClass<T>(isolate);
+                    const T *wrapped = static_cast<const T *>(V8Unwrap<T>(isolate, object));
+                    if (wrapped == nullptr) {
+                        return false;
+                    }
+                    std::invoke(write, *wrapped, bytes);
+                    return true;
+                },
+                [name, read](v8::Isolate *isolate, v8::Local<v8::Context>, const std::vector<uint8_t> &bytes) -> v8::MaybeLocal<v8::Value> {
+                    V8EnsureClass<T>(isolate);
+                    std::string error;
+                    try {
+                        const v8::Local<v8::Value> wrapped = V8Adopt<T>(isolate, new T(std::invoke(read, bytes)));
+                        if (!wrapped.IsEmpty()) {
+                            return wrapped;
+                        }
+                        error = name + " is not available in this JavaScript runtime";
+                    }
+                    catch (const std::exception &exception) {
+                        error = exception.what();
+                    }
+                    isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, error)));
+                    return {};
+                });
+        }
+
+        template <typename T, typename W, typename R>
+        void LuaRegisterTransferAs(const std::string &name, W write, R read) {
+            LuaTransfer::RegisterHostType(
+                name,
+                [write](lua_State *L, int index, std::vector<uint8_t> &bytes) {
+                    const T *object = LuaObjectAt<T>(L, index);
+                    if (object == nullptr) {
+                        return false;
+                    }
+                    std::invoke(write, *object, bytes);
+                    return true;
+                },
+                [read](lua_State *L, const std::vector<uint8_t> &bytes) {
+                    // Built before anything is pushed: what `read` throws fails the copy.
+                    T object = std::invoke(read, bytes);
+                    LuaNewObject<T>(L, std::move(object));
+                    return true;
+                });
+        }
     } // namespace Detail
 
     // The definition of a script class bound to the C++ class T: declared once in C++, described for the catalog
@@ -563,6 +616,23 @@ namespace Framework::Scripting::Bind {
             _record->registerTransfer = [name = _record->desc.name, get]() {
                 Detail::V8RegisterTransfer<T, Payload>(name, get);
                 Detail::LuaRegisterTransfer<T, Payload>(name, get);
+            };
+            return *this;
+        }
+
+        // Transfer for an object that crosses as more than the bytes of one value, as a handle that carries text
+        // does: `write` puts what crosses into the bytes it is given, empty at first, and `read` builds the object
+        // again from them, in the runtime it arrives in. Both are callable as write(const T &, std::vector<uint8_t>
+        // &) and read(const std::vector<uint8_t> &); what `read` throws fails the copy with what().
+        template <typename W, typename R>
+            requires std::is_invocable_v<W, const T &, std::vector<uint8_t> &> && std::is_invocable_r_v<T, R, const std::vector<uint8_t> &>
+        Class &Transfer(W write, R read) {
+            if (!_record->registerTransfer.empty()) {
+                throw std::logic_error("Bind: '" + _record->desc.name + "' declares twice how it crosses between runtimes");
+            }
+            _record->registerTransfer = [name = _record->desc.name, write, read]() {
+                Detail::V8RegisterTransferAs<T>(name, write, read);
+                Detail::LuaRegisterTransferAs<T>(name, write, read);
             };
             return *this;
         }
