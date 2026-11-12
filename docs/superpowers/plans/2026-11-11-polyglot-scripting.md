@@ -667,3 +667,16 @@ class Deferred final {            // copyable handle to shared state
 **Files:** Create `docs/scripting_lua.md`, `docs/scripting_bindings.md`, `code/tests/bench/binding_bench.cpp` (+ CMake target `FrameworkBindingBench`), an example resource under `code/tests/fixtures/resources/lua-example/`. Modify `code/framework/src/scripting/builtins/README.md`, `AGENTS.md` (architecture and dependencies lines), `docs/scripting_resource_isolation.md` cross-reference.
 
 **Requirements:** `scripting_lua.md` for resource authors (manifest, the Lua dialect and sandbox, API conventions, async, timers, value mapping, limits); `scripting_bindings.md` for binding authors (the `Bind` DSL, typed vs context functions, hooks, sides, how to test both languages); the bench measures `Vector3` construct/method/property and an `Events.emit` round trip in JS (before/after numbers from `git stash`-free comparison are not required — report absolute numbers) and in Lua; the example resource is started by a test in `lua_interop`.
+
+---
+
+## Deviations during execution
+
+- **Order:** Tasks 17 (`Entity`, `StateBag`) and 18 (`Player`, `TextLabel`) ran before Task 16: the shared
+  `Chat` needs the bound `Player`.
+- **Task 15:** the requirement of a console command handler was wrong, there is no such API. `consoleCommand`
+  reaching Lua handlers moved to Task 19, with `Events`.
+- **Task 29** was split in three: 29A the guides for resource authors, 29B the guide for binding authors with
+  the builtins README and `AGENTS.md`, 29C the engineering items (bench, example test, Lua setup hooks).
+- **sol2** was evaluated for the Lua backend after Task 28 and rejected; the reasons are in the spec
+  (`docs/superpowers/specs/2026-11-11-polyglot-scripting-design.md`).

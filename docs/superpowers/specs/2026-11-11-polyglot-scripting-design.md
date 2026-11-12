@@ -1,7 +1,7 @@
 # Polyglot Scripting (JavaScript + Lua) — Design
 
 Date: 2026-11-11
-Status: Approved for implementation (decisions 1-4 settled with the maintainer; the rest are the author's calls, marked as such)
+Status: Implemented (2026-11-12; decisions 1-4 settled with the maintainer; the rest are the author's calls, marked as such)
 
 ## Goal
 
@@ -240,8 +240,9 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
   function accepts it there. What a function answers `null` with is `Call::Null()`, and so no key in Lua.
 - `Member(key)` reads what a script reads as `value.key`, for a parameter that is "anything with an id". On an
   `Object` or an `Array` it is `Get`. On a bound object it is the property: in JavaScript whatever the object
-  answers under that name, as for a script, so a class a project bound by hand and a script's subclass are read
-  too; in Lua what the getter of a property its class declares for the runtime gives, a method not being one.
+  answers under that name, as for a script, so a class a project bound by hand is read too, and so is what a
+  script's subclass sets on the instance (a getter the subclass defines is not read: the instance is the
+  one the bound constructor made, without the prototype of the subclass); in Lua what the getter of a property its class declares for the runtime gives, a method not being one.
   What an accessor throws is thrown by the call once the function has returned, in both languages
   (`HasThrown()` tells). Anything else, a function included, has no members.
 
@@ -362,8 +363,11 @@ for a wrong `this`, as the hand-written builtins did.
     server, `0` for no cap.
   - **Time:** a count hook every 10 000 instructions checks a deadline per entry into the state. Defaults:
     5 000 ms on the client, off on the server. Past it the entry is aborted with `script ran too long`.
-  - **Errors:** every entry is a protected call with a traceback handler; an error in a handler or timer
-    is attributed to the resource and handed to `ResourceManager::HandleResourceRuntimeError`.
+  - **Errors:** every entry is a protected call with a traceback handler; an error is attributed to the
+    resource and never handled where it was raised. What a timer callback raises, or a coroutine after its
+    first wait, is queued by the engine. The failure of a handler a builtin kept is queued through
+    `ResourceManager::ReportHandlerFailure` and handled at the manager's next upkeep
+    (`ProcessHandlerFailures`), for the resource instance that reported it if it still runs.
 - **Scheduler** (C++): every script file, handler and timer callback runs in its own coroutine. Globals:
   `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` (as JavaScript), plus Lua-only `sleep(ms)`
   and `spawn(fn, ...)`. Timers die with the state.
@@ -405,7 +409,10 @@ for a wrong `this`, as the hand-written builtins did.
   that tick at the earliest, so Node keeps its share of the wait. A wait for no time (`sleep(0)`,
   `setTimeout(fn, 0)`) is due at the tick that armed it, not after it: it goes on at the next `Update()`,
   so a loop around `sleep(0)` goes round once for each tick of the server. What the engine queued as
-  errors goes to `ResourceManager::HandleResourceRuntimeError` with Node's.
+  errors (of timers and of coroutines past their first wait) goes to
+  `ResourceManager::HandleResourceRuntimeError` with Node's, from `Update()`. A handler failure does not
+  go there directly: it is queued through `ResourceManager::ReportHandlerFailure` and handled at the
+  manager's next upkeep, at the top of the same `Update()`.
 - The client scripting module owns a Lua engine too, through `LuaClientHost` (`scripting/lua/lua_client_host.h`),
   which is shared code so that it builds and is tested on every host: 128 MB a state, 5 000 ms an entry, the
   bindings both sides have (`Builtins::RegisterSharedLua`) with the members of the client side, and the transfer
