@@ -398,12 +398,19 @@ namespace Framework::Networking::Replication {
         World::RequireNoneHeld("a delegation pass was run");
         ++t_walking;
         RunPass();
+        // What the pass put off while it had ReplicaManager3's world: functions queued with
+        // World::WhenNoneHeld (an entity's OnSimulatorChanged), state-change handlers, teardowns.
+        World::Settle();
         DeliverNotices();
         --t_walking;
     }
 
     void DelegationManager::RunPass() {
         FW_PROFILE_SCOPE_N("Replication::DelegationPass");
+        // Letting go of an entity below must not run what this thread put off: that is promised to
+        // run with nothing of the Framework's held, and the pass holds ReplicaManager3's world.
+        // Declared first, so it outlives the guard; UpdateNow settles afterwards.
+        const World::HoldOff heldOff;
         // One pass at a time, and the connections stay as they are for it: the world comes before
         // the entities the pass then takes one by one.
         const MafiaNet::ReplicaManager3::WorldGuard pass(*_manager);

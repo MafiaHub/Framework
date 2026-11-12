@@ -31,6 +31,8 @@ namespace Framework::Networking::Replication {
         // Set while this thread tears one down or runs one of those: a handle taken and released
         // inside must not start the next.
         thread_local bool t_draining = false;
+        // World::HoldOff scopes alive on this thread.
+        thread_local uint32_t t_heldOff = 0;
 
         void Unhold(const Detail::WorldLockable *lock) {
             const auto it = std::find(t_locks.begin(), t_locks.end(), lock);
@@ -196,7 +198,7 @@ namespace Framework::Networking::Replication {
     void World::FinishDoomed() {
         // One at a time and off the list first: a teardown may take and release handles, which
         // comes back here and leaves the rest to this loop.
-        if (t_draining) {
+        if (t_draining || t_heldOff != 0) {
             return;
         }
         t_draining = true;
@@ -212,6 +214,14 @@ namespace Framework::Networking::Replication {
             next.world->Teardown(next.slot);
         }
         t_draining = false;
+    }
+
+    World::HoldOff::HoldOff() {
+        ++t_heldOff;
+    }
+
+    World::HoldOff::~HoldOff() {
+        --t_heldOff;
     }
 
     void World::WhenNoneHeld(fu2::unique_function<void()> fn) {

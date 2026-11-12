@@ -453,6 +453,18 @@ namespace Framework::Networking::Replication {
         Doom MarkDoomed(uint64_t id, std::shared_ptr<Detail::WorldEntitySlot> &unheld);
         void TeardownUnheld(std::shared_ptr<Detail::WorldEntitySlot> slot);
 
+        // While one lives, the calling thread runs nothing it put off and tears nothing down when it
+        // lets go of a handle: for a walk made under a lock that what is put off must not run
+        // under (a delegation pass holds ReplicaManager3's world). Whoever made one calls Settle
+        // once that lock is gone.
+        class HoldOff final {
+          public:
+            HoldOff();
+            ~HoldOff();
+            HoldOff(const HoldOff &)            = delete;
+            HoldOff &operator=(const HoldOff &) = delete;
+        };
+
         // Destroyed, and still to be torn down.
         bool AnyDoomed() const {
             return _doomedCount.load(std::memory_order_acquire) != 0;

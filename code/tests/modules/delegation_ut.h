@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/delegation.h"
 #include "networking/replication/entity_registry.h"
@@ -21,6 +22,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <functional>
+#include <future>
 #include <thread>
 #include <vector>
 
@@ -36,6 +39,20 @@ namespace DelegationTest {
         const DelegationPolicy *GetDelegationPolicy() const override {
             static const DelegationPolicy policy {};
             return &policy;
+        }
+    };
+    // An entity whose hook puts work off until its thread holds nothing, as a mod's does to reach another entity.
+    struct Hooked final: NetworkEntity {
+        static constexpr const char *kTypeName = "Test::Delegation::Hooked";
+        static inline std::function<void(uint64_t)> later;
+        const DelegationPolicy *GetDelegationPolicy() const override {
+            static const DelegationPolicy policy {};
+            return &policy;
+        }
+        void OnSimulatorChanged(MafiaNet::PeerGuid, MafiaNet::PeerGuid) override {
+            World::WhenNoneHeld([id = GetNetworkID()] {
+                later(id);
+            });
         }
     };
 } // namespace DelegationTest
@@ -246,6 +263,70 @@ MODULE(delegation, {
         const std::vector<DelegationCandidate> candidates {};
         EQUALS(DelegationManager::Elect(policy, entityAt, MafiaNet::VIRTUAL_WORLD_GLOBAL, alice, candidates, kGroundXY), nobody);
     });
+    IT("runs what an entity's hook put off once the pass has let go of ReplicaManager3's world", {
+        using namespace DelegationTest;
+        Framework::Networking::NetworkServer peer;
+        ReplicationManager *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+                Hooked::later = nullptr;
+            }
+        } cleanup {manager};
+        EntityRegistry::Get().Register<Avatar>(Avatar::kTypeName);
+        EntityRegistry::Get().Register<Hooked>(Hooked::kTypeName);
+        World &world               = manager->GetWorld();
+        DelegationManager &elector = manager->Delegation();
+        {
+            const Ref<Avatar> avatar = world.Create<Avatar>();
+            avatar->ownerGUID        = alice;
+            manager->SetViewer(alice, avatar);
+        }
+        uint64_t hooked[2] = {0, 0};
+        for (uint64_t &id : hooked) {
+            const Ref<Hooked> created = world.Create<Hooked>();
+            created->position         = glm::vec3(10.0f, 0.0f, 0.0f);
+            id                        = created->GetNetworkID();
+        }
+
+        int ran                = 0;
+        int worldFree          = 0;
+        size_t heldAtMost      = 0;
+        int audiences          = 0;
+        std::vector<std::thread> probes;
+        Hooked::later = [&](uint64_t id) {
+            ++ran;
+            heldAtMost = std::max(heldAtMost, World::HeldByThisThread());
+            // Another thread can have ReplicaManager3's world only if this one has let go of it.
+            std::promise<void> taken;
+            std::future<void> done = taken.get_future();
+            probes.emplace_back([&manager, taken = std::move(taken)]() mutable {
+                const MafiaNet::ReplicaManager3::WorldGuard guard(*TestWorld::Rm3(manager));
+                taken.set_value();
+            });
+            worldFree += done.wait_for(std::chrono::seconds(2)) == std::future_status::ready ? 1 : 0;
+            // And what takes that world, or runs a pass, is this function's to call.
+            int peers = 0;
+            manager->ForEachStreamingPeer(id, [&](MafiaNet::PeerGuid) {
+                ++peers;
+            });
+            audiences += peers + 1;
+            elector.Pin(id, alice);
+        };
+        elector.UpdateNow();
+        for (std::thread &probe : probes) {
+            probe.join();
+        }
+        EQUALS(ran, 2);
+        EQUALS(worldFree, 2);
+        EQUALS(heldAtMost, size_t {0});
+        EQUALS(audiences, 2);
+        EQUALS(elector.IsPinned(hooked[0]) && elector.IsPinned(hooked[1]), true);
+        EQUALS(World::HeldByThisThread(), size_t {0});
+    });
+
     IT("tells a simulator-changed handler once the pass is over, and makes a pass it asks for the next one", {
         using namespace DelegationTest;
         Framework::Networking::NetworkServer peer;
