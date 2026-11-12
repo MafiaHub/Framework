@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/transform_batch.h"
@@ -177,7 +178,7 @@ MODULE(transform_batch, {
         packet.data   = game;
         packet.length = sizeof(game);
         packet.guid   = MafiaNet::RakNetGUID(1001);
-        EQUALS(manager->OnReceive(&packet), MafiaNet::RR_CONTINUE_PROCESSING);
+        EQUALS(TestWorld::OnReceive(manager, &packet), MafiaNet::RR_CONTINUE_PROCESSING);
     });
 
     IT("applies batches through ownership epoch and per-entity timestamp gates", {
@@ -192,13 +193,13 @@ MODULE(transform_batch, {
             }
         } cleanup {manager};
         const MafiaNet::RakNetGUID owner(1001), stranger(1002);
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, stranger));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, stranger));
         Framework::Networking::Replication::NetworkEntity entity;
         entity.SetNetworkID(7);
         entity.ownerGUID  = MafiaNet::ToPeerGuid(owner);
         entity.stateEpoch = 3;
-        manager->Reference(&entity);
+        TestWorld::Rm3(manager)->Reference(&entity);
 
         auto deliver = [&](MafiaNet::RakNetGUID sender, MafiaNet::Time time, std::uint8_t epoch, float x, bool truncate = false) {
             Harness h;
@@ -217,7 +218,7 @@ MODULE(transform_batch, {
             packet.length = static_cast<unsigned int>(bytes.size()) - (truncate ? 1 : 0);
             packet.guid   = sender;
             // The unit macros break out of the test on failure, so the check stays out of this lambda.
-            return manager->OnReceive(&packet);
+            return TestWorld::OnReceive(manager, &packet);
         };
         EQUALS(deliver(stranger, 100, 3, 9.0f), MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE);
         EQUALS(entity.position.x, 0.0f);
@@ -245,13 +246,13 @@ MODULE(transform_batch, {
             }
         } cleanup {manager};
         const MafiaNet::RakNetGUID owner(1001);
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
         Framework::Networking::Replication::NetworkEntity entities[2];
         for (unsigned int i = 0; i < 2; ++i) {
             entities[i].SetNetworkID(i + 1);
             entities[i].ownerGUID  = MafiaNet::ToPeerGuid(owner);
             entities[i].stateEpoch = static_cast<uint8_t>(i + 1);
-            manager->Reference(&entities[i]);
+            TestWorld::Rm3(manager)->Reference(&entities[i]);
         }
         for (unsigned int pass = 1; pass <= 3; ++pass) {
             Harness h;
@@ -270,7 +271,7 @@ MODULE(transform_batch, {
             packet.data   = h.packets[0].data.data();
             packet.length = static_cast<unsigned int>(h.packets[0].data.size());
             packet.guid   = owner;
-            manager->OnReceive(&packet);
+            TestWorld::OnReceive(manager, &packet);
             EQUALS(entities[0].position.x, static_cast<float>(10 * pass));
             EQUALS(entities[1].position.x, static_cast<float>(10 * pass + 1));
         }
@@ -313,7 +314,7 @@ MODULE(transform_batch, {
                 ++passes;
             }
         } entity;
-        manager->Reference(&entity);
+        TestWorld::Rm3(manager)->Reference(&entity);
         manager->BeginNetworkUpdate();
         for (int packet = 0; packet < 300; ++packet) {
             manager->Update();

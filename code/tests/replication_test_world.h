@@ -15,6 +15,20 @@
 
 #include <cstdint>
 
+// The manager as the ReplicaManager3 it is, which is private to it: tests push connections and
+// reference replicas by hand, with no network behind them.
+struct Framework::Networking::Replication::TestAccess {
+    static MafiaNet::ReplicaManager3 *Base(ReplicationManager *manager) {
+        return manager;
+    }
+    static MafiaNet::PluginReceiveResult OnReceive(ReplicationManager *manager, MafiaNet::Packet *packet) {
+        return manager->OnReceive(packet);
+    }
+    static void OnClosedConnection(ReplicationManager *manager, const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid, MafiaNet::PI2_LostConnectionReason reason) {
+        manager->OnClosedConnection(address, guid, reason);
+    }
+};
+
 // Server entities for tests, made and reached through the world as a game's are. A test drives the
 // manager step by step on one thread and looks at an entity between two steps, so it keeps the
 // pointer a handle gave it once the handle is gone; nothing but a test may.
@@ -26,6 +40,18 @@ namespace TestWorld {
     inline uint32_t PlainType() {
         static const uint32_t type = Framework::Networking::Replication::EntityRegistry::Get().Register<NetworkEntity>("Test::World::Plain");
         return type;
+    }
+
+    inline MafiaNet::ReplicaManager3 *Rm3(ReplicationManager *manager) {
+        return Framework::Networking::Replication::TestAccess::Base(manager);
+    }
+
+    inline MafiaNet::PluginReceiveResult OnReceive(ReplicationManager *manager, MafiaNet::Packet *packet) {
+        return Framework::Networking::Replication::TestAccess::OnReceive(manager, packet);
+    }
+
+    inline void OnClosedConnection(ReplicationManager *manager, const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid, MafiaNet::PI2_LostConnectionReason reason) {
+        Framework::Networking::Replication::TestAccess::OnClosedConnection(manager, address, guid, reason);
     }
 
     inline NetworkEntity *Make(ReplicationManager *manager, uint32_t typeId) {

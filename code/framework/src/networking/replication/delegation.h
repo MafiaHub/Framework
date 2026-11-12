@@ -222,8 +222,9 @@ namespace Framework::Networking::Replication {
 
         // Raised after the ownership change has been applied and the forced state pushed, so a
         // handler sees the entity in its new arrangement. `previous` is UNASSIGNED when the entity
-        // was dormant, and `current` is UNASSIGNED when it just became so. The pass holds the entity
-        // while it calls: a handler works on it and does not ask the world for a handle.
+        // was dormant, and `current` is UNASSIGNED when it just became so. A handler is given the
+        // entity's network id, once the pass has let go of the entity: it reaches the entity
+        // through the world, like anything else.
         //
         // Handles rather than one slot, for the same reason state-bag subscriptions are handles: a
         // game has more than one kind of delegated entity, and the second feature to want this must
@@ -231,7 +232,8 @@ namespace Framework::Networking::Replication {
         using SimulatorChangedHandle                                    = uint32_t;
         static constexpr SimulatorChangedHandle kInvalidSimulatorHandle = 0;
 
-        SimulatorChangedHandle AddSimulatorChangedHandler(fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const> callback);
+        using SimulatorChanged = fu2::function<void(uint64_t networkId, MafiaNet::PeerGuid previous, MafiaNet::PeerGuid current, DelegationChange change) const>;
+        SimulatorChangedHandle AddSimulatorChangedHandler(SimulatorChanged callback);
         void RemoveSimulatorChangedHandler(SimulatorChangedHandle handle);
 
         // What one client is currently carrying, in policy weight.
@@ -299,7 +301,6 @@ namespace Framework::Networking::Replication {
         std::vector<uint64_t> _scan;
         // Keyed by handle, so a handler that unsubscribes during dispatch cannot invalidate what the
         // dispatch is walking.
-        using SimulatorChanged = fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const>;
         std::unordered_map<SimulatorChangedHandle, std::shared_ptr<const SimulatorChanged>> _simulatorChanged;
         SimulatorChangedHandle _nextSimulatorHandle = kInvalidSimulatorHandle;
         // Scratch for one dispatch, reused so a handover allocates nothing.

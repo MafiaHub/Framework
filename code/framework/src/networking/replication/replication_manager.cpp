@@ -602,9 +602,7 @@ namespace Framework::Networking::Replication {
         // A handler asks the world for the entity, which the writer holds: on the server it is told
         // once the writer has let go, by id.
         if (_isServer && World::HeldByThisThread() != 0) {
-            StateChange later = change;
-            later.entity      = nullptr;
-            World::WhenNoneHeld([this, later = std::move(later)] {
+            World::WhenNoneHeld([this, later = change] {
                 DispatchStateChange(later);
             });
             return;
@@ -1118,6 +1116,16 @@ namespace Framework::Networking::Replication {
             _delegation.UpdateNow();
         }
         ReplicaManager3::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
+    }
+
+    void ReplicationManager::StartReplication(const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid) {
+        const WorldGuard world(*this);
+        if (GetConnectionByGUID(guid) != nullptr) {
+            return; // already started (a client could send ClientIdentity twice)
+        }
+        if (MafiaNet::Connection_RM3 *connection = AllocConnection(address, guid)) {
+            PushConnection(connection);
+        }
     }
 
     MafiaNet::Connection_RM3 *ReplicationManager::AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const {

@@ -536,13 +536,11 @@ MODULE(world, {
         int calls               = 0;
         size_t heldInHandler    = 99;
         uint64_t namedEntity    = 0;
-        bool handedThePointer   = true;
         bool reachedTheEntity   = false;
         const auto subscription = fixture.manager->AddStateChangeHandler({}, [&](const StateChange &change) {
             ++calls;
             heldInHandler    = World::HeldByThisThread();
             namedEntity      = change.networkId;
-            handedThePointer = change.entity != nullptr;
             // What a script's handler does: read the entity it was told about.
             reachedTheEntity = static_cast<bool>(world.Read<Walker>(change.networkId));
         });
@@ -558,7 +556,6 @@ MODULE(world, {
         EQUALS(calls, 1);
         EQUALS(heldInHandler, size_t {0});
         EQUALS(namedEntity, walker);
-        EQUALS(handedThePointer, false);
         EQUALS(reachedTheEntity, true);
     });
 

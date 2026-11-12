@@ -750,7 +750,7 @@ namespace Framework::Integrations::Server {
 
             auto *replication   = net->GetReplicationManager();
             const auto peerGuid = MafiaNet::ToPeerGuid(guid);
-            if (replication && (replication->GetConnectionByGUID(guid) || sender.Avatar() != 0)) {
+            if (replication && (replication->HasConnection(guid) || sender.Avatar() != 0)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate join from {}", guid.g);
                 return;
             }

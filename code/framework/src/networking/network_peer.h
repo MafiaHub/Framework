@@ -42,6 +42,13 @@ namespace Framework::Networking::RPC {
 namespace Framework::Networking {
     class NetworkPeer: public Lifecycle {
       protected:
+        // The table replicated entities are found in by id: the replication manager's, and public
+        // only on a client. A server reaches entities through the world.
+        MafiaNet::NetworkIDManager *GetNetworkIDManager() noexcept {
+            return &_networkIDManager;
+        }
+        friend class Replication::ReplicationManager;
+
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset             = 0; // Offset to skip timestamp prefix if present
@@ -248,10 +255,6 @@ namespace Framework::Networking {
 
         MafiaNet::RPC4 *GetRPC() noexcept {
             return &_rpc;
-        }
-
-        MafiaNet::NetworkIDManager *GetNetworkIDManager() noexcept {
-            return &_networkIDManager;
         }
 
         MafiaNet::TwoWayAuthentication *GetTwoWayAuth() noexcept {

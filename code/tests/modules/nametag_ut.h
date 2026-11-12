@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "core_modules.h"
 #include "networking/network_server.h"
 #include "networking/replication/nametag_state.h"
@@ -58,8 +59,8 @@ class NametagRig {
         Server()->Init(&serverPeer, true);
         ownerPeer.GetReplicationManager()->Init(&ownerPeer, false);
         viewerPeer.GetReplicationManager()->Init(&viewerPeer, false);
-        owner.replicaManager  = ownerPeer.GetReplicationManager();
-        viewer.replicaManager = viewerPeer.GetReplicationManager();
+        owner.replicaManager  = TestWorld::Rm3(ownerPeer.GetReplicationManager());
+        viewer.replicaManager = TestWorld::Rm3(viewerPeer.GetReplicationManager());
 
         Framework::Networking::Replication::EntityRegistry::Get().Register<Avatar>(Avatar::kTypeName);
         {
@@ -67,7 +68,7 @@ class NametagRig {
             created->ownerGUID = ownerPeer.GetReplicationManager()->GetMyGUID();
             avatar             = &*created;
         }
-        ownerConnection = Server()->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, MafiaNet::ToGuid(avatar->ownerGUID));
+        ownerConnection = TestWorld::Rm3(Server())->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, MafiaNet::ToGuid(avatar->ownerGUID));
         Framework::CoreModules::SetReplication(Server());
         if (clientsInWorld) {
             Construct(owner);
@@ -102,7 +103,7 @@ class NametagRig {
 
     ~NametagRig() {
         Framework::CoreModules::SetReplication(nullptr);
-        Server()->DeallocConnection(ownerConnection);
+        TestWorld::Rm3(Server())->DeallocConnection(ownerConnection);
         Server()->Clear();
     }
 

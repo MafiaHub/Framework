@@ -235,7 +235,8 @@ namespace Framework::Networking::Replication {
     // On the server an entity is reached through a handle of the World, which holds its lock. The
     // Framework holds that lock too around every extension point below that it calls on the entity
     // (serializing it, applying inbound state, an election asking it): an override works on its own
-    // entity freely, and must not ask the world for a handle.
+    // entity freely, and must not ask the world for a handle. What it has to do on another entity,
+    // or by id, it hands to World::WhenNoneHeld, which runs it once the Framework has let go.
     class NetworkEntity: public MafiaNet::VirtualWorldReplica3 {
       public:
         NetworkEntity() {

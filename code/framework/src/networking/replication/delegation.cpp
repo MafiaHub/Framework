@@ -315,18 +315,24 @@ namespace Framework::Networking::Replication {
             dispatch.assign(_simulatorChanged.begin(), _simulatorChanged.end());
             ++_stats.handovers;
         }
-        for (const auto &[handle, callback] : dispatch) {
-            {
-                const std::lock_guard guard(_mutex);
-                if (!_simulatorChanged.contains(handle)) {
-                    continue;
-                }
-            }
-            (*callback)(&entity, previous, next, change);
+        if (dispatch.empty()) {
+            return;
         }
+        // Once the caller has let go of the entity: a handler asks the world for it by id.
+        World::WhenNoneHeld([this, dispatch = std::move(dispatch), id = static_cast<uint64_t>(entity.GetNetworkID()), previous, next, change] {
+            for (const auto &[handle, callback] : dispatch) {
+                {
+                    const std::lock_guard guard(_mutex);
+                    if (!_simulatorChanged.contains(handle)) {
+                        continue;
+                    }
+                }
+                (*callback)(id, previous, next, change);
+            }
+        });
     }
 
-    DelegationManager::SimulatorChangedHandle DelegationManager::AddSimulatorChangedHandler(fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const> callback) {
+    DelegationManager::SimulatorChangedHandle DelegationManager::AddSimulatorChangedHandler(SimulatorChanged callback) {
         if (!callback) {
             return kInvalidSimulatorHandle;
         }

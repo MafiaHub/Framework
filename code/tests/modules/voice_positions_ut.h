@@ -239,8 +239,8 @@ MODULE(voice_positions, {
     IT("places a speaker at their avatar on a client, not at an entity they only own", {
         NetworkEntity serverAvatar;
         NetworkEntity serverNpc;
-        serverAvatar.replicaManager     = serverManager;
-        serverNpc.replicaManager        = serverManager;
+        serverAvatar.replicaManager     = TestWorld::Rm3(serverManager);
+        serverNpc.replicaManager        = TestWorld::Rm3(serverManager);
         serverAvatar.ownerGUID          = alice;
         serverAvatar.position           = aliceAt;
         serverAvatar.streaming.isViewer = true;
@@ -249,8 +249,8 @@ MODULE(voice_positions, {
 
         NetworkEntity clientAvatar;
         NetworkEntity clientNpc;
-        clientManager->Reference(&clientAvatar);
-        clientManager->Reference(&clientNpc);
+        TestWorld::Rm3(clientManager)->Reference(&clientAvatar);
+        TestWorld::Rm3(clientManager)->Reference(&clientNpc);
         construct(serverAvatar, clientAvatar);
         construct(serverNpc, clientNpc);
 
@@ -274,8 +274,8 @@ MODULE(voice_positions, {
 
         NetworkEntity clientOld;
         NetworkEntity clientNew;
-        clientManager->Reference(&clientOld);
-        clientManager->Reference(&clientNew);
+        TestWorld::Rm3(clientManager)->Reference(&clientOld);
+        TestWorld::Rm3(clientManager)->Reference(&clientNew);
         construct(*serverOld, clientOld);
         construct(*serverNew, clientNew);
         deliverState(*serverOld, clientOld, true);
@@ -296,11 +296,11 @@ MODULE(voice_positions, {
 
     IT("does not let a client promote an entity to an avatar on the server", {
         NetworkEntity serverNpc;
-        serverNpc.replicaManager = serverManager;
+        serverNpc.replicaManager = TestWorld::Rm3(serverManager);
         serverNpc.ownerGUID      = alice;
 
         NetworkEntity clientNpc;
-        clientNpc.replicaManager     = clientManager;
+        clientNpc.replicaManager     = TestWorld::Rm3(clientManager);
         clientNpc.ownerGUID          = alice;
         clientNpc.streaming.isViewer = true;
 

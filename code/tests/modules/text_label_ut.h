@@ -297,10 +297,10 @@ MODULE(text_label, {
         manager->SetViewer(MafiaNet::ToPeerGuid(nearbyGuid), nearby->GetNetworkID());
         manager->SetViewer(MafiaNet::ToPeerGuid(distantGuid), distant->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, nearbyGuid));
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, distantGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, nearbyGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, distantGuid));
         const auto sees = [&](MafiaNet::RakNetGUID guid) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guid));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guid));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(label);
@@ -331,14 +331,14 @@ MODULE(text_label, {
         TextLabel handle(label->GetNetworkID());
         manager->RebuildInterest();
         for (const auto &guid : guids) {
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
         }
         // Routine refreshes are far off and nothing is rebuilt between changes: a filter change alone
         // has to reach the players it concerns, and only them.
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto sees = [&](int player, NetworkEntity *entity) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(entity);
@@ -376,7 +376,7 @@ MODULE(text_label, {
 
         // A player who leaves is dropped from the filter: whoever holds that guid next starts clean.
         handle.SetVisibleFor(players[1]->ownerGUID, false);
-        manager->OnClosedConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guids[1], MafiaNet::LCR_CONNECTION_LOST);
+        TestWorld::OnClosedConnection(manager, MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guids[1], MafiaNet::LCR_CONNECTION_LOST);
         EQUALS((label->streaming.viewers == nullptr), true);
     });
 
@@ -395,12 +395,12 @@ MODULE(text_label, {
         auto *prop  = TestWorld::Make(manager, world.targetType);
         manager->RebuildInterest();
         for (const auto &guid : guids) {
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
         }
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto sees = [&](int player, NetworkEntity *entity) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(entity);
@@ -461,11 +461,11 @@ MODULE(text_label, {
         TextLabel handle(label->GetNetworkID());
         manager->RebuildInterest();
         for (const auto &guid : guids) {
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
         }
         manager->SetInterestRebuildInterval(1000000);
         const auto sees = [&](int player) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(label);

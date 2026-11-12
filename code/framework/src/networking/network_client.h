@@ -46,6 +46,8 @@ namespace Framework::Networking {
       public:
         NetworkClient();
 
+        using NetworkPeer::GetNetworkIDManager;
+
         // The local address the peer binds. The default binds every interface, which reaching a server on
         // another machine needs; one that only ever talks to a server on this machine binds "127.0.0.1" and
         // opens nothing on the network.

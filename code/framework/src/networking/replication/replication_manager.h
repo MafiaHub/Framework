@@ -41,6 +41,7 @@ namespace Framework::Networking {
 
 namespace Framework::Networking::Replication {
     class ReplicationConnection;
+    struct TestAccess;
 
     // Downcast a base NetworkEntity* to a concrete subclass by comparing the registered type id
     // against the compile-time id of T::kTypeName. This is an exact-type match, not an is-a test:
@@ -93,8 +94,22 @@ namespace Framework::Networking::Replication {
     using StateChangeHandle                                      = uint32_t;
     inline constexpr StateChangeHandle kInvalidStateChangeHandle = 0;
 
-    class ReplicationManager final: public MafiaNet::ReplicaManager3 {
+    // ReplicaManager3 is a private base: its connection and replica lists hand out entities by
+    // pointer, which only this class, the world and the connections may touch. What a server needs
+    // of it is named below.
+    class ReplicationManager final: private MafiaNet::ReplicaManager3 {
       public:
+        using MafiaNet::ReplicaManager3::Clear;
+        using MafiaNet::ReplicaManager3::GetConnectionCount;
+        using MafiaNet::ReplicaManager3::SetAutoManageConnections;
+        using MafiaNet::ReplicaManager3::SetAutoSerializeInterval;
+        // Whether replication to this peer has started, and starting it (idempotent). See
+        // NetworkServer::PushReplicationConnection.
+        bool HasConnection(MafiaNet::RakNetGUID guid) const {
+            return GetConnectionByGUID(guid) != nullptr;
+        }
+        void StartReplication(const MafiaNet::SystemAddress &address, MafiaNet::RakNetGUID guid);
+
         ReplicationManager();
         ~ReplicationManager();
 
@@ -124,8 +139,6 @@ namespace Framework::Networking::Replication {
         // pass serialize even if it is not due, so they are what the next delta is taken against;
         // otherwise a value that changed back before then would never reach that viewer.
         void SerializeThisPass();
-        // Decodes transform batches and hands everything else to ReplicaManager3.
-        MafiaNet::PluginReceiveResult OnReceive(MafiaNet::Packet *packet) override;
 
         // Server: push the entity's forced state to its owner — the server's authoritative override
         // of an owned entity (see NetworkEntity::ForceState / OnStateForced). Bumps the entity's
@@ -319,13 +332,6 @@ namespace Framework::Networking::Replication {
         void RebuildInterest();
 
         // --- Read by ReplicationConnection ---
-        const InterestGrid &Interest() const {
-            return _interest;
-        }
-        // Working memory for a query run on the server thread outside RebuildInterest.
-        InterestGrid::Scratch &MainScratch() {
-            return _scratch.front();
-        }
         // Entities every viewer has to look at again, as a sequence each connection reads up to
         // where it got: created, or its audience widened. A connection behind ReevaluationBase has
         // missed some and recomputes.
@@ -390,7 +396,10 @@ namespace Framework::Networking::Replication {
             _onEntityDestroyed = std::move(callback);
         }
 
+      private:
         // --- ReplicaManager3 hooks ---
+        // Decodes transform batches and hands everything else to ReplicaManager3.
+        MafiaNet::PluginReceiveResult OnReceive(MafiaNet::Packet *packet) override;
         // Connection-drop teardown. The base only removes replicas a dropped peer itself created;
         // player avatars are server-created, so on the server we additionally notify the game and
         // destroy the dropped peer's viewer (which broadcasts the destruction to remaining
@@ -400,7 +409,18 @@ namespace Framework::Networking::Replication {
         MafiaNet::Connection_RM3 *AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const override;
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
-      private:
+        // The tests drive ReplicaManager3 directly: connections without a network behind them.
+        friend struct TestAccess;
+
+        // The interest index, for the connections: its slots give entities by pointer.
+        const InterestGrid &Interest() const {
+            return _interest;
+        }
+        // Working memory for a query run on the server thread outside RebuildInterest.
+        InterestGrid::Scratch &MainScratch() {
+            return _scratch.front();
+        }
+
         // --- Entities by pointer: this class's own, the world's, and a client's (ClientEntities) ---
         // Server: construct and start replicating an entity of the given type, nullptr if unknown.
         // It is locked for its creator, as `hold`, from before any other thread can find it.

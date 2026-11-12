@@ -300,8 +300,8 @@ MODULE(replication_rate, {
             viewer->ownerGUID       = MafiaNet::ToPeerGuid(guid);
             viewers.push_back(viewer);
             manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer->GetNetworkID());
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
-            MafiaNet::Connection_RM3 *connection = manager->GetConnectionByGUID(guid);
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            MafiaNet::Connection_RM3 *connection = TestWorld::Rm3(manager)->GetConnectionByGUID(guid);
             connection->isValidated              = true;
             return connection;
         };

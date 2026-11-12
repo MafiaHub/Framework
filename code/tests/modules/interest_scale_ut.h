@@ -77,10 +77,10 @@ namespace InterestScaleTests {
             NetworkEntity *avatar = Spawn(x, z);
             const MafiaNet::RakNetGUID rakGuid(guid);
             manager->SetViewer(MafiaNet::ToPeerGuid(rakGuid), avatar->GetNetworkID());
-            auto *connection = static_cast<ReplicationConnection *>(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, rakGuid));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, rakGuid));
             // Validation needs the remote's reply; there is no remote here.
             connection->isValidated = true;
-            manager->PushConnection(connection);
+            TestWorld::Rm3(manager)->PushConnection(connection);
             connections.push_back(connection);
             return connection;
         }

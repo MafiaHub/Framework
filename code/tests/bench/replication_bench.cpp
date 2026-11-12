@@ -101,9 +101,9 @@ namespace {
             const MafiaNet::RakNetGUID guid(10000 + i);
             avatar->ownerGUID = MafiaNet::ToPeerGuid(guid);
             manager->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
-            auto *connection        = manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid);
+            auto *connection        = TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid);
             connection->isValidated = true;
-            manager->PushConnection(connection);
+            TestWorld::Rm3(manager)->PushConnection(connection);
             movers.push_back(avatar);
         }
 

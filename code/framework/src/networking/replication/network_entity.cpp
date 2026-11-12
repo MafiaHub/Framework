@@ -294,7 +294,6 @@ namespace Framework::Networking::Replication {
                 continue;
             }
             StateChange change;
-            change.entity    = this;
             change.networkId = GetNetworkID();
             change.key       = key;
             change.value  = *value;

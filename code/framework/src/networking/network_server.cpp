@@ -225,13 +225,7 @@ namespace Framework::Networking {
         if (!_replicationManager) {
             return;
         }
-        if (_replicationManager->GetConnectionByGUID(guid) != nullptr) {
-            return; // already pushed (a client could send ClientIdentity twice)
-        }
-        const auto address = _peer->GetSystemAddressFromGuid(guid);
-        if (MafiaNet::Connection_RM3 *connection = _replicationManager->AllocConnection(address, guid)) {
-            _replicationManager->PushConnection(connection);
-        }
+        _replicationManager->StartReplication(_peer->GetSystemAddressFromGuid(guid), guid);
     }
 
     void NetworkServer::AcceptSession(MafiaNet::RakNetGUID guid) {

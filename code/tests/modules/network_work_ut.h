@@ -75,8 +75,8 @@ namespace NetworkWorkTest {
             viewer->ownerGUID       = MafiaNet::ToPeerGuid(guid);
             entities.push_back(viewer);
             manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer->GetNetworkID());
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
-            MafiaNet::Connection_RM3 *connection = manager->GetConnectionByGUID(guid);
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            MafiaNet::Connection_RM3 *connection = TestWorld::Rm3(manager)->GetConnectionByGUID(guid);
             connection->isValidated              = true;
             return connection;
         }
@@ -135,8 +135,8 @@ MODULE(network_work, {
                 movers.push_back(mover);
                 const MafiaNet::RakNetGUID guid(1000 + i);
                 manager->SetViewer(MafiaNet::ToPeerGuid(guid), avatar->GetNetworkID());
-                manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
-                connections.push_back(static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guid)));
+                TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+                connections.push_back(static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guid)));
             }
         }
         ~Turns() {
@@ -228,10 +228,10 @@ MODULE(network_work, {
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->SetViewer(MafiaNet::ToPeerGuid(bystanderGuid), bystander->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, bystanderGuid));
-        auto *viewerConnection    = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
-        auto *bystanderConnection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(bystanderGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, bystanderGuid));
+        auto *viewerConnection    = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(viewerGuid));
+        auto *bystanderConnection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(bystanderGuid));
 
         // Whether the connection's interest set holds the entity once it has been queried.
         auto sees = [](ReplicationConnection *connection, NetworkEntity *entity) {
@@ -303,8 +303,8 @@ MODULE(network_work, {
         const MafiaNet::RakNetGUID viewerGuid(91);
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
-        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(viewerGuid));
         auto sees        = [connection](NetworkEntity *entity) {
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
@@ -381,11 +381,11 @@ MODULE(network_work, {
         const MafiaNet::RakNetGUID viewerGuid(93);
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
-        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(viewerGuid));
         // Query and apply, as ReplicaManager3::Update does.
         auto pass = [&] {
-            connection->AutoConstructByQuery(manager, 0);
+            connection->AutoConstructByQuery(TestWorld::Rm3(manager), 0);
         };
 
         pass();
@@ -393,8 +393,8 @@ MODULE(network_work, {
         EQUALS(connection->HasReplicaConstructed(nearby), true);
 
         // A refused client destruction drops it outside the diff.
-        manager->Dereference(nearby);
-        manager->Reference(nearby);
+        TestWorld::Rm3(manager)->Dereference(nearby);
+        TestWorld::Rm3(manager)->Reference(nearby);
         pass();
         EQUALS(connection->HasReplicaConstructed(nearby), true);
         pass();
@@ -431,10 +431,10 @@ MODULE(network_work, {
         const MafiaNet::RakNetGUID viewerGuid(95);
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
-        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(viewerGuid));
 
-        connection->AutoConstructByQuery(manager, 0);
+        connection->AutoConstructByQuery(TestWorld::Rm3(manager), 0);
         EQUALS(connection->HasReplicaConstructed(leaving), true);
         EQUALS(connection->HasReplicaConstructed(arriving), false);
 
@@ -442,7 +442,7 @@ MODULE(network_work, {
         leaving->position.x  = 1000;
         arriving->position.x = 0;
         manager->RebuildInterest();
-        connection->AutoConstructByQuery(manager, 0);
+        connection->AutoConstructByQuery(TestWorld::Rm3(manager), 0);
         EQUALS(connection->HasReplicaConstructed(leaving), false);
         EQUALS(connection->HasReplicaConstructed(arriving), true);
 
@@ -471,8 +471,8 @@ MODULE(network_work, {
         const MafiaNet::RakNetGUID viewerGuid(94);
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
-        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(viewerGuid));
 
         // Claims the client already holds an entity outside its interest.
         MafiaNet::BitStream bs;
@@ -498,7 +498,7 @@ MODULE(network_work, {
         packet.data   = bs.GetData();
         packet.length = bs.GetNumberOfBytesUsed();
         packet.guid   = viewerGuid;
-        manager->OnReceive(&packet);
+        TestWorld::OnReceive(manager, &packet);
         EQUALS(connection->HasReplicaConstructed(distant), false);
 
         TestWorld::Destroy(manager, distant);
@@ -530,9 +530,9 @@ MODULE(network_work, {
 
         const MafiaNet::RakNetGUID viewerGuid(97);
         manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
-        auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
-        connection->AutoConstructByQuery(manager, 0);
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
+        auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(viewerGuid));
+        connection->AutoConstructByQuery(TestWorld::Rm3(manager), 0);
         EQUALS(connection->HasReplicaConstructed(nearby), true);
 
         TestWorld::Destroy(manager, nearby);
@@ -622,7 +622,7 @@ MODULE(network_work, {
         EQUALS(probe->stateSends[farViewer], 1);
 
         // The closed connection is only a map key from here on.
-        server.manager->DeallocConnection(server.manager->PopConnection(farViewer->GetRakNetGUID()));
+        TestWorld::Rm3(server.manager)->DeallocConnection(TestWorld::Rm3(server.manager)->PopConnection(farViewer->GetRakNetGUID()));
         probe->value = 3;
         server.Pass();
         EQUALS(probe->stateSends[nearViewer], 2);
@@ -657,7 +657,7 @@ MODULE(network_work, {
         packet.data   = destruction.GetData();
         packet.length = destruction.GetNumberOfBytesUsed();
         packet.guid   = viewer->GetRakNetGUID();
-        server.manager->OnReceive(&packet);
+        TestWorld::OnReceive(server.manager, &packet);
         EQUALS(viewer->HasReplicaConstructed(probe), false);
         server.Pass();
         EQUALS(viewer->HasReplicaConstructed(probe), true);
