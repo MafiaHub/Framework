@@ -201,6 +201,16 @@ namespace Framework::Scripting::Bind {
         return *this;
     }
 
+    bool ExistsIn(const ClassDesc &desc, Side runtime) {
+        if (desc.functions.empty() && desc.properties.empty()) {
+            return true;
+        }
+        const auto here = [runtime](const auto &member) {
+            return Materialises(member.side, runtime);
+        };
+        return std::any_of(desc.functions.begin(), desc.functions.end(), here) || std::any_of(desc.properties.begin(), desc.properties.end(), here);
+    }
+
     ApiCatalog &ApiCatalog::Get() {
         static ApiCatalog catalog;
         return catalog;
@@ -215,6 +225,13 @@ namespace Framework::Scripting::Bind {
     const ClassDesc *ApiCatalog::Find(std::string_view name) const {
         const auto it = std::find_if(_entries.begin(), _entries.end(), [name](const ClassDesc *desc) {
             return desc->name == name;
+        });
+        return it != _entries.end() ? *it : nullptr;
+    }
+
+    const ClassDesc *ApiCatalog::Find(std::string_view name, Side runtime) const {
+        const auto it = std::find_if(_entries.begin(), _entries.end(), [name, runtime](const ClassDesc *desc) {
+            return desc->name == name && ExistsIn(*desc, runtime);
         });
         return it != _entries.end() ? *it : nullptr;
     }

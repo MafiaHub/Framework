@@ -165,6 +165,10 @@ namespace Framework::Scripting::Bind {
         return Detail::DescribeSignature(Detail::Signature<void, void, Args...> {}, "constructor", doc, false, Side::Shared);
     }
 
+    // Whether a runtime of side `runtime` has the class or namespace: it has one of its members, or the description
+    // declares none.
+    bool ExistsIn(const ClassDesc &desc, Side runtime);
+
     // Every description built in this process, in the order it was recorded. Not thread-safe: definitions are built
     // and read on the thread that sets a runtime up.
     class ApiCatalog final {
@@ -181,6 +185,11 @@ namespace Framework::Scripting::Bind {
 
         // The first recorded description named `name`, or nullptr.
         const ClassDesc *Find(std::string_view name) const;
+
+        // The first recorded description named `name` that a runtime of side `runtime` has (ExistsIn), or nullptr.
+        // Two builtins may share a global name when no runtime has both, as the Chat of the server and the Chat
+        // of the client do: each is its own definition, materialised on its side only.
+        const ClassDesc *Find(std::string_view name, Side runtime) const;
 
       private:
         std::vector<const ClassDesc *> _entries;
