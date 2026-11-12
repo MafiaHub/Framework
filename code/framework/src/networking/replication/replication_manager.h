@@ -41,7 +41,9 @@ namespace Framework::Networking {
 
 namespace Framework::Networking::Replication {
     class ReplicationConnection;
+#ifdef FW_TESTING
     struct TestAccess;
+#endif
 
     // Downcast a base NetworkEntity* to a concrete subclass by comparing the registered type id
     // against the compile-time id of T::kTypeName. This is an exact-type match, not an is-a test:
@@ -424,8 +426,12 @@ namespace Framework::Networking::Replication {
         MafiaNet::Connection_RM3 *AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const override;
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
-        // The tests drive ReplicaManager3 directly: connections without a network behind them.
+#ifdef FW_TESTING
+        // The Framework's own tests drive ReplicaManager3 directly: connections without a network
+        // behind them. Only their targets define FW_TESTING; an installed header has no such door.
+        // It changes who may reach the private base and nothing of the class's layout.
         friend struct TestAccess;
+#endif
 
         // The interest index, for the connections: its slots give entities by pointer.
         const InterestGrid &Interest() const {
