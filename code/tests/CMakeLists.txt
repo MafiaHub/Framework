@@ -88,6 +88,7 @@ target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/
 # The Key and Voice builtins of a client and what they stand on, without linking the rest of
 # FrameworkClient: key names, and a voice client that is never attached to a peer and so opens no device.
 target_sources(FrameworkClientScriptingTests PRIVATE
+    ../framework/src/integrations/client/scripting/builtins/builtins.cpp
     ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
     ../framework/src/integrations/client/scripting/builtins/voice.cpp
     ../framework/src/utils/key_names.cpp
@@ -151,6 +152,9 @@ if(_fw_test_imgui)
     target_sources(FrameworkClientScriptingTests PRIVATE ../framework/src/integrations/client/scripting/builtins/nametags.cpp)
     target_include_directories(FrameworkClientScriptingTests PRIVATE "${_fw_test_imgui}")
     target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_CLIENT_NAMETAGS=1)
+else()
+    # The list of the client builtins leaves Nametags out of a binary that cannot build it.
+    target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_CLIENT_SCRIPTING_WITHOUT_NAMETAGS=1)
 endif()
 
 # The SDK smoke test: install this build into a prefix, then configure and build a consumer project

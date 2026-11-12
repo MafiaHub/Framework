@@ -23,6 +23,7 @@
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
 
+#include "builtins/builtins.h"
 #include "builtins/chat.h"
 #include "builtins/discord.h"
 #include "builtins/keybinds.h"
@@ -65,14 +66,7 @@ namespace Framework::Integrations::Client::Scripting {
         // a client state.
         _lua = std::make_unique<Framework::Scripting::LuaClientHost>(Framework::Scripting::LuaEngineOptions::Client());
         // The builtins only a client has, next to the shared ones of every state.
-        _lua->AddRuntimeSetup([](Framework::Scripting::LuaRuntime &runtime) {
-            Builtins::Web::RegisterLua(runtime);
-            Builtins::Keybinds::RegisterLua(runtime);
-            Builtins::Chat::RegisterLua(runtime);
-            Builtins::Discord::RegisterLua(runtime);
-            Builtins::Voice::RegisterLua(runtime);
-            Builtins::Nametags::RegisterLua(runtime);
-        });
+        _lua->AddRuntimeSetup(&Builtins::RegisterClientBuiltinsLua);
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -142,9 +136,7 @@ namespace Framework::Integrations::Client::Scripting {
         if (!v8pp::metadata::export_catalog_from_environment("framework-client", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework client scripting API metadata");
         }
-        if (!Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(Framework::Scripting::Builtins::SharedDefinitions({&Builtins::Web::Definition().Describe(), &Builtins::Keybinds::Definition().Describe(), &Builtins::Chat::Definition().Describe(),
-                                                                                 &Builtins::Discord::Definition().Describe(), &Builtins::Voice::Definition().Describe(), &Builtins::Nametags::Definition().Describe()}),
-                Framework::Scripting::Bind::Side::Client, "FRAMEWORK_SCRIPTING_LUA_DEFINITIONS")) {
+        if (!Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(Builtins::ClientLuaDefinitions(), Framework::Scripting::Bind::Side::Client, "FRAMEWORK_SCRIPTING_LUA_DEFINITIONS")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export the Framework client Lua definitions");
         }
 
@@ -185,12 +177,7 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true, _modVersion);
 
         // Client-only surface.
-        Builtins::Web::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Keybinds::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Chat::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Discord::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Voice::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Nametags::Register(isolate, context, global, _resourceManager.get());
+        Builtins::RegisterClientBuiltins(isolate, context, global, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
