@@ -74,7 +74,10 @@ namespace Framework::Scripting {
         // Lifecycle entry points remain synchronous to their C++ callers, but the JS work they gate
         // is asynchronous. Pump the shared scripting engine so microtasks, timers, and Node/libuv I/O
         // can make progress; a plain blocking wait here would deadlock every meaningful async handler.
-        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
+        //
+        // A Lua handler settles its part of the promise from a tick of the Lua engine, when its coroutine ends: that
+        // engine is ticked here too, so a handler that sleeps holds the transition up as one that awaits does.
+        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, LuaEngine *luaEngine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
             if (!engine || !engine->IsInitialized() || promise.IsEmpty()) {
                 return {};
             }
@@ -115,8 +118,51 @@ namespace Framework::Scripting {
                 }
 
                 engine->Tick();
+                if (luaEngine && luaEngine->IsInitialized()) {
+                    luaEngine->Tick();
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
+        }
+
+        // A lifecycle event emitted without a JavaScript engine to emit it from: what its handlers, which are all
+        // Lua, came to. Shared with the emission, which may outlive the wait.
+        struct LifecycleEmission final {
+            bool settled = false;
+            std::vector<std::string> errors;
+        };
+
+        // Emits a lifecycle event of `resourceName` to the Lua handlers of a manager that has no JavaScript engine,
+        // and waits for them as AwaitLifecyclePromise waits for a promise, under the same timeout.
+        LifecyclePromiseResult EmitLifecycleWithoutJavaScript(LuaEngine *luaEngine, Builtins::Events &events, const char *eventName, const std::string &resourceName, int timeoutMs) {
+            if (!luaEngine || !luaEngine->IsInitialized()) {
+                return {};
+            }
+
+            TransferredValue name;
+            name.kind = TransferredValue::Kind::String;
+            name.text = resourceName;
+            std::vector<TransferredValue> args;
+            args.push_back(std::move(name));
+
+            const auto emission = std::make_shared<LifecycleEmission>();
+            events.EmitReserved(eventName, std::move(args), [emission](std::vector<std::string> &&errors) {
+                emission->settled = true;
+                emission->errors  = std::move(errors);
+            });
+
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 1));
+            while (!emission->settled) {
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    return {LifecyclePromiseStatus::TimedOut, {}};
+                }
+                luaEngine->Tick();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            if (!emission->errors.empty()) {
+                return {LifecyclePromiseStatus::Rejected, Builtins::Events::DescribeFailures("One or more event handlers failed", emission->errors)};
+            }
+            return {};
         }
 
         bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
@@ -623,7 +669,8 @@ namespace Framework::Scripting {
             SetCurrentResourceContext("");
         }
 
-        const auto startLifecycle = AwaitLifecyclePromise(_jsEngine, _events, startPromise, _config.resourceStartTimeoutMs);
+        const bool hasJavaScript  = _jsEngine && _jsEngine->IsInitialized();
+        const auto startLifecycle = hasJavaScript ? AwaitLifecyclePromise(_jsEngine, _luaEngine, _events, startPromise, _config.resourceStartTimeoutMs) : EmitLifecycleWithoutJavaScript(_luaEngine, _events, "resourceStart", std::string(name), _config.resourceStartTimeoutMs);
         if (startLifecycle.status != LifecyclePromiseStatus::Fulfilled) {
             error = startLifecycle.status == LifecyclePromiseStatus::TimedOut ? "resourceStart timed out after " + std::to_string(std::max(_config.resourceStartTimeoutMs, 1)) + "ms" : "resourceStart rejected: " + startLifecycle.error;
             CleanupResourceRuntime(*resource, name);
@@ -695,7 +742,8 @@ namespace Framework::Scripting {
             SetCurrentResourceContext("");
         }
 
-        const auto stopLifecycle = AwaitLifecyclePromise(_jsEngine, _events, stopPromise, _config.resourceStopTimeoutMs);
+        const bool hasJavaScript = _jsEngine && _jsEngine->IsInitialized();
+        const auto stopLifecycle = hasJavaScript ? AwaitLifecyclePromise(_jsEngine, _luaEngine, _events, stopPromise, _config.resourceStopTimeoutMs) : EmitLifecycleWithoutJavaScript(_luaEngine, _events, "resourceStop", std::string(name), _config.resourceStopTimeoutMs);
         if (stopLifecycle.status == LifecyclePromiseStatus::Rejected) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' rejected; forcing cleanup: {}", name, stopLifecycle.error);
         }

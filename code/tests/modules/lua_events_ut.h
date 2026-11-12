@@ -655,4 +655,99 @@ MODULE(lua_events, {
         EQUALS((bool)bus.Manager().StopResource("solo"), true);
         EQUALS(bus.Lua("watcher", "seen"), "start watcher,start solo,stop solo,");
     });
+
+    IT("waits for a Lua handler of resourceStart and resourceStop that sleeps", {
+        Bus bus;
+        bus.server.files.Resource("watcher", {{"main.lua", R"(
+            Events.on('resourceStart', function(name) if name == 'late' then sleep(40) started = name end end)
+            Events.on('resourceStop', function(name) if name == 'late' then sleep(40) stopped = name end end)
+        )"}});
+        bus.server.files.Resource("late", {{"main.lua", "loaded = true"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("watcher"), "");
+
+        auto before = std::chrono::steady_clock::now();
+        EQUALS(bus.Start("late"), "");
+        EQUALS(std::chrono::steady_clock::now() - before >= std::chrono::milliseconds(40), true);
+        EQUALS(bus.Lua("watcher", "started"), "late");
+        EQUALS(bus.Manager().IsResourceRunning("late"), true);
+
+        before = std::chrono::steady_clock::now();
+        EQUALS((bool)bus.Manager().StopResource("late"), true);
+        EQUALS(std::chrono::steady_clock::now() - before >= std::chrono::milliseconds(40), true);
+        EQUALS(bus.Lua("watcher", "stopped"), "late");
+    });
+
+    IT("fails a start that a Lua handler of resourceStart refuses or holds up too long", {
+        Bus bus;
+        bus.server.files.Resource("watcher", {{"main.lua", R"(
+            Events.on('resourceStart', function(name)
+                if name == 'refused' then error('not this one') end
+                if name == 'stuck' then sleep(60000) end
+            end)
+        )"}});
+        bus.server.files.Resource("refused", {{"main.lua", ""}});
+        bus.server.files.Resource("stuck", {{"main.lua", ""}});
+        EQUALS(bus.Init(), true);
+        auto config                   = bus.Manager().GetConfig();
+        config.resourceStartTimeoutMs = 50;
+        bus.Manager().SetConfig(config);
+        EQUALS(bus.Start("watcher"), "");
+
+        const std::string refused = bus.Start("refused");
+        EQUALS(refused.starts_with("resourceStart rejected: "), true);
+        EQUALS(Contains(refused, "One or more event handlers failed"), true);
+        EQUALS(Contains(refused, "not this one"), true);
+        EQUALS(bus.Manager().IsResourceRunning("refused"), false);
+
+        EQUALS(bus.Start("stuck"), "resourceStart timed out after 50ms");
+        EQUALS(bus.Manager().IsResourceRunning("stuck"), false);
+    });
+
+    IT("emits the lifecycle events of a manager that has no JavaScript engine", {
+        LuaResourcesTest::Files files;
+        files.Resource("watcher", {{"main.lua", R"(
+            Events.on('resourceStart', function(name) if name ~= 'watcher' then sleep(30) end log('start ' .. name) if name == 'refused' then error('not this one') end if name == 'stuck' then sleep(60000) end end)
+            Events.on('resourceStop', function(name) sleep(30) log('stop ' .. name) end)
+        )"}});
+        files.Resource("solo", {{"main.lua", "Events.on('resourceStart', function(name) log('own ' .. name) end)"}});
+        files.Resource("refused", {{"main.lua", ""}});
+        files.Resource("stuck", {{"main.lua", ""}});
+        LuaResourcesTest::Log().clear();
+
+        LuaEngine lua;
+        EQUALS(lua.Init(), ScriptingError::SCRIPTING_NONE);
+        Bind::WatchRuntimes(lua);
+        ResourceManagerConfig config;
+        config.resourcesPath          = files.root.string();
+        config.resourceStartTimeoutMs = 200;
+        ResourceManager manager(nullptr, config);
+        manager.SetLuaEngine(&lua);
+        lua.SetRuntimeSetupCallback([&manager](LuaRuntime &runtime) {
+            Bind::SetCallResourceManager(&runtime, &manager);
+            Builtins::Events::RegisterLua(runtime);
+            lua_pushcfunction(runtime.State(), LuaResourcesTest::LuaLog);
+            lua_setglobal(runtime.State(), "log");
+        });
+        lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+            Bind::SetCallResourceManager(&runtime, nullptr);
+        });
+        EQUALS(manager.DiscoverResources(), 4u);
+
+        EQUALS((bool)manager.StartResource("watcher"), true);
+        EQUALS((bool)manager.StartResource("solo"), true);
+        // The start came back once the handler that slept was done.
+        EQUALS(LuaResourcesTest::LogText(), "start watcher,own solo,start solo");
+        EQUALS((bool)manager.StopResource("solo"), true);
+        EQUALS(LuaResourcesTest::LogText(), "start watcher,own solo,start solo,stop solo");
+
+        const auto refused = manager.StartResource("refused");
+        EQUALS((bool)refused, false);
+        EQUALS(refused.GetError().starts_with("resourceStart rejected: One or more event handlers failed: "), true);
+        EQUALS(Contains(refused.GetError(), "not this one"), true);
+        EQUALS(manager.StartResource("stuck").GetError(), "resourceStart timed out after 200ms");
+        EQUALS(manager.IsResourceRunning("stuck"), false);
+
+        manager.StopAll();
+    });
 });
