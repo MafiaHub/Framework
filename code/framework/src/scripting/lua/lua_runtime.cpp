@@ -12,6 +12,7 @@
 
 #include "../output_level.h"
 #include "../script_engine.h"
+#include "../script_log.h"
 
 #include "logging/logger.h"
 
@@ -71,21 +72,6 @@ namespace Framework::Scripting {
 
         // The message of an error keeps half of what an error text may hold, which leaves the traceback its room.
         constexpr size_t kMaxTracedMessageBytes = LuaRuntime::kMaxErrorBytes / 2;
-
-        // A space for each control character but the tab, so that a script cannot start a line of its own in the
-        // log or drive the terminal that shows it. That covers the C1 controls as UTF-8 spells them.
-        void BlankControlCharacters(std::string &line) {
-            for (size_t i = 0; i < line.size(); ++i) {
-                const auto byte = static_cast<unsigned char>(line[i]);
-                if ((byte < 0x20 && byte != '\t') || byte == 0x7F) {
-                    line[i] = ' ';
-                }
-                else if (byte == 0xC2 && i + 1 < line.size() && static_cast<unsigned char>(line[i + 1]) >= 0x80 && static_cast<unsigned char>(line[i + 1]) <= 0x9F) {
-                    line[i]     = ' ';
-                    line[i + 1] = ' ';
-                }
-            }
-        }
     } // namespace
 
     LuaRuntime::LuaRuntime(LuaRuntimeOptions options): _options(std::move(options)) {

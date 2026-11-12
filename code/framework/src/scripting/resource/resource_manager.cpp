@@ -14,6 +14,7 @@
 #include "../builtins/state_bag.h"
 #include "../engine_scope.h"
 #include "../lua/lua_engine.h"
+#include "../script_log.h"
 
 #include <utils/vfs.h>
 
@@ -1541,7 +1542,9 @@ namespace Framework::Scripting {
             return;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}", resourceName, error);
+        // The text is the script's own: no control character of it reaches the log, and not more of it than a
+        // resource may write in a second.
+        LogScriptError(resourceName, "Runtime error: " + error);
 
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
         v8::Isolate *failedIsolate      = resource->GetIsolate();
@@ -1592,7 +1595,7 @@ namespace Framework::Scripting {
                 HandleResourceRuntimeError(failure.resourceName, failure.message);
             }
             else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {} (the resource is not running)", failure.resourceName, failure.message);
+                LogScriptError(failure.resourceName, failure.message + " (the resource is not running)");
             }
         }
     }

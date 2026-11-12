@@ -105,7 +105,12 @@ what it needs, and nothing else diverges:
   `ResourceManager::ReportHandlerFailure`, which queues it, and becomes an
   error of its resource at the manager's next upkeep if the resource is
   still running. Never `HandleResourceRuntimeError` from the handler's
-  `done`: a script may be executing, or the resource stopping.
+  `done`: a script may be executing, or the resource stopping. A builtin
+  that logs what a handler failed with itself does it with
+  `LogScriptError` (`scripting/script_log.h`), as the manager does: the
+  text is the script's, so control characters are blanked, every line is
+  put under the name of the resource, and a resource gets 200 entries a
+  second.
   Every builtin that keeps a script function follows these three rules.
 
   `Player` and `TextLabel` are declared the same way, each inheriting

@@ -14,6 +14,7 @@
 #include "../lua/lua_runtime.h"
 #include "../resource/resource_manager.h"
 #include "../resource_monitor.h"
+#include "../script_log.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
@@ -79,7 +80,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         void LogHandlerError(const std::string &resourceName, const std::string &eventName, const std::string &error) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", resourceName, eventName, error);
+            LogScriptError(resourceName, "Event '" + eventName + "' handler error: " + error);
         }
 
         // What a handler that was called through its callable failed with, for the emitter. A handler whose runtime

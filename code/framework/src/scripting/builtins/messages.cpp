@@ -15,6 +15,7 @@
 #include "../lua/lua_runtime.h"
 #include "../resource/resource_manager.h"
 #include "../resource_monitor.h"
+#include "../script_log.h"
 #include "../scripting_catalog.h"
 #include "../value_transfer.h"
 
@@ -43,7 +44,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         void LogHandlerError(const std::string &resourceName, const std::string &messageType, const std::string &error) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Message handler '{}' error: {}", resourceName, messageType, error);
+            LogScriptError(resourceName, "Message handler '" + messageType + "' error: " + error);
         }
     } // namespace
 
