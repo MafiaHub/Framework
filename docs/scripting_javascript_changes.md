@@ -41,6 +41,11 @@ handler.
   through the binding layer were callable until the runtime was freed at the
   next tick → they are dead at once (`runtime stopped`). Function references
   between two JavaScript runtimes keep their old rule.
+- **Script.** Whenever a JavaScript function is called across a Lua boundary
+  (an export, a handler, a function passed as an argument), the class of the
+  exception it throws is lost: the exception arrives as a plain `Error`
+  carrying the message. This is not particular to `Messages` or `state.set`.
+  Calls that stay between JavaScript scripts keep the thrown value.
 
 ## Logs
 
@@ -76,7 +81,8 @@ handler.
   serialiser. A script that replaced `JSON.stringify` no longer changes
   console output.
 - **Script.** The number 2^63 exactly was formatted through an undefined
-  conversion → it is written `9.22337e+18`.
+  conversion → it is written as every number that is not an integer of 64
+  bits is, in the short floating-point form: `9.22337e+18`.
 
 ## `Events`
 
@@ -118,8 +124,10 @@ handler.
 
 - **Script.** New pairing: a request or notification may be handled by a Lua
   handler. When it fails before replying, the Promise is rejected with an
-  `Error` carrying the handler's message (a JavaScript handler in the
-  requester's runtime still rejects with the thrown value). A payload that
+  `Error` carrying the handler's message. The same holds for a JavaScript
+  handler reached across a Lua boundary, as for every such call (see
+  [Handler failures](#handler-failures-all-builtins)); a JavaScript handler
+  in the requester's runtime still rejects with the thrown value. A payload that
   cannot be copied for a Lua handler rejects with
   `TypeError: Messages.request: payload: <why>` and the handler is not
   called; for `Messages.send` it is dropped with a log line.
@@ -145,6 +153,12 @@ handler.
   unprefixed → the message starts with `StateBag.set: `. A `toJSON` that
   throws its own error class arrived as that object → it arrives as a
   `TypeError` carrying its message.
+- **Script.** A value stored as JSON was read by `state.get`, and handed to
+  an `onChange` handler, through `JSON.parse` → it is parsed by the
+  framework's own JSON parser (nlohmann). A stored document that parser
+  refuses reads back as a string holding its raw text, also where
+  `JSON.parse` accepted it: a number that overflows a double, such as
+  `1e400`, which `JSON.parse` reads as `Infinity`.
 - **Script.** An `onChange` handler was called with `this` undefined → with
   the global object of its context.
 - **Operator.** State change handlers were not dispatched when no scripting
@@ -161,15 +175,12 @@ handler.
   destroyed when that resource stops. On the Framework's server, which wires
   the hook, nothing changes.
 
-## `PendingConnection` and `Voice` (server)
+## `PendingConnection` (server)
 
 - **Script.** The `PendingConnection` a `playerConnecting` handler receives
   was a writable copy → its properties are read-only and non-deletable, as
   the TypeScript contract always said. Assigning to one is ignored, and
   throws a `TypeError` in strict mode. Replacing `reject` on it does nothing.
-- **Script.** `Voice.setPlayerMuted`, `setPlayerDeaf` and `setLocalMute`
-  with the BigInt `0n` as the flag: false → true. Every other value reads as
-  before.
 
 ## `Key` (client)
 
@@ -258,3 +269,16 @@ Listed because they were questioned during the work and settled as "stays":
   the owner's object as `this`.
 - Error classes, messages and the order of argument checks of every ported
   function.
+- The flag of `Voice.setPlayerMuted`, `setPlayerDeaf` and `setLocalMute` is
+  still read as JavaScript reads a condition: `undefined`, `null`, `false`,
+  `0`, `NaN`, the empty string and the BigInt `0n` are false, everything else
+  is true.
+
+## For maintainers
+
+- **Mixed versions.** A 41.3 client that connects to a 41.4 server does not
+  run the client Lua resources that server ships. This is a difference of
+  content, not of the wire format.
+- **`Key` handlers of a stopped resource.** As of this release, a key handler
+  is not called once its resource has stopped, also when an earlier handler
+  of the same key edge stopped it. `Key` checks this as `Web` does.

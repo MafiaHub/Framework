@@ -233,17 +233,26 @@ local d = spawn:distance(position)      -- method: colon
 Events.on('ping', handler)              -- namespace function: dot
 ```
 
-A method called with `.` raises: `spawn.distance(position)` is
+A method called with `.` raises, because its first argument is taken as the
+receiver. `spawn.distance(5)` is
 
 ```
-bad receiver for 'Vector3:distance' (Vector3 expected, got ...)
+bad receiver for 'Vector3:distance' (Vector3 expected, got number)
+```
+
+Where the first argument happens to be an object of the class, it passes as
+the receiver and the arguments that follow are one short:
+`spawn.distance(position)` is
+
+```
+wrong number of arguments to 'Vector3:distance' (1..1 expected, got 0)
 ```
 
 This holds for every method and property of every class
 (`entity.state.get('job')` raises too; write `entity.state:get('job')`). A
 namespace function called with `:` gets the namespace as its first argument,
 which is almost never what it expects: `console:log('x')` logs the console
-table too.
+table too, and writes `[] x`.
 
 A method on a handle whose entity is gone (a `Player` who left) does not
 raise. It does nothing, as in JavaScript.
@@ -264,8 +273,11 @@ Properties are read and assigned as fields: `v.x = 4`, `entity.position`,
 - Assigning to a read-only property or to an unknown name raises
   (`attempt to set 'length' on Vector3`). JavaScript ignores such an
   assignment outside strict mode.
-- Class tables and namespaces are read-only: `Chat.sendToAll = nil` raises
-  `attempt to set 'sendToAll' on Chat`.
+- Class tables and namespaces are read-only. Assigning to a namespace raises
+  the same words (`Chat.sendToAll = nil` is
+  `attempt to set 'sendToAll' on Chat`); assigning to a class table names it
+  as a class, `attempt to set '<k>' on class <Name>` (`Vector3.zero = nil` is
+  `attempt to set 'zero' on class Vector3`).
 
 Value classes also have operators where they make sense, in addition to the
 named methods: `+`, `-`, `*`, `/`, unary minus and `==` on the vectors, `*`
@@ -274,7 +286,12 @@ and `==` on `Quaternion`, `==` on `Color`. `tostring(v)` is `v:toString()`.
 ### `nil`, numbers, strings, arrays
 
 - JavaScript `null` and `undefined` are both `nil`. An optional argument is
-  left out or passed as `nil`.
+  left out or passed as `nil`. A few members are marked optional in the
+  definition files and are required all the same, in both languages:
+  `player:kick(reason)`, `player:emit(eventName, payloadJson)` and
+  `player:setNametagText(text)`. Leaving the argument out raises
+  `wrong number of arguments to 'Player:kick' (...)`, and `nil` is not taken
+  for it either: pass a string.
 - A Lua table cannot hold `nil`. Where a JavaScript option takes `null`
   inside an object (`attachTo: null`, `showTo: null` of a `TextLabel`), a
   Lua script passes `false` for that key. Where a function answers with an
@@ -655,6 +672,10 @@ names them).
   table, a function or a userdata print addresses of the process.
 - **Large unsigned ids.** A 64-bit unsigned id above 2^63 reads as a negative
   integer.
+- **Three arguments documented as optional are required**:
+  `player:kick(reason)`, `player:emit(eventName, payloadJson)` and
+  `player:setNametagText(text)` raise without their last argument, as they
+  throw in JavaScript. The definition files mark it optional.
 - **No timeouts on `Messages.request`.**
 - **Exports from Lua are snapshots**, and exported methods get no `self`
   (see above).

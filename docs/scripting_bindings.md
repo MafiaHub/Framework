@@ -89,13 +89,20 @@ Lua's `tostring()` calls.
 
 `Bind::Doc` (`bind/doc.h`) gives what a signature cannot: the summary,
 `Param(name, description)` for each parameter in order, `Returns(description)`.
-`OptionalParam` documents a parameter as optional whatever its C++ type,
-`ParamType` and `ReturnType` replace a derived type, and `RestParam` is the
+`OptionalParam` documents a parameter as optional whatever its C++ type (see
+the warning below), `ParamType` and `ReturnType` replace a derived type, and `RestParam` is the
 last parameter of a context function, which takes every remaining argument. A
 type the model cannot derive is spelled by hand for both languages:
 `Bind::Type::Custom("{ author?: string }", "table")`. A `Doc` that disagrees
 with the signature on the number of parameters throws, naming
 `<Class>.<member>`.
+
+> **Warning.** On a typed member, `OptionalParam` only documents the
+> parameter as optional. It does not make the argument omittable in either
+> language: only a `std::optional<T>` parameter does. This is why
+> `Player.kick` requires the reason its documentation calls optional
+> (`wrong number of arguments to 'Player:kick'` in Lua,
+> `Argument count does not match function definition` in JavaScript).
 
 ### The type model
 
@@ -714,7 +721,11 @@ with `FW_UPDATE_GOLDEN=1` and committing the result:
 
 ```bash
 FW_UPDATE_GOLDEN=1 FW_TEST_FILTER=scripting_catalog_golden,lua_parity build/bin/FrameworkTests
+FW_UPDATE_GOLDEN=1 FW_TEST_FILTER=client_catalog_golden,lua_client_parity build/bin/FrameworkClientScriptingTests
 ```
+
+The two client modules run in `FrameworkClientScriptingTests`, so the first
+command alone leaves the client fixtures as they were.
 
 Read the diff before committing it: it is what script authors will see.
 
@@ -752,6 +763,8 @@ IT("gives a Lua state the Chat of JavaScript, under the same names", {
 
     EQUALS(stage.lua.Eval("type(Chat) .. ' ' .. type(Chat.sendToAll) .. ' ' .. type(Chat.sendToPlayer)"), "table function function");
     EQUALS(stage.js.Eval("typeof Chat + ' ' + typeof Chat.sendToAll + ' ' + typeof Chat.sendToPlayer"), "object function function");
+    EQUALS(stage.js.Eval("Object.keys(Chat).join()"), "sendToAll,sendToPlayer");
+    // ...
 });
 ```
 

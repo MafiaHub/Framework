@@ -15,7 +15,7 @@ what a Lua script author sees is in
 
 All builtins live in `Framework::Scripting::Builtins`. No exceptions — value
 types (`Vector3`, `Color`, …), handle types (`Entity`, `Player`, `TextLabel`),
-and service APIs (`Console`, `Environment`, `Events`, `Exports`, `Imports`,
+and service APIs (`Console`, `ExecutionEnvironment`, `Events`, `Exports`, `Imports`,
 `Messages`, `Chat`) all share the namespace. A builtin that needs a type from
 another subsystem forward-declares it in its own namespace; it does not move
 itself out of `Builtins` to be near that type.
@@ -157,8 +157,20 @@ static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context,
 static void RegisterLua(LuaRuntime &runtime /*, what Register is told */);
 ```
 
-`Console` and `ExecutionEnvironment` are the worked examples, and `Chat` the
-one that reads an option object and a handle argument.
+`Exports`, `Imports` and `Messages` have exactly this shape. A service API
+takes only what it needs of it, so the argument list varies:
+
+```cpp
+// Console: its global is always the context's own
+static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, ResourceManager *resourceManager);
+// ExecutionEnvironment: no manager, the values of its runtime constants
+static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient, const std::string &modVersion = {});
+// Chat: neither a context nor a manager
+static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+```
+
+`Console` and `ExecutionEnvironment` are the worked examples of a definition,
+and `Chat` the one that reads an option object and a handle argument.
 
 - `Definition()` holds the functions, the constants and their documentation.
 - `Register` materialises the definition into the isolate
