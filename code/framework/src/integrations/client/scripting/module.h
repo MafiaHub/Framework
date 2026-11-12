@@ -15,6 +15,8 @@
 #include <vector>
 
 #include <networking/rpc/server_resources.h>
+#include <scripting/lua/lua_client_host.h>
+#include <scripting/lua/lua_engine.h>
 #include <scripting/module.h>
 #include <scripting/resource/resource_manager.h>
 #include <scripting/v8_engine.h>
@@ -39,10 +41,11 @@ namespace Framework::Integrations::Client::Scripting {
     using ResourceSyncCompleteCallback = fu2::function<void(bool success) const>;
 
     /**
-     * Client-side JavaScript scripting module with resource management support.
+     * Client-side scripting module with resource management support.
      *
      * Uses standalone V8 engine for client-side JavaScript execution.
-     * No Node.js APIs are available at the binary level.
+     * No Node.js APIs are available at the binary level. A resource's `.lua`
+     * scripts run in a sandboxed Lua state of its own, next to the isolate.
      */
     class ClientScriptingModule final
         : public Framework::Lifecycle
@@ -52,20 +55,21 @@ namespace Framework::Integrations::Client::Scripting {
         ~ClientScriptingModule();
 
         /**
-         * Initialize the V8 engine and resource manager.
+         * Initialize the V8 engine, the Lua engine and resource manager.
          * @param sdkCallback Optional callback for registering additional SDK bindings
          * @return true if initialization succeeded
          */
         [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
 
         /**
-         * Shutdown the V8 engine.
+         * Shutdown the Lua engine and the V8 engine.
          * Use this only when the client is truly closing.
          */
         void Shutdown() override;
 
         /**
          * Reset scripting state for reconnection without recreating the V8 isolate.
+         * Every Lua state is destroyed; the next Init() starts with none.
          */
         void Reset();
 
@@ -87,7 +91,14 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         /**
-         * Get the JavaScript resource manager.
+         * Get the Lua engine.
+         */
+        Framework::Scripting::LuaEngine *GetLuaEngine() const {
+            return &_lua->GetEngine();
+        }
+
+        /**
+         * Get the resource manager.
          */
         Framework::Scripting::ResourceManager *GetResourceManager() const override {
             return _resourceManager.get();
@@ -182,6 +193,8 @@ namespace Framework::Integrations::Client::Scripting {
 
       private:
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;
+        // The Lua engine of a client, its bindings and its tick (scripting/lua/lua_client_host.h).
+        std::unique_ptr<Framework::Scripting::LuaClientHost> _lua;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
         std::string _modVersion;
 

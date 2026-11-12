@@ -59,6 +59,10 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::V8EngineOptions options;
         options.processName = "mafiahub-client";
         _engine             = std::make_unique<Framework::Scripting::V8Engine>(options);
+
+        // Lua scripts come from the server as the JavaScript ones do: sandboxed, with the memory and the time of
+        // a client state.
+        _lua = std::make_unique<Framework::Scripting::LuaClientHost>(Framework::Scripting::LuaEngineOptions::Client());
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -104,6 +108,11 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_engine.get(), config);
         }
 
+        // The Lua engine is up before the resource manager can start a resource in it.
+        if (_lua->Init(*_resourceManager, _modVersion) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
+            return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
+        }
+
         // Web views and key binds created by a resource die with it (single callback slot).
         _resourceManager->AddOnResourceStopped([](const std::string &resourceName) {
             Builtins::Web::CleanupResource(resourceName);
@@ -124,7 +133,7 @@ namespace Framework::Integrations::Client::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework client scripting API metadata");
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with standalone V8 engine");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with the standalone V8 and Lua engines");
 
         _initialized = true;
         return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
@@ -177,6 +186,9 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager.reset();
         }
 
+        // After the resources, whose Lua states it owns, and before the V8 engine.
+        _lua->Shutdown();
+
         // Releases V8 globals; must precede engine shutdown (isolate disposal)
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
@@ -199,6 +211,9 @@ namespace Framework::Integrations::Client::Scripting {
         if (_resourceManager) {
             _resourceManager->Reset();
         }
+
+        // No Lua state outlives the connection its scripts came over.
+        _lua->Shutdown();
 
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
@@ -226,6 +241,9 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager->ProcessHandlerFailures();
             _resourceManager->ProcessScheduledRestarts();
         }
+
+        // Lua timers and sleeps, and what they raised.
+        _lua->Update();
 
         // Process V8 timers, microtasks, and pending message responses
         if (_engine && _engine->IsInitialized()) {
@@ -359,7 +377,7 @@ namespace Framework::Integrations::Client::Scripting {
             }
         }
         if (discovered == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourceCachePath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No resources discovered in: {}", _resourceCachePath);
             return true; // Not an error, just no resources
         }
 
