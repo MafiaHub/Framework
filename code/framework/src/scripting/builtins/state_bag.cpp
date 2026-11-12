@@ -15,7 +15,11 @@
 #include "../scripting_catalog.h"
 #include "../transferred_value.h"
 
+#include "../resource/resource_manager.h"
+#include "../value_transfer.h"
+
 #include <core_modules.h>
+#include <logging/logger.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
 
@@ -23,7 +27,6 @@
 #include <nlohmann/json.hpp>
 #include <v8pp/convert.hpp>
 
-#include <cmath>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -124,30 +127,6 @@ namespace Framework::Scripting::Builtins {
             return true;
         }
 
-        // The reverse. Unparseable Json comes back as raw text rather than throwing, so a script
-        // never has to guard a read: malformed JSON means a peer sent something broken.
-        Bind::Value MakeValue(Bind::Call &call, const StateValue &value) {
-            using Type = StateValue::Type;
-
-            switch (value.type) {
-            case Type::Boolean: return call.Boolean(value.boolean);
-            case Type::Number: {
-                // A whole number reads as one in Lua too, as it does out of a document. The same number in
-                // JavaScript, which has the one kind; a negative zero is the exception that would not be.
-                const double number = value.number;
-                const bool whole    = std::isfinite(number) && std::trunc(number) == number && std::fabs(number) <= 9007199254740992.0 && !(number == 0.0 && std::signbit(number));
-                return whole ? call.Integer(static_cast<int64_t>(number)) : call.Number(number);
-            }
-            case Type::String: return call.String(value.text);
-            case Type::Json: {
-                auto parsed = call.ParseJson(value.text);
-                return parsed ? parsed.GetValue() : call.String(value.text);
-            }
-            case Type::Null: break;
-            }
-            return call.Null();
-        }
-
         TransferredValue Text(std::string text) {
             TransferredValue value;
             value.kind = TransferredValue::Kind::String;
@@ -191,8 +170,9 @@ namespace Framework::Scripting::Builtins {
             return value;
         }
 
-        // What a change handler is given for a stored value, whichever runtime it runs in. As for a
-        // read, a document that does not parse arrives as its text.
+        // A stored value as the copy any runtime builds its value from: what `get` returns and what a
+        // change handler is given. A document that does not parse is its text rather than an error, so a
+        // script never has to guard a read: malformed JSON means a peer sent something broken.
         TransferredValue ToTransfer(const StateValue &value) {
             using Type = StateValue::Type;
 
@@ -215,6 +195,24 @@ namespace Framework::Scripting::Builtins {
             }
             return out;
         }
+
+        // A stored value as a script reads it: the same copy a handler is given, built in the calling
+        // runtime.
+        Bind::Value MakeValue(Bind::Call &call, const StateValue &value) {
+            auto built = call.FromTransfer(ToTransfer(value));
+            return built ? built.GetValue() : call.Nil();
+        }
+
+        // What reports a handler that failed, which the write that woke it does not hear of.
+        void ReportFailure(ResourceManager *manager, const std::string &resourceName, const std::string &key, const std::string &error) {
+            const std::string message = fmt::format("State change listener for '{}' failed: {}", key, error);
+            // As an error of the resource nobody caught: its manager applies what the manifest asks for.
+            if (manager != nullptr && manager->HasResource(resourceName)) {
+                manager->HandleResourceRuntimeError(resourceName, message);
+                return;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {}", resourceName, message);
+        }
     } // namespace
 
     Networking::Replication::StateBag *StateBag::ResolveFrom(const Bind::Call &call) {
@@ -229,65 +227,33 @@ namespace Framework::Scripting::Builtins {
     }
 
     bool StateBag::ToStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> input, Networking::Replication::StateValue &out) {
-        using Type = Networking::Replication::StateValue::Type;
-
-        if (input.IsEmpty() || input->IsNullOrUndefined()) {
+        if (input.IsEmpty()) {
             out = Networking::Replication::StateValue {};
             return true;
         }
-        if (input->IsBoolean()) {
-            out.type    = Type::Boolean;
-            out.boolean = input->BooleanValue(isolate);
-            return true;
-        }
-        if (input->IsNumber()) {
-            double number = 0.0;
-            if (!input->NumberValue(context).To(&number)) {
-                return false;
-            }
-            out.type   = Type::Number;
-            out.number = number;
-            return true;
-        }
-        if (input->IsString()) {
-            out.type = Type::String;
-            out.text = v8pp::from_v8<std::string>(isolate, input);
-            return true;
-        }
 
-        // Everything else travels as JSON. Stringify leaves its own exception pending for a value it
-        // cannot express, which is the script's error to see.
-        v8::Local<v8::String> json;
-        if (!v8::JSON::Stringify(context, input).ToLocal(&json)) {
-            return false;
-        }
-        out.type = Type::Json;
-        out.text = v8pp::from_v8<std::string>(isolate, json);
-        return true;
+        // The conversion `set` runs reads a value of a call, so the value is handed to a function made
+        // for it. What that throws stays pending here, for the caller's script to see.
+        v8::HandleScope scope(isolate);
+        bool converted                  = false;
+        v8::Local<v8::Function> convert = Bind::MakeV8Function(isolate, context, [&out, &converted](Bind::Call &call) {
+            converted = ReadStateValue(call, call.Arg(0), out);
+        });
+        (void)convert->Call(context, v8::Undefined(isolate), 1, &input);
+        return converted;
     }
 
     v8::Local<v8::Value> StateBag::FromStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, const Networking::Replication::StateValue &value) {
-        using Type = Networking::Replication::StateValue::Type;
-
-        switch (value.type) {
-        case Type::Boolean: return v8::Boolean::New(isolate, value.boolean);
-        case Type::Number: return v8::Number::New(isolate, value.number);
-        case Type::String: return v8pp::to_v8(isolate, value.text);
-        case Type::Json: {
-            // A pending exception here would surface later as an error from whatever the script was
-            // actually doing. Swallow it and hand back the raw text: malformed JSON means a peer sent
-            // something broken, and a read should not be what breaks a script.
-            v8::TryCatch tryCatch(isolate);
-            v8::Local<v8::Value> parsed;
-            if (v8::JSON::Parse(context, v8pp::to_v8(isolate, value.text)).ToLocal(&parsed)) {
-                return parsed;
-            }
+        // A value that cannot be built, as in an isolate that is being terminated, reads as nothing
+        // and leaves no exception for whatever the script was actually doing.
+        v8::EscapableHandleScope scope(isolate);
+        v8::TryCatch tryCatch(isolate);
+        v8::Local<v8::Value> built;
+        if (!ValueTransfer::Rebuild(isolate, context, ToTransfer(value)).ToLocal(&built)) {
             tryCatch.Reset();
-            return v8pp::to_v8(isolate, value.text);
+            return v8::Undefined(isolate);
         }
-        case Type::Null: break;
-        }
-        return v8::Null(isolate);
+        return scope.Escape(built);
     }
 
     void StateBag::Dispatch(uint32_t id, const Networking::Replication::StateChange &change) {
@@ -317,9 +283,14 @@ namespace Framework::Scripting::Builtins {
         auto *monitor        = isolate != nullptr ? ResourceMonitor::Current() : nullptr;
         const double charged = monitor ? monitor->ChargedMs(isolate, ResourceMonitor::Clock::now()) : 0.0;
 
-        // A throwing listener is its own bug and must not take down the write that raised it: nobody
-        // waits on the outcome.
-        callback->Invoke(args, Bind::ReturnMode::Outcome, {});
+        // A failing listener is its own bug and must not take down the write that raised it. It is
+        // reported as an error of its resource instead, when it threw and when what it waited on failed
+        // later. A listener cut short because its runtime stopped has nothing to report.
+        callback->Invoke(args, Bind::ReturnMode::Outcome, [manager = entry->second.manager, resourceName = entry->second.resourceName, key = change.key](Bind::CallOutcome &&outcome) {
+            if (outcome.threw && outcome.error != Bind::kRuntimeStopped) {
+                ReportFailure(manager->manager, resourceName, key, outcome.error);
+            }
+        });
 
         if (monitor) {
             monitor->ReportOwnTime(isolate, "state change listener for", change.key, charged, ResourceMonitor::Clock::now());
@@ -352,10 +323,38 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
-    void StateBag::CleanupResource(v8::Isolate *, const std::string &resourceName) {
-        DropSubscriptions([&resourceName](const Subscription &subscription) {
-            return subscription.resourceName == resourceName;
+    void StateBag::CleanupResource(const ResourceManager *manager, const std::string &resourceName) {
+        DropSubscriptions([manager, &resourceName](const Subscription &subscription) {
+            return subscription.manager->manager == manager && subscription.resourceName == resourceName;
         });
+    }
+
+    void StateBag::CleanupResource(v8::Isolate *isolate, const std::string &resourceName) {
+        CleanupResource(Bind::Detail::CallResourceManager(isolate), resourceName);
+    }
+
+    void StateBag::ForgetManager(const ResourceManager *manager) {
+        const auto link = _managers.find(manager);
+        if (link == _managers.end()) {
+            return;
+        }
+        // Still told apart from the subscriptions of no manager while they are dropped.
+        const std::shared_ptr<ManagerLink> going = link->second;
+        _managers.erase(link);
+        DropSubscriptions([&going](const Subscription &subscription) {
+            return subscription.manager == going;
+        });
+        // A handler that is still running reports to nobody.
+        going->manager = nullptr;
+    }
+
+    std::shared_ptr<StateBag::ManagerLink> StateBag::LinkOf(ResourceManager *manager) {
+        std::shared_ptr<ManagerLink> &link = _managers[manager];
+        if (link == nullptr) {
+            link          = std::make_shared<ManagerLink>();
+            link->manager = manager;
+        }
+        return link;
     }
 
     void StateBag::DropDeadSubscriptions() {
@@ -406,23 +405,18 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        // The object is made with its keys already in it, as JSON makes one, and then filled. Assigning to
-        // an empty one would not do for every key a bag can hold: "__proto__" would run the inherited
-        // setter of a JavaScript object and replace its prototype, and "10" would become the tenth element
-        // of a Lua table.
-        const std::vector<std::string> keys = bag->Keys();
-        nlohmann::ordered_json skeleton     = nlohmann::ordered_json::object();
-        for (const std::string &key : keys) {
-            skeleton[key] = true;
-        }
-        auto parsed     = call.ParseJson(skeleton.dump(-1, ' ', false, nlohmann::ordered_json::error_handler_t::replace));
-        Bind::Value out = parsed ? parsed.GetValue() : call.NewObject();
-        for (const std::string &key : keys) {
+        // Built as one copy and not key by key: assigning "__proto__" to a JavaScript object would run the
+        // inherited setter and replace its prototype, and "10" would become the tenth element of a Lua
+        // table. A stored null has no entry in Lua, where a table holds no nil.
+        TransferredValue copy;
+        copy.kind = TransferredValue::Kind::Object;
+        for (const std::string &key : bag->Keys()) {
             if (const auto *value = bag->Get(key)) {
-                out.Set(key, MakeValue(call, *value));
+                copy.properties.emplace_back(key, ToTransfer(*value));
             }
         }
-        call.Return(out);
+        auto built = call.FromTransfer(copy);
+        call.Return(built ? built.GetValue() : call.NewObject());
     }
 
     void StateBag::OnChange(Bind::Call &call) {
@@ -450,11 +444,11 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        // Owned by the resource that registered it, so a stop drops it. An owner that
+        // Owned by the resource the handler belongs to, so a stop drops it. An owner that
         // cannot be named is refused rather than stored empty: CleanupResource matches on the
         // name, so an empty one would survive every resource stop and keep calling a handler
         // whose resource is gone. Events.on refuses the same case.
-        std::string resourceName = call.ResourceName();
+        std::string resourceName = call.OwnerOf(call.Arg(1));
         if (resourceName.empty()) {
             call.ThrowError("StateBag.onChange: must be called from within a resource");
             return;
@@ -478,7 +472,7 @@ namespace Framework::Scripting::Builtins {
         if (handle == Networking::Replication::kInvalidStateChangeHandle) {
             return;
         }
-        _subscriptions.emplace(id, Subscription {std::move(callback), std::move(resourceName), handle});
+        _subscriptions.emplace(id, Subscription {std::move(callback), std::move(resourceName), LinkOf(call.GetResourceManager()), handle});
 
         // Matching what Events.on hands back.
         call.Return(call.NewFunction([id](Bind::Call &) {

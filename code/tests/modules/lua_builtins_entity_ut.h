@@ -9,6 +9,7 @@
 #pragma once
 
 #include "lua_builtins_core_ut.h"
+#include "lua_resources_ut.h"
 #include "lua_runtime_ut.h"
 #include "node_test_helpers.h"
 #include "text_label_ut.h"
@@ -20,6 +21,7 @@
 #include "scripting/builtins/entity.h"
 #include "scripting/builtins/player.h"
 #include "scripting/builtins/state_bag.h"
+#include "scripting/engine_scope.h"
 #include "scripting/lua/lua_engine.h"
 #include "scripting/lua/lua_runtime.h"
 #include "scripting/lua/lua_transfer.h"
@@ -27,8 +29,11 @@
 #include "scripting/scripting_catalog.h"
 #include "scripting/value_transfer.h"
 
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
+#include <vector>
 
 // Entity and StateBag, declared once for JavaScript and Lua: what a Lua script gets of them, held against what a
 // JavaScript one gets, over one replication manager both languages write to.
@@ -49,12 +54,15 @@ namespace LuaBuiltinsEntityTest {
     struct LuaSide final {
         LuaEngine engine;
 
-        explicit LuaSide(Bind::Side side = Bind::Side::Server): engine(LuaBuiltinsCoreTest::LuaSide::Options(side)) {
+        // `manager` is what the runtimes answer their calls with, as the server module tells them its own.
+        explicit LuaSide(Bind::Side side = Bind::Side::Server, ResourceManager *manager = nullptr): engine(LuaBuiltinsCoreTest::LuaSide::Options(side)) {
             Bind::WatchRuntimes(engine);
-            engine.AddRuntimeDisposingListener([](LuaRuntime &) {
+            engine.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
                 StateBag::DropDeadSubscriptions();
+                Bind::SetCallResourceManager(&runtime, nullptr);
             });
-            engine.SetRuntimeSetupCallback([side](LuaRuntime &runtime) {
+            engine.SetRuntimeSetupCallback([side, manager](LuaRuntime &runtime) {
+                Bind::SetCallResourceManager(&runtime, manager);
                 Builtins::RegisterValueTypesLua(runtime.State(), side);
                 Entity::RegisterLua(runtime);
             });
@@ -117,10 +125,10 @@ namespace LuaBuiltinsEntityTest {
         TextLabelWorld world;
         NetworkEntity *entity;
         std::string id;
-        LuaSide lua;
         JsSide js;
+        LuaSide lua;
 
-        Stage(): entity(world.Manager()->CreateEntity(world.targetType)), id(std::to_string(entity->GetNetworkID())) {
+        Stage(): entity(world.Manager()->CreateEntity(world.targetType)), id(std::to_string(entity->GetNetworkID())), lua(Bind::Side::Server, &js.manager) {
             lua.Run("e = Entity.new(" + id + ")");
             js.Eval("globalThis.e = new Entity(" + id + "); 0");
         }
@@ -132,6 +140,132 @@ namespace LuaBuiltinsEntityTest {
         std::string StoredJson(const std::string &key) const {
             const StateValue *value = Stored(key);
             return value != nullptr && value->type == StateValue::Type::Json ? value->text : "<not json>";
+        }
+    };
+
+    // Host functions for the scripts of a Stage: destroyEntity() takes the entity of the stage away.
+    inline int LuaDestroyEntity(lua_State *L) {
+        auto *stage = static_cast<Stage *>(lua_touserdata(L, lua_upvalueindex(1)));
+        stage->world.Manager()->DestroyEntity(stage->entity);
+        return 0;
+    }
+
+    inline void InstallDestroyEntity(Stage &stage) {
+        lua_State *L = stage.lua.Runtime().State();
+        lua_pushlightuserdata(L, &stage);
+        lua_pushcclosure(L, LuaDestroyEntity, 1);
+        lua_setglobal(L, "destroyEntity");
+        stage.js.js.Enter([&stage](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            const auto destroy = [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                auto *self = static_cast<Stage *>(info.Data().As<v8::External>()->Value());
+                self->world.Manager()->DestroyEntity(self->entity);
+            };
+            context->Global()->Set(context, v8pp::to_v8(isolate, "destroyEntity"), v8::Function::New(context, destroy, v8::External::New(isolate, &stage)).ToLocalChecked()).Check();
+        });
+    }
+
+    // The server scripting module over resources on disk, with the world its scripts write to: every resource
+    // runs in runtimes of its own, as on a server. A JavaScript runtime gets Entity the way a game registers
+    // it, and both languages get stop(name), which stops a resource. `ENTITY` in a script is the id of the one
+    // entity.
+    struct Realm final {
+        TextLabelWorld world;
+        NetworkEntity *entity;
+        std::string id;
+        LuaResourcesTest::Files files;
+        // "<resource>: <first line>" for each error the manager was handed.
+        std::vector<std::string> errors;
+        LuaResourcesTest::ServerScriptingModule module;
+
+        Realm(): entity(world.Manager()->CreateEntity(world.targetType)), id(std::to_string(entity->GetNetworkID())) {}
+
+        void Resource(const std::string &name, const std::string &file, std::string script, const std::string &errorBehavior = "continue") {
+            for (size_t at = script.find("ENTITY"); at != std::string::npos; at = script.find("ENTITY", at)) {
+                script.replace(at, 6, id);
+            }
+            files.Resource(name, {{file, script}}, ",\"errorBehavior\":\"" + errorBehavior + "\"");
+        }
+
+        bool Start() {
+            module.SetResourcesPath(files.root.string());
+            const auto registered = module.Init([this](Engine *engine) {
+                EngineScope scope(engine);
+                v8::Isolate *isolate           = scope.Isolate();
+                v8::Local<v8::Context> context = scope.Context();
+                Entity::Register(isolate, context->Global());
+                context->Global()->Set(context, v8pp::to_v8(isolate, "stop"), v8::Function::New(context, JavaScriptStop, v8::External::New(isolate, this)).ToLocalChecked()).Check();
+            });
+            if (registered != ScriptingError::SCRIPTING_NONE) {
+                return false;
+            }
+            module.GetResourceManager()->AddOnResourceError([this](const std::string &name, const std::string &error) {
+                errors.push_back(name + ": " + LuaRuntimeTest::FirstLine(error));
+            });
+            // The module's own bindings give a Lua script no stop(): it is added once the runtimes exist, for
+            // the handlers to call.
+            return module.StartAllResources() && InstallLuaStop();
+        }
+
+        bool InstallLuaStop() {
+            for (const std::string &name : module.GetResourceManager()->GetAllResourceNames()) {
+                if (LuaRuntime *runtime = module.GetLuaEngine()->GetRuntime(name)) {
+                    lua_State *L = runtime->State();
+                    lua_pushlightuserdata(L, this);
+                    lua_pushcclosure(L, LuaStop, 1);
+                    lua_setglobal(L, "stop");
+                }
+            }
+            return true;
+        }
+
+        static int LuaStop(lua_State *L) {
+            auto *self = static_cast<Realm *>(lua_touserdata(L, lua_upvalueindex(1)));
+            self->module.GetResourceManager()->StopResource(luaL_checkstring(L, 1));
+            return 0;
+        }
+
+        static void JavaScriptStop(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = static_cast<Realm *>(info.Data().As<v8::External>()->Value());
+            v8::String::Utf8Value name(info.GetIsolate(), info[0]);
+            self->module.GetResourceManager()->StopResource(*name ? *name : "");
+        }
+
+        // A write of the host, which wakes the handlers of every resource.
+        void Write(const std::string &key, double number) {
+            StateValue value;
+            value.type   = StateValue::Type::Number;
+            value.number = number;
+            entity->state.Set(key, value);
+        }
+
+        std::string Lua(const std::string &resource, const std::string &expression) const {
+            LuaRuntime *runtime = module.GetLuaEngine()->GetRuntime(resource);
+            return runtime != nullptr ? LuaRuntimeTest::Eval(*runtime, expression) : "<no runtime>";
+        }
+
+        std::string Js(const std::string &resource, const std::string &expression) const {
+            NodeRuntime *runtime = module.GetEngine()->GetResourceRuntime(resource);
+            return runtime != nullptr ? NodeTest::Eval(*runtime, expression) : "<no runtime>";
+        }
+
+        // Ticks the module as a server does, until `count` errors were handed to the manager or time runs out.
+        bool UpdateUntilErrors(size_t count, int timeoutMs = 3000) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+            while (errors.size() < count && std::chrono::steady_clock::now() < deadline) {
+                module.Update();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return errors.size() >= count;
+        }
+
+        // The error the manager was handed for `resource`, or "<none>".
+        std::string ErrorOf(const std::string &resource) const {
+            for (const std::string &error : errors) {
+                if (error.starts_with(resource + ": ")) {
+                    return error.substr(resource.size() + 2);
+                }
+            }
+            return "<none>";
         }
     };
 } // namespace LuaBuiltinsEntityTest
@@ -485,6 +619,181 @@ MODULE(lua_builtins_entity, {
 
         EQUALS(stage.lua.Run("e.state:onChange('a', function(_, value) e.state:set('b', value * 2) end) e.state:set('a', 21)"), "");
         EQUALS(stage.lua.Eval("e.state:get('b')"), "42");
+    });
+
+    IT("lets a handler write the key it watches, end another subscription, and take the entity away", {
+        Stage stage;
+        // A write of the watched key wakes the handler again, inside itself.
+        EQUALS(stage.lua.Run("seen = {} e.state:onChange('n', function(_, value) seen[#seen + 1] = value if value < 3 then e.state:set('n', value + 1) end end) e.state:set('n', 1)"), "");
+        EQUALS(stage.lua.Eval("table.concat(seen, ',') .. ' ' .. e.state:get('n')"), "1,2,3 3");
+        EQUALS(stage.js.Eval("globalThis.seen = []; e.state.onChange('m', (_, value) => { seen.push(value); if (value < 3) e.state.set('m', value + 1); }); e.state.set('m', 1); seen.join(',') + ' ' + e.state.get('m')"), "1,2,3 3");
+        // A JavaScript handler writes another key, which a Lua handler hears of.
+        EQUALS(stage.lua.Run("doubled = nil e.state:onChange('twice', function(_, value) doubled = value end)"), "");
+        EQUALS(stage.js.Eval("e.state.onChange('once', (_, value) => e.state.set('twice', value * 2)); e.state.set('once', 21); e.state.get('twice')"), "42");
+        EQUALS(stage.lua.Eval("doubled"), "42");
+
+        // The first handler ends the subscription of the second, which is not called for the change under way.
+        EQUALS(stage.lua.Run("first, second = 0, 0 local stopSecond e.state:onChange('pair', function() first = first + 1 stopSecond() end) stopSecond = e.state:onChange('pair', function() second = second + 1 end) e.state:set('pair', 1) e.state:set('pair', 2)"), "");
+        EQUALS(stage.lua.Eval("first + second"), "2");
+        EQUALS(stage.js.Eval("globalThis.first = 0; globalThis.second = 0; let stopSecond; e.state.onChange('jsPair', () => { first++; stopSecond(); }); stopSecond = e.state.onChange('jsPair', () => second++); e.state.set('jsPair', 1); e.state.set('jsPair', 2); first + second"),
+            "2");
+
+        // A handler that takes the entity away leaves handles that do nothing.
+        InstallDestroyEntity(stage);
+        EQUALS(stage.lua.Run("after = 'unset' e.state:onChange('gone', function() destroyEntity() after = tostring(e.state:get('gone')) .. tostring(e.state:has('gone')) end)"), "");
+        EQUALS(stage.js.Eval("globalThis.heardGone = 0; e.state.onChange('gone', () => heardGone++); 0"), "0");
+        EQUALS(stage.lua.Run("e.state:set('gone', 1)"), "");
+        EQUALS(stage.lua.Eval("after"), "nilfalse");
+        EQUALS(stage.world.Manager()->GetEntityByNetworkID(std::stoull(stage.id)) == nullptr, true);
+        EQUALS(stage.lua.Eval("select('#', e.state:set('gone', 2))"), "0");
+    });
+
+    IT("pins what JavaScript is refused when a value has no JSON form", {
+        Stage stage;
+        // A function was once stored as the text "undefined"; it is refused now, as in Lua.
+        EQUALS(stage.js.Thrown("e.state.set('fn', () => {})"), "TypeError: StateBag.set: a value of this kind has no JSON form");
+        EQUALS(stage.js.Thrown("e.state.set('sym', Symbol('s'))"), "TypeError: StateBag.set: a value of this kind has no JSON form");
+        EQUALS(stage.js.Thrown("const o = {}; o.self = o; e.state.set('loop', o)").starts_with("TypeError: StateBag.set: Converting circular structure to JSON"), true);
+        // What a toJSON throws is the message of the TypeError.
+        EQUALS(stage.js.Thrown("e.state.set('custom', { toJSON() { throw new RangeError('no json today'); } })"), "TypeError: StateBag.set: no json today");
+        EQUALS(stage.entity->state.Size(), size_t(0));
+        // A function inside a document is left out, as JSON.stringify leaves it out.
+        EQUALS(stage.js.Eval("e.state.set('doc', { keep: 1, drop() {} }); JSON.stringify(e.state.get('doc'))"), R"({"keep":1})");
+
+        // The conversion the host is offered is the one set runs.
+        std::string refused = "converted";
+        stage.js.js.Enter([&refused](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            v8::Local<v8::Value> function = v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &) {}).ToLocalChecked();
+            v8::TryCatch tryCatch(isolate);
+            StateValue out;
+            if (!StateBag::ToStateValue(isolate, context, function, out) && tryCatch.HasCaught()) {
+                v8::String::Utf8Value message(isolate, tryCatch.Exception());
+                refused = *message ? *message : "";
+            }
+        });
+        EQUALS(refused, "TypeError: StateBag.set: a value of this kind has no JSON form");
+    });
+
+    IT("copies a key that is not UTF-8 once", {
+        Stage stage;
+        EQUALS(stage.lua.Run("e.state:set('\\255key', 1) e.state:set('plain', 2)"), "");
+        EQUALS(stage.lua.Eval("(function() local all, count = e.state:toObject(), 0 for _ in pairs(all) do count = count + 1 end return count .. ' ' .. tostring(all['\\255key']) .. ' ' .. tostring(all.plain) end)()"), "2 1 2");
+        EQUALS(stage.js.Eval("Object.keys(e.state.toObject()).length + ' ' + e.state.keys().length"), "2 2");
+    });
+
+    // ==================== StateBag: failing handlers ====================
+
+    IT("hands the failure of a handler to the manager of its resource, at once or later", {
+        Realm realm;
+        realm.Resource("js-sync", "main.js", "globalThis.calls = 0; new Entity(ENTITY).state.onChange('job', () => { calls++; throw new Error('sync boom'); });");
+        realm.Resource("js-async", "main.js", "globalThis.calls = 0; new Entity(ENTITY).state.onChange('job', async () => { calls++; await new Promise((resolve) => setTimeout(resolve, 5)); throw new Error('async boom'); });");
+        realm.Resource("lua-sync", "main.lua", "calls = 0 Entity.new(ENTITY).state:onChange('job', function() calls = calls + 1 error('lua boom') end)");
+        realm.Resource("lua-async", "main.lua", "calls = 0 Entity.new(ENTITY).state:onChange('job', function() calls = calls + 1 sleep(5) error('lua late boom') end)");
+        realm.Resource("quiet", "main.lua", "calls = 0 Entity.new(ENTITY).state:onChange('job', function() calls = calls + 1 end)");
+        // The writer is not thrown at for what its listeners do.
+        realm.Resource("writer", "main.js", "globalThis.write = (value) => { try { return String(new Entity(ENTITY).state.set('job', value)); } catch (e) { return 'threw ' + e.message; } };");
+        EQUALS(realm.Start(), true);
+        EQUALS(StateBag::SubscriptionCount(), 5u);
+
+        EQUALS(realm.Js("writer", "write('smith')"), "true");
+        // Those that failed in the call were told by the time the write returned.
+        EQUALS(realm.ErrorOf("js-sync").starts_with("State change listener for 'job' failed: "), true);
+        EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("js-sync"), "sync boom"), true);
+        EQUALS(realm.ErrorOf("lua-sync").starts_with("State change listener for 'job' failed: "), true);
+        EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("lua-sync"), "lua boom"), true);
+        EQUALS(realm.errors.size(), 2u);
+
+        // Those that failed after a wait are told when it ends.
+        EQUALS(realm.UpdateUntilErrors(4), true);
+        EQUALS(realm.ErrorOf("js-async").starts_with("State change listener for 'job' failed: "), true);
+        EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("js-async"), "async boom"), true);
+        EQUALS(realm.ErrorOf("lua-async").starts_with("State change listener for 'job' failed: "), true);
+        EQUALS(LuaRuntimeTest::Contains(realm.ErrorOf("lua-async"), "lua late boom"), true);
+        EQUALS(realm.ErrorOf("quiet") + realm.ErrorOf("writer"), "<none><none>");
+
+        // As errorBehavior continue says, each goes on listening.
+        realm.errors.clear();
+        EQUALS(realm.Js("writer", "write('farmer')"), "true");
+        EQUALS(realm.UpdateUntilErrors(4), true);
+        EQUALS(realm.Js("js-sync", "calls") + realm.Js("js-async", "calls") + realm.Lua("lua-sync", "calls") + realm.Lua("lua-async", "calls") + realm.Lua("quiet", "calls"), "22222");
+        EQUALS(StateBag::SubscriptionCount(), 5u);
+    });
+
+    IT("stops a resource whose handler fails, as errorBehavior stop says, in the write that woke it", {
+        Realm realm;
+        realm.Resource("js-fragile", "main.js", "new Entity(ENTITY).state.onChange('job', () => { throw new Error('boom'); });", "stop");
+        realm.Resource("lua-fragile", "main.lua", "Entity.new(ENTITY).state:onChange('job', function() error('boom') end)", "stop");
+        // A resource whose own write wakes its own failing handler is stopped under its own feet.
+        realm.Resource("js-self", "main.js", "const e = new Entity(ENTITY); e.state.onChange('mine', () => { throw new Error('own boom'); }); globalThis.write = () => String(e.state.set('mine', 1));", "stop");
+        realm.Resource("lua-self", "main.lua", "local e = Entity.new(ENTITY) e.state:onChange('theirs', function() error('own boom') end) function write() return tostring(e.state:set('theirs', 1)) end", "stop");
+        realm.Resource("sturdy", "main.lua", "calls = 0 Entity.new(ENTITY).state:onChange(nil, function() calls = calls + 1 end)");
+        EQUALS(realm.Start(), true);
+        EQUALS(StateBag::SubscriptionCount(), 5u);
+
+        realm.Write("job", 1);
+        EQUALS(realm.errors.size(), 2u);
+        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("js-fragile"), false);
+        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("lua-fragile"), false);
+        EQUALS(StateBag::SubscriptionCount(), 3u);
+
+        EQUALS(realm.Js("js-self", "write()"), "true");
+        EQUALS(realm.Lua("lua-self", "write()"), "true");
+        EQUALS(realm.errors.size(), 4u);
+        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("js-self"), false);
+        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("lua-self"), false);
+        EQUALS(StateBag::SubscriptionCount(), 1u);
+
+        realm.module.Update();
+        realm.Write("job", 2);
+        EQUALS(realm.errors.size(), 4u);
+        EQUALS(realm.Lua("sturdy", "calls"), "4");
+    });
+
+    IT("drops the subscriptions of a resource its manager stops, also from inside its own handler", {
+        Realm realm;
+        realm.Resource("lua-watcher", "main.lua", "calls = 0 local e = Entity.new(ENTITY) e.state:onChange(nil, function() calls = calls + 1 end) e.state:onChange('job', function() end)");
+        realm.Resource("js-watcher", "main.js", "globalThis.calls = 0; const e = new Entity(ENTITY); e.state.onChange(null, () => calls++); e.state.onChange('job', () => {});");
+        realm.Resource("lua-quitter", "main.lua", "Entity.new(ENTITY).state:onChange('quit', function() stop('lua-quitter') end)");
+        realm.Resource("js-quitter", "main.js", "new Entity(ENTITY).state.onChange('quit', () => stop('js-quitter'));");
+        realm.Resource("sturdy", "main.lua", "calls = 0 Entity.new(ENTITY).state:onChange(nil, function() calls = calls + 1 end)");
+        EQUALS(realm.Start(), true);
+        EQUALS(StateBag::SubscriptionCount(), 7u);
+
+        // Through the manager, as the server stops a resource: nothing here calls CleanupResource itself.
+        EQUALS(static_cast<bool>(realm.module.GetResourceManager()->StopResource("lua-watcher")), true);
+        EQUALS(StateBag::SubscriptionCount(), 5u);
+        EQUALS(static_cast<bool>(realm.module.GetResourceManager()->StopResource("js-watcher")), true);
+        EQUALS(StateBag::SubscriptionCount(), 3u);
+
+        // A handler that stops its own resource: stopping is no failure, and nothing of it is left.
+        realm.Write("quit", 1);
+        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("lua-quitter"), false);
+        EQUALS(realm.module.GetResourceManager()->IsResourceRunning("js-quitter"), false);
+        EQUALS(StateBag::SubscriptionCount(), 1u);
+        realm.module.Update();
+        realm.Write("quit", 2);
+        EQUALS(realm.errors.empty(), true);
+        EQUALS(realm.Lua("sturdy", "calls"), "2");
+    });
+
+    IT("keeps the subscriptions of one manager when another stops a resource of the same name", {
+        Stage stage;
+        ResourceManager other(&stage.js.js.engine);
+        EQUALS(stage.lua.Run("e.state:onChange(nil, function() end)"), "");
+        EQUALS(stage.js.Eval("e.state.onChange(null, () => {}); 0"), "0");
+        EQUALS(StateBag::SubscriptionCount(), 2u);
+
+        StateBag::CleanupResource(&other, kLuaResource);
+        StateBag::CleanupResource(&other, kJsResource);
+        StateBag::CleanupResource(static_cast<const ResourceManager *>(nullptr), kJsResource);
+        EQUALS(StateBag::SubscriptionCount(), 2u);
+        // With no JavaScript engine in sight, the manager and the name are enough.
+        StateBag::CleanupResource(&stage.js.manager, kLuaResource);
+        EQUALS(StateBag::SubscriptionCount(), 1u);
+
+        // A manager that goes takes what was made under it.
+        StateBag::ForgetManager(&stage.js.manager);
+        EQUALS(StateBag::SubscriptionCount(), 0u);
     });
 
     // ==================== StateBag: cleanup ====================

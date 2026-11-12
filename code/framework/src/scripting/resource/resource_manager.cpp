@@ -192,6 +192,7 @@ namespace Framework::Scripting {
         StopAll();
         // A runtime a builtin was registered in with this manager may outlive it.
         Bind::ForgetCallResourceManager(this);
+        Builtins::StateBag::ForgetManager(this);
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
         }
@@ -1058,6 +1059,9 @@ namespace Framework::Scripting {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
 
+        // Whatever language the resource is written in, and whether or not the JavaScript engine is up.
+        Builtins::StateBag::CleanupResource(this, std::string(resourceName));
+
         // Reject and drop message requests tied to this resource. Rejecting the awaiting
         // Promises needs an active isolate/context, so scope one here.
         if (_jsEngine && _jsEngine->IsInitialized()) {
@@ -1065,7 +1069,6 @@ namespace Framework::Scripting {
             v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
-            Builtins::StateBag::CleanupResource(isolate, std::string(resourceName));
         }
         return true;
     }

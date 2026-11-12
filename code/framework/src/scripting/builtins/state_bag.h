@@ -27,6 +27,7 @@
 
 namespace Framework::Scripting {
     class LuaRuntime;
+    class ResourceManager;
 } // namespace Framework::Scripting
 
 namespace Framework::Scripting::Builtins {
@@ -59,11 +60,18 @@ namespace Framework::Scripting::Builtins {
         // of memory, is a Lua error: call it protected, or it is a panic.
         static void RegisterLua(LuaRuntime &runtime);
 
-        // Drops the change subscriptions a stopping resource registered, mirroring
+        // Drops the change subscriptions of a stopping resource of `manager`, mirroring
         // Events::CleanupResource. Without it a stopped resource's handler keeps running, and its
-        // retained function keeps the resource's objects alive. The resource is told by its name alone,
-        // whatever language it is written in: `isolate` is whichever the caller has entered.
+        // retained function keeps the resource's objects alive. The resource is told by its manager and
+        // its name, whatever language it is written in, so two managers in one process do not drop
+        // each other's. The manager calls it for every resource it stops.
+        static void CleanupResource(const ResourceManager *manager, const std::string &resourceName);
+
+        // The same for the manager `isolate` answers with (Bind::SetCallResourceManager).
         static void CleanupResource(v8::Isolate *isolate, const std::string &resourceName);
+
+        // Drops every subscription made under `manager`, which is going: none is to reach it again.
+        static void ForgetManager(const ResourceManager *manager);
 
         // Drops the subscriptions whose handler can no longer run because its runtime is gone. What hears of
         // a Lua runtime going calls it: the disposing listener of the Lua engine, added after
@@ -74,21 +82,29 @@ namespace Framework::Scripting::Builtins {
         static size_t SubscriptionCount();
 
         // Scalars map directly; anything else is serialized to JSON. Returns false with an exception
-        // pending when the value cannot be represented — a cycle, chiefly.
+        // pending when the value cannot be represented — a cycle or a function: the TypeError `set`
+        // throws, since this is the conversion `set` runs.
         static bool ToStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> input, Networking::Replication::StateValue &out);
 
-        // The reverse. Unparseable Json comes back as raw text rather than throwing, so a script
-        // never has to guard a read.
+        // The reverse, as `get` and a change handler are given a value. Unparseable Json comes back as
+        // raw text rather than throwing, so a script never has to guard a read.
         static v8::Local<v8::Value> FromStateValue(v8::Isolate *isolate, v8::Local<v8::Context> context, const Networking::Replication::StateValue &value);
 
       private:
         Networking::Replication::StateBag *Resolve() const;
 
+        // The manager subscriptions were made under, until it goes: what a failing handler is reported to.
+        struct ManagerLink {
+            ResourceManager *manager = nullptr;
+        };
+
         // One live `onChange` registration: the script's function, of either language, the resource that
-        // registered it so a stop can drop it, and the replication-side handle to cancel.
+        // owns it and that resource's manager so a stop can drop it, and the replication-side handle to
+        // cancel.
         struct Subscription {
             std::shared_ptr<Bind::ScriptCallable> callback;
             std::string resourceName;
+            std::shared_ptr<ManagerLink> manager;
             Networking::Replication::StateChangeHandle handle = Networking::Replication::kInvalidStateChangeHandle;
         };
 
@@ -99,6 +115,9 @@ namespace Framework::Scripting::Builtins {
 
         // Calls one live subscription's handler with a change the filter already accepted.
         static void Dispatch(uint32_t id, const Networking::Replication::StateChange &change);
+
+        // The link of `manager`, shared by everything made under it. Never null; of no manager for nullptr.
+        static std::shared_ptr<ManagerLink> LinkOf(ResourceManager *manager);
 
         // The live bag behind a call's receiver, or nullptr when the handle is stale or not a
         // StateBag at all. Both cases are a silent no-op, so callers need not tell them apart —
@@ -117,6 +136,7 @@ namespace Framework::Scripting::Builtins {
         uint64_t _id = 0;
         inline static ClassCache<StateBag> _classes;
         inline static std::unordered_map<uint32_t, Subscription> _subscriptions;
+        inline static std::unordered_map<const ResourceManager *, std::shared_ptr<ManagerLink>> _managers;
         inline static uint32_t _nextSubscriptionId = 0;
     };
 } // namespace Framework::Scripting::Builtins

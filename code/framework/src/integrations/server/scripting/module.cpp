@@ -11,6 +11,7 @@
 #include <logging/logger.h>
 #include <utils/profiler.h>
 
+#include <scripting/bind/call.h>
 #include <scripting/bind/callable.h>
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
@@ -69,8 +70,10 @@ namespace Framework::Integrations::Server::Scripting {
 
         // After the above, which is what tells a handler that its runtime goes: the state changes a Lua
         // runtime watched are let go of with it.
-        _luaEngine->AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &) {
+        _luaEngine->AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
             Framework::Scripting::Builtins::StateBag::DropDeadSubscriptions();
+            // The address of the runtime may be the next one's.
+            Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
         });
 
         // Before any project registers its own handle types (PostInit runs ahead of Init): the newest is tried first,
@@ -186,6 +189,10 @@ namespace Framework::Integrations::Server::Scripting {
     }
 
     void ServerScriptingModule::RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime) {
+        // What a call made in the runtime answers GetResourceManager with, as the isolates are told through the
+        // console. Forgotten when the runtime goes, and when the manager does.
+        Framework::Scripting::Bind::SetCallResourceManager(&runtime, _resourceManager.get());
+
         // As in JavaScript, every builtin is a global (Vector3.new, not Core.Vector3.new).
         Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
 

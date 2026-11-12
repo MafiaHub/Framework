@@ -93,10 +93,16 @@ what it needs, and nothing else diverges:
   and not published. Both cross between runtimes by their network id
   (`Transfer(&Entity::GetId)`); a handle a project derives by hand from
   `Player` or `Entity` still registers through `RegisterHandleTransfer`.
-  A function `StateBag.onChange` keeps is a `Bind::ScriptCallable`, dropped
-  when its resource stops (`StateBag::CleanupResource`), when its isolate
-  goes (`UnregisterIsolate`) and when its Lua runtime goes
-  (`DropDeadSubscriptions`, from the Lua engine's disposing listener).
+  A function `StateBag.onChange` keeps is a `Bind::ScriptCallable`, owned by
+  the resource `Call::OwnerOf(function)` names and kept with that resource's
+  manager. It is dropped when the manager stops the resource
+  (`StateBag::CleanupResource(manager, name)`), when the manager goes
+  (`ForgetManager`), when its isolate goes (`UnregisterIsolate`) and when its
+  Lua runtime goes (`DropDeadSubscriptions`, from the Lua engine's disposing
+  listener). A handler that throws, or whose promise or coroutine fails
+  later, does not fail the write that woke it: it is handed to
+  `ResourceManager::HandleResourceRuntimeError` as an error of its resource.
+  Every builtin that keeps a script function follows these three rules.
 
 - **Service APIs** — need the context and the `ResourceManager`:
 
