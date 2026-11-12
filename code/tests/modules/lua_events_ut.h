@@ -1017,7 +1017,7 @@ MODULE(lua_events, {
 
     IT("drops an emission whose emitter stops while a handler is still at it", {
         Bus bus;
-        bus.server.files.Resource("listener", {{"main.lua", "finished = 0 Events.on('slow', function() sleep(30) finished = finished + 1 end)"}});
+        bus.server.files.Resource("listener", {{"main.lua", "finished = 0 Events.on('slow', function() while not open do sleep(1) end finished = finished + 1 end)"}});
         bus.server.files.Resource("lua-sender", {{"main.lua", "spawn(function() Events.emit('slow') resumed = true end)"}});
         bus.server.files.Resource("js-sender", {{"main.js", "Events.emit('slow').then(() => { globalThis.settled = true; });"}});
         EQUALS(bus.Init(), true);
@@ -1033,6 +1033,10 @@ MODULE(lua_events, {
         EQUALS((bool)bus.Manager().StopResource("lua-sender"), true);
         EQUALS((bool)bus.Manager().StopResource("js-sender"), true);
         EQUALS(Builtins::Events::GetWaitingEmissionCount(), (size_t)0);
+        // The handlers are held until here, whatever time the stops took.
+        bus.server.module.Update();
+        EQUALS(bus.Lua("listener", "finished"), "0");
+        EQUALS(bus.Run("listener", "open = true"), "");
         EQUALS(bus.Until([&] {
             return bus.Lua("listener", "finished") == "2";
         }),

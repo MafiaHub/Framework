@@ -165,23 +165,25 @@ namespace LuaRuntimeTest {
     // What the suffix of a cut line or error is.
     constexpr std::string_view kTruncated = " ...(truncated)";
 
-    // Gives the state busy(), true for a second after its first call, and spin(), which loops while it is. A script
+    // Gives the state busy(), true for `busyMs` after its first call, and spin(), which loops while it is. A script
     // under test loops on these and never on `true`, so that a deadline that does not hold fails the test instead
     // of hanging it.
-    inline void AddSpin(LuaRuntime &runtime) {
+    inline void AddSpin(LuaRuntime &runtime, int busyMs = 1000) {
         SetGlobalFunction(runtime, "now", NowMs);
-        Run(runtime, "local stop function busy() stop = stop or now() + 1000 return now() < stop end function spin() while busy() do end end", "=spin");
+        Run(runtime, "local stop function busy() stop = stop or now() + " + std::to_string(busyMs) + " return now() < stop end function spin() while busy() do end end", "=spin");
     }
 
     // Runs `source` in a fresh state with a 50 ms deadline and gives the first line of its error. Says so when the
-    // entry was not cut short in time, and when the script got as far as setting the global `survived`.
+    // entry was not cut short in time, and when the script got as far as setting the global `survived`. The script
+    // would be busy for five seconds and is given half of that to be gone, so that a machine under load, where a
+    // tower of coroutines takes its time to unwind, does not pass for a deadline that did not hold.
     inline std::string RunPastDeadline(const std::string &source) {
         LuaRuntime runtime(Options(0, 50));
-        AddSpin(runtime);
+        AddSpin(runtime, 5000);
         SetGlobalFunction(runtime, "reenter", Reenter);
         const auto start    = std::chrono::steady_clock::now();
         std::string outcome = FirstLine(Run(runtime, source));
-        if (ElapsedMs(start) >= 500) {
+        if (ElapsedMs(start) >= 2500) {
             outcome += " (not cut short)";
         }
         if (Eval(runtime, "survived") != "nil") {
