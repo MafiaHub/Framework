@@ -358,6 +358,11 @@ namespace Framework::Scripting {
         void OnEntityCreated(uint64_t networkId);
         void OnEntityDestroyed(uint64_t networkId);
 
+        // Makes `resourceName` the one resource that owns the entity, which is destroyed when that resource stops:
+        // for a builtin that knows which resource made an entity, in a language OnEntityCreated cannot see the
+        // running script of. Does nothing for a name that is no resource of this manager.
+        void AssignEntity(std::string_view resourceName, uint64_t networkId);
+
         // Statistics
 
         /**

@@ -1449,6 +1449,18 @@ namespace Framework::Scripting {
         }
     }
 
+    void ResourceManager::AssignEntity(std::string_view resourceName, uint64_t networkId) {
+        std::scoped_lock lock(_resourcesMutex);
+        const auto owner = _resources.find(resourceName);
+        if (owner == _resources.end()) {
+            return;
+        }
+        for (auto &[name, resource] : _resources) {
+            resource->UntrackEntity(networkId);
+        }
+        owner->second->TrackEntity(networkId);
+    }
+
     void ResourceManager::HandleResourceRuntimeError(const std::string &resourceName, const std::string &error) {
         Resource *resource = GetResourceMutable(resourceName);
         if (!resource) {
