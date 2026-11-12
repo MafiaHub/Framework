@@ -54,6 +54,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/playout_buffer_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_parallel_ut.h"
+#include "modules/replication_threads_ut.h"
 #include "modules/replication_rate_ut.h"
 #include "modules/resource_package_ut.h"
 #include "modules/result_ut.h"
@@ -135,6 +136,7 @@ int main() {
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(replication_parallel);
+    UNIT_MODULE(replication_threads);
     UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(interest_scale);
