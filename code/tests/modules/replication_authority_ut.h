@@ -32,8 +32,12 @@ namespace ReplicationAuthorityTest {
     // Counts what a mod would do when one of its entities is destroyed by its owner.
     struct Counted final: Framework::Networking::Replication::NetworkEntity {
         static inline int preDestructions = 0;
+        // How many of those calls were made with a lock of the world's held by the calling thread: the
+        // entity's own, which is the only one in reach when the hook runs.
+        static inline int underLock = 0;
         void PreDestruction(MafiaNet::Connection_RM3 *) override {
             ++preDestructions;
+            underLock += Framework::Networking::Replication::World::HeldByThisThread() == 1 ? 1 : 0;
         }
     };
 } // namespace ReplicationAuthorityTest
@@ -183,6 +187,7 @@ MODULE(replication_authority, {
     IT("runs an owner's PreDestruction only once nothing else holds the entity", {
         using ReplicationAuthorityTest::Counted;
         Counted::preDestructions = 0;
+        Counted::underLock       = 0;
         NetworkServer peer;
         auto *manager = peer.GetReplicationManager();
         manager->Init(&peer, true);
@@ -208,6 +213,7 @@ MODULE(replication_authority, {
         NetworkEntity *free = TestWorld::Find(manager, ids[0]);
         EQUALS(free->DeserializeDestruction(&bs, connection), true);
         EQUALS(Counted::preDestructions, 1);
+        EQUALS(Counted::underLock, 1);
         EQUALS(world.Exists(ids[0]), false);
 
         // The second is held, as by a handler in the middle of its work: the destruction waits for it,
@@ -222,6 +228,9 @@ MODULE(replication_authority, {
         EQUALS(kept, true);
         EQUALS(duringHold, 1);
         EQUALS(Counted::preDestructions, 2);
+        // Put off to the teardown, the hook still had the entity to itself: the handle that kept it was gone
+        // by then, so the one lock held was taken for the hook.
+        EQUALS(Counted::underLock, 2);
         EQUALS(world.Exists(ids[1]), false);
         TestWorld::Rm3(manager)->DeallocConnection(connection);
     });

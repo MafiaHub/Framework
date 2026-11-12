@@ -882,7 +882,11 @@ namespace Framework::Networking::Replication {
     void ReplicationManager::TeardownEntity(NetworkEntity *entity) {
         const uint64_t id = entity->GetNetworkID();
         if (std::exchange(entity->_preDestructionOwed, false)) {
-            // The connection that asked may be gone by now, so none is named.
+            // Under the entity's lock, as when it is not put off: the entity is still referenced,
+            // and a replication worker may be serializing it. Nothing is held at a teardown, so the
+            // entity alone is in order; let go before ReplicaManager3's world is taken below. The
+            // connection that asked may be gone by now, so none is named.
+            const Detail::EntityGuard guard(*entity, true);
             entity->PreDestruction(nullptr);
         }
         {
@@ -1134,17 +1138,36 @@ namespace Framework::Networking::Replication {
         // replicas all originate from the server, so PopConnection cleans them up on its own.
         if (_isServer) {
             const auto guid = MafiaNet::ToPeerGuid(rakNetGUID);
+            // What follows reaches a mod's code (entities' OnSimulatorChanged and
+            // CanReleaseSimulation, simulator-changed handlers) from inside RakPeer::Receive, on the
+            // packet thread: thrown out of here it would end the process. Each step is tried on
+            // its own, so that one that throws does not keep the avatar from being destroyed.
+            const auto tried = [&](const char *step, const auto &run) {
+                try {
+                    run();
+                }
+                catch (const std::exception &error) {
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Closing the connection of {}: {} threw: {}", rakNetGUID.g, step, error.what());
+                }
+                catch (...) {
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Closing the connection of {}: {} threw", rakNetGUID.g, step);
+                }
+            };
             // This plugin callback fires for every closed connection, including peers dropped before
             // they completed identity (build mismatch, quit during the asset phase). Those never
             // produced a player-connect notification, so gate the disconnect notification on the
             // replication connection that PushReplicationConnection creates alongside it — keeping
             // the connect/disconnect callbacks paired for the game.
             if (_onClientDisconnect && HasConnection(rakNetGUID)) {
-                _onClientDisconnect(guid);
+                tried("the disconnect notification", [&] {
+                    _onClientDisconnect(guid);
+                });
             }
             // Before the blanket hand-back below, so entities this peer was *simulating* go through
             // delegation and raise its change notification, rather than silently losing an owner.
-            _delegation.OnClientDisconnected(guid);
+            tried("handing back what it simulated", [&] {
+                _delegation.OnClientDisconnected(guid);
+            });
             const uint64_t viewer = GetViewerId(guid);
             // Return any other entity the dropped peer owned (e.g. a vehicle it was driving) to the
             // server, or its authority gate would freeze it against an owner that no longer exists.
@@ -1160,7 +1183,9 @@ namespace Framework::Networking::Replication {
             // Now that the departed peer can no longer be elected, re-run the election so whatever
             // it was simulating is picked up by whoever else is near it this instant rather than at
             // the next scheduled pass.
-            _delegation.UpdateNow();
+            tried("the delegation pass", [&] {
+                _delegation.UpdateNow();
+            });
         }
         ReplicaManager3::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
     }
