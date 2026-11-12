@@ -175,6 +175,24 @@ followed by what each handler failed with. A handler whose resource stops
 while an emit waits on it fails that emit with
 `<resource> stopped before the call finished`.
 
+Messages cross languages the same way. `Messages.request` from Lua waits
+where JavaScript gets a Promise: it returns the reply, or raises what the
+Promise would be rejected with (`Target resource not found`,
+`No handler for message type`, what the handler failed with,
+`Messages.request: resource '<name>' stopped before reply`). A reply is
+delivered at the next update of the server, also when the handler answered at
+once, so a request needs a place where Lua can wait. A handler of either
+language may answer later, a Lua one after a `sleep`; only the first reply
+counts, and a reply to a request that is gone does nothing. Where the
+requester or the handler is Lua the payload and the reply are copies, and a
+Lua caller whose payload cannot be copied is told as it calls
+(`Messages.request: payload: ...`). A request nobody answers waits until the
+resource that owes the answer, or the one that asked, stops, in both
+languages. A handler that fails while its request still waits fails that
+request; a failure nobody waits for (a notification, a handler that fails
+after it replied) is reported against the handler's resource when Lua is
+involved, and only logged between two JavaScript resources, as before.
+
 Exports cross languages the same way. What a Lua script registers with
 `Exports.register` is copied when it is registered, its functions as
 functions that call home, and every importer of either language gets a

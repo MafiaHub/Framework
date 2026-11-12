@@ -200,6 +200,14 @@ what it needs, and nothing else diverges:
     is given a copy made inside the owner's isolate
     (`Exports::CopyJavaScriptExport`); the functions in either are
     `ScriptCallable`s.
+  - `Messages` is declared this way too. A JavaScript request or notification
+    to a JavaScript handler runs the code it always ran (`CallHandler`, the
+    reply function, the response queue of `v8::Global`s). Where the requester
+    or the handler is Lua, the handler is called through its `ScriptCallable`
+    with a copy of the payload and `reply` is a callable of the host
+    (`Messages::ReplyFunction`) that queues a copy of the answer; a Lua
+    requester waits on a `Bind::Deferred`. `ProcessPendingResponses()`
+    delivers both kinds of reply, with or without an isolate at hand.
 
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
