@@ -297,7 +297,7 @@ namespace Framework::Scripting {
         // at the next tick, from the top, and until then none of its timers fires and nothing that waits in it is
         // resumed. So it is while JavaScript is on the stack, which may be in the middle of a call into this
         // runtime (ScriptActivity).
-        if (runtime->IsExecuting() || ScriptActivity::OfAnother(Language::Lua)) {
+        if (runtime->IsExecuting() || ScriptActivity::JavaScriptOnStack()) {
             runtime->Scheduler().Stop();
             _retiredRuntimes.push_back(std::move(runtime));
             return;
@@ -378,7 +378,7 @@ namespace Framework::Scripting {
         std::vector<std::unique_ptr<LuaRuntime>> retired;
         retired.swap(_retiredRuntimes);
         // A shutdown closes what is not executing whoever calls it; a tick from under JavaScript closes nothing.
-        const bool held = !shutdown && ScriptActivity::OfAnother(Language::Lua);
+        const bool held = !shutdown && ScriptActivity::JavaScriptOnStack();
         for (auto &runtime : retired) {
             if (held || runtime->IsExecuting()) {
                 _retiredRuntimes.push_back(std::move(runtime));

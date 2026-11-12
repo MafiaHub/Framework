@@ -291,7 +291,7 @@ namespace Framework::Scripting {
         int status = LUA_OK;
         {
             // Script is on the stack: the JavaScript engine frees no runtime under it (ScriptActivity).
-            const ScriptActivity::Running running(Language::Lua);
+            const ScriptActivity::LuaRunning running;
             status = lua_pcall(_state, nargs, nresults, function);
         }
         if (--_entryDepth == 0) {

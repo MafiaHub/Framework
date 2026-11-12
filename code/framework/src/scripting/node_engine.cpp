@@ -838,7 +838,7 @@ namespace Framework::Scripting {
     bool NodeEngine::CanTeardownNow(const ResourceRuntime &runtime) const {
         // Not while an isolate is entered, nor while a Lua script runs: either may hold handles of the isolate,
         // the Lua script through the binding layer.
-        return v8::Isolate::TryGetCurrent() == nullptr && !ScriptActivity::OfAnother(Language::JavaScript) && !runtime.runtime->GetIsolate()->IsInUse();
+        return v8::Isolate::TryGetCurrent() == nullptr && !ScriptActivity::LuaOnStack() && !runtime.runtime->GetIsolate()->IsInUse();
     }
 
     void NodeEngine::FlushRetiredRuntimes() {
