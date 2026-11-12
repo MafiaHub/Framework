@@ -51,6 +51,19 @@ Events.on("resourceStop", async (resourceName) => {
 });
 ```
 
+A Lua handler waits the way Lua does: the transition is held until its
+coroutine ends, so a handler that sleeps or waits on a host call delays it as
+an awaited promise does, and one that raises fails it as a rejection does. The
+manager ticks the Lua engine as well while it waits, and a server without a
+JavaScript engine emits both events to its Lua handlers all the same.
+
+```lua
+Events.on("resourceStop", function(resourceName)
+    if resourceName ~= "my-resource" then return end
+    saveInventory() -- may wait
+end)
+```
+
 Startup does not transition the resource to `Running`, invoke its started
 callback, or start a dependent resource until every matching handler settles.
 If a start handler rejects or exceeds the timeout, startup fails and the

@@ -162,6 +162,16 @@ cross (a timer, a socket) is not an error. A returned `false` still vetoes a
 cancellable event, a returned promise is still waited on, and a throw or
 rejection still reaches the emitter.
 
+The same holds for an event that involves Lua, on either end and also inside
+one resource. A Lua handler receives copies and is called for its outcome
+only: `false` returned before it first waits vetoes, the emitter waits until
+its coroutine ends, and what it raises reaches the emitter. `Events.emit` from
+Lua copies its arguments once, waits until every handler of either language
+has settled, returns nothing, and raises `One or more event handlers failed`
+followed by what each handler failed with. A handler whose resource stops
+while an emit waits on it fails that emit with
+`<resource> stopped before the call finished`.
+
 Shared memory cannot be shared between resources. Each environment frees its
 array buffers through its own allocator, which dies with the resource, so a
 `SharedArrayBuffer` that outlived the resource that made it would crash the

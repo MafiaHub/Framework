@@ -146,7 +146,15 @@ what it needs, and nothing else diverges:
 
   `Events` is the one deliberate variation: it is a non-static member of
   `ResourceManager` (which owns the handler tables), so it is called as
-  `manager.GetEvents().Register(...)` with the same argument list.
+  `manager.GetEvents().Register(...)` with the same argument list. Its
+  functions come from one definition for JavaScript and Lua all the same
+  (`Events::Definition()`, `Events::RegisterLua`): a JavaScript call finds
+  its `Events` by the isolate `Register` bound, a Lua call through the
+  manager of its runtime. It is also the one place where a context function
+  speaks V8 (`Bind::V8ValueOf`, `Bind::V8ValueIn`): a JavaScript emit hands
+  its arguments to the JavaScript handlers of its own isolate as they are,
+  and returns the Promise it always returned. Whatever involves Lua goes
+  through the handler's `ScriptCallable` with copied arguments.
 
   A service API that is declared once for JavaScript and Lua goes through
   `Bind::Namespace` (`scripting/bind/namespace.h`). `Console` and
