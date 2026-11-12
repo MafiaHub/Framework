@@ -308,11 +308,7 @@ MODULE(delegation, {
             });
             worldFree += done.wait_for(std::chrono::seconds(2)) == std::future_status::ready ? 1 : 0;
             // And what takes that world, or runs a pass, is this function's to call.
-            int peers = 0;
-            manager->ForEachStreamingPeer(id, [&](MafiaNet::PeerGuid) {
-                ++peers;
-            });
-            audiences += peers + 1;
+            audiences += static_cast<int>(manager->StreamingPeers(id).size()) + 1;
             elector.Pin(id, alice);
         };
         elector.UpdateNow();

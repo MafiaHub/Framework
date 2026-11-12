@@ -668,23 +668,25 @@ namespace Framework::Networking::Replication {
         _dirtyStateBags.insert(networkId);
     }
 
-    void ReplicationManager::ForEachStreamingPeer(uint64_t networkId, const fu2::function<void(MafiaNet::PeerGuid) const> &fn) {
+    std::vector<MafiaNet::PeerGuid> ReplicationManager::StreamingPeers(uint64_t networkId) {
+        std::vector<MafiaNet::PeerGuid> peers;
         if (!_isServer || _owner == nullptr) {
-            return;
+            return peers;
         }
         World::RequireNoneHeld("an entity's audience was asked for");
         const WorldGuard world(*this);
         NetworkEntity *entity = GetEntityByNetworkID(networkId);
         if (entity == nullptr) {
-            return;
+            return peers;
         }
         const unsigned connectionCount = GetConnectionCount();
         for (unsigned i = 0; i < connectionCount; ++i) {
             MafiaNet::Connection_RM3 *connection = GetConnectionAtIndex(i);
             if (connection != nullptr && connection->HasReplicaConstructed(entity)) {
-                fn(MafiaNet::ToPeerGuid(connection->GetRakNetGUID()));
+                peers.push_back(MafiaNet::ToPeerGuid(connection->GetRakNetGUID()));
             }
         }
+        return peers;
     }
 
     void ReplicationManager::FlushStateBags() {

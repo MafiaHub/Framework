@@ -481,10 +481,10 @@ handle, never by pointer:
 | `ForceState(entity)`, `SetOwner(entity, guid)` | `ForceState(id)` / `ForceState(ref)`, `SetOwner(id, guid)` / `SetOwner(ref, guid)` |
 | `SetViewer(guid, entity)` | `SetViewer(guid, id)` / `SetViewer(guid, ref)` |
 | `MarkStateBagDirty(entity)` | `MarkStateBagDirty(id)` |
-| `ForEachStreamingPeer(entity, fn)` | `ForEachStreamingPeer(id, fn)` |
+| `ForEachStreamingPeer(entity, fn)` | `for (PeerGuid peer : StreamingPeers(id))` |
 
 The forms that take an id, `Pin`, `SetDeclined`, `UpdateNow` and
-`ForEachStreamingPeer` must be called with no handle held; they abort
+`StreamingPeers` must be called with no handle held; they abort
 otherwise. The forms that take a `Ref`, and `entity->SetOwner(guid)` and
 `entity->ForceState()`, are for inside the handle's scope.
 

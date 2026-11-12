@@ -469,7 +469,7 @@ Check again what the handler relies on.
 handle themselves or take a lock that comes before an entity's:
 
 - the `ReplicationManager` functions that take a network id (above),
-  `ForEachStreamingPeer` and `StartReplication`
+  `StreamingPeers` and `StartReplication`
   (`NetworkServer::PushReplicationConnection`);
 - `DelegationManager::Pin`, `SetDeclined` and `UpdateNow`;
 - `Events::EmitReservedSync`. The handlers that would answer ask the world
@@ -596,7 +596,7 @@ both treats the second as possibly late.
 - Inbound entity state waits only for its own entity. Construction and
   destruction messages from clients, connections opening and closing,
   `world.Create`, the teardown that follows `world.Destroy`, and the
-  functions that walk connections (`ForEachStreamingPeer`,
+  functions that walk connections (`StreamingPeers`,
   `StartReplication`, a delegation pass) wait for a replication pass that
   is running.
 - The automatic replication worker count is one lower than before on the

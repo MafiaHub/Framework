@@ -241,9 +241,10 @@ namespace Framework::Networking::Replication {
         // Server: every peer that has `entity` constructed -- the audience interest, virtual worlds
         // and budgets have already chosen, and so the one an event about the entity belongs to. The
         // same question FlushStateBags asks, answered from the connections rather than re-derived
-        // from positions and ranges. O(connections); visits nothing on a client. Walks the
-        // connections, so not from inside a handle's scope.
-        void ForEachStreamingPeer(uint64_t networkId, const fu2::function<void(MafiaNet::PeerGuid) const> &fn);
+        // from positions and ranges. O(connections); empty on a client. Walks the connections under
+        // ReplicaManager3's world, so not from inside a handle's scope; the list is taken there and
+        // handed back, so that what the caller does with it runs under nothing.
+        std::vector<MafiaNet::PeerGuid> StreamingPeers(uint64_t networkId);
 
         // --- Delegated simulation ---
         // Election of which client simulates which server-owned entity. Server-side; on a client the

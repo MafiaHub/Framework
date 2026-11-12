@@ -469,10 +469,7 @@ namespace Framework::Networking::Replication {
             // A client that streamed the entity out can no longer withdraw its decline, so the decline goes with the entity.
             // Asked of the connections before the entity is taken: their lock comes first.
             if (!entry.declined.empty()) {
-                streaming.clear();
-                _manager->ForEachStreamingPeer(id, [&](MafiaNet::PeerGuid peer) {
-                    streaming.push_back(peer);
-                });
+                streaming = _manager->StreamingPeers(id);
                 const std::lock_guard guard(_mutex);
                 Entry &stored = _entries[id];
                 std::erase_if(stored.declined, [&](MafiaNet::PeerGuid guid) {
