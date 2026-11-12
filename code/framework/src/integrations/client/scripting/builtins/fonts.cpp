@@ -8,6 +8,7 @@
 
 #include "fonts.h"
 
+#include <logging/logger.h>
 #include <networking/replication/entities/text_label_entity.h>
 #include <scripting/engine_helpers.h>
 #include <scripting/resource/resource_manager.h>
@@ -140,9 +141,12 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 return;
             }
         }
-        if (_add) {
-            _add(family, {std::move(bytes[0]), std::move(bytes[1]), std::move(bytes[2]), std::move(bytes[3])});
+        // Without ImGui no label draws at all, so a throw would only break the resource's script.
+        if (!_add) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Fonts.register: '{}' not registered: this client has no ImGui renderer", family);
+            return;
         }
+        _add(family, {std::move(bytes[0]), std::move(bytes[1]), std::move(bytes[2]), std::move(bytes[3])});
     }
 
     void Fonts::Reset() {

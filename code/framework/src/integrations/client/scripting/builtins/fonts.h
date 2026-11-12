@@ -30,7 +30,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         using AddFamily = std::function<void(const std::string &family, External::ImGUI::FontFamilySource faces)>;
         // Where families go: the client instance points it at its ImGui atlas. With none, register
-        // still checks its files and then drops them.
+        // still checks its files, then logs and drops them.
         static void SetTarget(AddFamily add, std::function<void()> clear);
 
         static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
