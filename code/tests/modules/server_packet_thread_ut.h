@@ -53,6 +53,30 @@ namespace ServerPacketThreadTest {
     using Framework::Networking::Sender;
     using Framework::Networking::Replication::World;
 
+    inline bool UdpPortFree(int32_t port) {
+        const auto probe = ::socket(AF_INET, SOCK_DGRAM, 0);
+#ifdef _WIN32
+        if (probe == INVALID_SOCKET) {
+            return false;
+        }
+#else
+        if (probe < 0) {
+            return false;
+        }
+#endif
+        sockaddr_in address {};
+        address.sin_family      = AF_INET;
+        address.sin_port        = htons(static_cast<uint16_t>(port));
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        const bool isFree       = ::bind(probe, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) == 0;
+#ifdef _WIN32
+        ::closesocket(probe);
+#else
+        ::close(probe);
+#endif
+        return isFree;
+    }
+
     inline int32_t FreePort() {
         std::mt19937 random(static_cast<unsigned int>(Clock::now().time_since_epoch().count()));
         for (int attempt = 0; attempt < 8; ++attempt) {
@@ -60,7 +84,10 @@ namespace ServerPacketThreadTest {
             httplib::Server probe;
             if (probe.bind_to_port("127.0.0.1", candidate)) {
                 probe.stop();
-                return candidate;
+                // The game port is UDP, which the probe above says nothing of: Windows keeps ranges of it back.
+                if (UdpPortFree(candidate)) {
+                    return candidate;
+                }
             }
         }
         return 0;
