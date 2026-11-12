@@ -191,15 +191,17 @@ namespace Framework::Integrations::Client::Scripting {
     void ClientScriptingModule::Shutdown() {
         if (_resourceManager) {
             _resourceManager->StopAll();
-            _resourceManager.reset();
         }
+
+        // What these two kept names the manager: let go of before it is destroyed.
+        Builtins::Web::Shutdown();
+        Builtins::Keybinds::Shutdown();
+        _resourceManager.reset();
 
         // After the resources, whose Lua states it owns, and before the V8 engine.
         _lua->Shutdown();
 
         // Releases V8 globals; must precede engine shutdown (isolate disposal)
-        Builtins::Web::Shutdown();
-        Builtins::Keybinds::Shutdown();
         Builtins::Discord::Shutdown();
         Builtins::Nametags::Shutdown();
 

@@ -162,8 +162,12 @@ A handler that throws (JavaScript) or raises (Lua), or whose promise rejects or
 coroutine fails later, is an error of its resource, like a failing timer: it is
 logged as `Runtime error: Key '<key>' (<state>) handler error: ...` and the
 resource then
-follows its `errorBehavior` (`stop` by default). The other handlers of the key
-still run.
+follows its `errorBehavior` (`stop` by default). This changed with Lua support:
+before, a JavaScript handler that threw was only logged and its resource ran
+on; a resource that relies on that needs `"errorBehavior": "continue"`. The
+handlers of other resources on the key still run; the failing resource's own
+remaining handlers are skipped until the next frame, so a resource whose
+handlers all hang costs a frame one script deadline, not one per handler.
 
 ## Notes and limits
 

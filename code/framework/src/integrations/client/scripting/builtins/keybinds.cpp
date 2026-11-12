@@ -215,6 +215,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         std::shared_ptr<Bind::ScriptCallable> callback = call.Arg(handlerSlot).ToCallable();
         if (callback == nullptr) {
+            call.ThrowError("Key.bind: expected a handler function");
             return;
         }
 
@@ -402,6 +403,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         // Gate and handlers are resolved per edge, so a handler that unbinds or opens a UI holds back
         // the rest of this tick's edges.
         _dispatchNotch = lastNotch - newNotches;
+        // The resources a handler of which failed during this update. Their other handlers wait for the next
+        // one: a resource that runs every handler into its deadline costs the frame one deadline, not one for
+        // each handler and each notch. Shared with the calls that end later, which add to it in vain.
+        using Owner       = std::pair<std::shared_ptr<ManagerLink>, std::string>;
+        const auto failed = std::make_shared<std::vector<Owner>>();
         for (const auto &edge : edges) {
             if (edge.notch != 0) {
                 _dispatchNotch = edge.notch;
@@ -432,16 +438,17 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             const std::vector<Framework::Scripting::TransferredValue> args = {Text(edge.keyName), Text(stateStr)};
             for (const auto &p : pending) {
                 // Its runtime may have gone with a handler that ran before it.
-                if (!p.callback->IsAlive()) {
+                if (!p.callback->IsAlive() || std::find(failed->begin(), failed->end(), Owner {p.manager, p.resourceName}) != failed->end()) {
                     continue;
                 }
                 // A handler that fails is reported to the manager of its resource, when it threw and when
                 // what it waited on failed later; one cut short because its runtime stopped has nothing
                 // to report.
-                p.callback->Invoke(args, Bind::ReturnMode::Outcome, [manager = p.manager, resourceName = p.resourceName, keyName = edge.keyName, stateStr](Bind::CallOutcome &&outcome) {
+                p.callback->Invoke(args, Bind::ReturnMode::Outcome, [failed, manager = p.manager, resourceName = p.resourceName, keyName = edge.keyName, stateStr](Bind::CallOutcome &&outcome) {
                     if (!outcome.threw || outcome.error == Bind::kRuntimeStopped) {
                         return;
                     }
+                    failed->emplace_back(manager, resourceName);
                     const std::string message = fmt::format("Key '{}' ({}) handler error: {}", keyName, stateStr, outcome.error);
                     // Queued: the manager applies what the manifest asks for at its next upkeep.
                     if (manager->manager != nullptr) {

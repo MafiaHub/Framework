@@ -108,7 +108,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
 
         static std::function<bool()> _activeCallback;
 
-        // Scripting thread only.
+        // The link of each manager a handler was bound under, until Shutdown. Guarded by _mutex.
         static std::map<const Framework::Scripting::ResourceManager *, std::shared_ptr<ManagerLink>> _managers;
     };
 

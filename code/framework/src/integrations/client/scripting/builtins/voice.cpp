@@ -53,7 +53,11 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
                 const double number = flag.AsNumber();
                 return number != 0.0 && number == number;
             }
-            return !flag.IsString() || !flag.AsString().empty();
+            if (flag.IsString()) {
+                return !flag.AsString().empty();
+            }
+            // Of what is left only the zero of a BigInt is false.
+            return flag.Kind() != Bind::ValueKind::Other || flag.ToDisplayString() != "0";
         }
 
         // The number at `index`. Throws `expected` and gives false for anything else.
