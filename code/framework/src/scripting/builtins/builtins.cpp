@@ -35,11 +35,13 @@ namespace Framework::Scripting::Builtins {
         Quaternion::Definition().RegisterTransfer();
         Color::Definition().RegisterTransfer();
 
-        // Bases before the handles derived from them: the transfer tries the newest registration first.
-        RegisterHandleTransfer<Entity>("Entity");
+        // The handles cross by their network id. Bases before the handles derived from them: the transfer tries
+        // the newest registration first. Entity and StateBag say so in their definitions, which registers them
+        // with both transfers.
+        Entity::Definition().RegisterTransfer();
         RegisterHandleTransfer<Player>("Player");
         RegisterHandleTransfer<TextLabel>("TextLabel");
-        RegisterHandleTransfer<StateBag>("StateBag");
+        StateBag::Definition().RegisterTransfer();
     }
 
     void UnregisterAll(v8::Isolate *isolate) {

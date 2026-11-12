@@ -11,6 +11,7 @@
 #include "quaternion.h"
 #include "vector3.h"
 
+#include "../bind/class.h"
 #include "../class_cache.h"
 
 #include <networking/replication/network_entity.h>
@@ -24,6 +25,10 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+
+namespace Framework::Scripting {
+    class LuaRuntime;
+} // namespace Framework::Scripting
 
 namespace Framework::Scripting::Builtins {
     // Base scripting handle for a replicated entity, reusable across mods. Wraps the entity's
@@ -61,11 +66,18 @@ namespace Framework::Scripting::Builtins {
 
         virtual std::string ToString() const;
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Entity> &Definition();
+
         static v8pp::class_<Entity> &GetClass(v8::Isolate *isolate);
 
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
 
         static void UnregisterIsolate(v8::Isolate *isolate);
+
+        // Publishes the class as a global of the state of a Lua runtime, with the class `state` reads as. A
+        // failure, such as the state running out of memory, is a Lua error: call it protected, or it is a panic.
+        static void RegisterLua(LuaRuntime &runtime);
 
       protected:
         Networking::Replication::NetworkEntity *Resolve() const;
@@ -74,3 +86,5 @@ namespace Framework::Scripting::Builtins {
         inline static ClassCache<Entity> _classes;
     };
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Entity, "Entity");

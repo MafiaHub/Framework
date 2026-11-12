@@ -86,6 +86,18 @@ what it needs, and nothing else diverges:
   crosses to another runtime as, which `Builtins::RegisterTransferTypes`
   registers for both languages.
 
+  `Entity` and `StateBag` are declared the same way. A handle's `RegisterLua`
+  takes the `LuaRuntime`, as a service API's does, and the scripting module
+  calls `Entity::RegisterLua` for every state it sets up. `StateBag` is a
+  global in neither language: it is materialised for `entity.state` to give,
+  and not published. Both cross between runtimes by their network id
+  (`Transfer(&Entity::GetId)`); a handle a project derives by hand from
+  `Player` or `Entity` still registers through `RegisterHandleTransfer`.
+  A function `StateBag.onChange` keeps is a `Bind::ScriptCallable`, dropped
+  when its resource stops (`StateBag::CleanupResource`), when its isolate
+  goes (`UnregisterIsolate`) and when its Lua runtime goes
+  (`DropDeadSubscriptions`, from the Lua engine's disposing listener).
+
 - **Service APIs** — need the context and the `ResourceManager`:
 
   ```cpp

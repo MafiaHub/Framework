@@ -7,7 +7,7 @@
  */
 
 #include "entity.h"
-#include "../engine_helpers.h"
+#include "../lua/lua_runtime.h"
 #include "../scripting_catalog.h"
 #include "state_bag.h"
 
@@ -86,93 +86,96 @@ namespace Framework::Scripting::Builtins {
         return ss.str();
     }
 
+    namespace {
+        // Property: rotation. Reads as a Quaternion; takes a Quaternion or a Vector3 (euler degrees), which is
+        // more than one signature says.
+        void ReadRotation(Bind::Call &call) {
+            if (const auto *self = call.Self<Entity>()) {
+                call.Return(call.Wrap(self->GetRotation()));
+            }
+        }
+
+        void WriteRotation(Bind::Call &call) {
+            auto *self = call.Self<Entity>();
+            if (!self || call.ArgCount() < 1) {
+                return;
+            }
+
+            if (const auto *vec = call.Arg(0).AsBound<Vector3>()) {
+                self->SetRotationFromEuler(*vec);
+                return;
+            }
+            if (const auto *quat = call.Arg(0).AsBound<Quaternion>()) {
+                self->SetRotationFromQuaternion(*quat);
+                return;
+            }
+            call.ThrowTypeError("rotation must be a Vector3 (euler degrees) or Quaternion");
+        }
+
+        // setVisibleTo(player|null): restrict streaming to one player's connection.
+        void SetVisibleToPlayer(Bind::Call &call) {
+            auto *self = call.Self<Entity>();
+            if (!self) {
+                return;
+            }
+            if (call.Arg(0).IsNil()) {
+                self->SetVisibleTo(nullptr);
+                return;
+            }
+            const auto *target = call.Arg(0).AsBound<Entity>();
+            if (!target) {
+                call.ThrowTypeError("setVisibleTo: expected a Player (or null to clear)");
+                return;
+            }
+            auto *targetEntity = target->GetHandle();
+            if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+                call.ThrowError("setVisibleTo: target has no owning connection");
+                return;
+            }
+            self->SetVisibleTo(targetEntity);
+        }
+    } // namespace
+
+    const Bind::Class<Entity> &Entity::Definition() {
+        using Bind::Doc;
+        namespace Type = Bind::Type;
+
+        static const auto definition = Bind::Class<Entity>("Entity", "Base handle for a live replicated network entity.")
+                                           .Constructor<uint64_t>(Doc("Creates a script wrapper for an existing entity with this ID; it does not spawn an entity.").Param("id", "Network entity identifier."))
+                                           .Method("toString", &Entity::ToString, Doc("Formats this entity handle for logging and debugging.").Returns("Text containing the network entity ID."))
+                                           .Property("id", &Entity::GetId, "Immutable network entity identifier.")
+                                           .Property("virtualWorld", &Entity::GetVirtualWorld, "Current virtual-world identifier.")
+                                           .Property("position", &Entity::GetPosition, &Entity::SetPosition, "Authoritative world-space position; assignment forces replicated state.")
+                                           .Property("rotation", Type::Custom("Quaternion | Vector3", "Quaternion|Vector3"), &ReadRotation, &WriteRotation, "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees.")
+                                           // Property: state. Read-only handle onto this entity's state bag — the bag itself is mutable,
+                                           // the binding between entity and bag is not, so there is no setter.
+                                           .Property(
+                                               "state",
+                                               [](const Entity &entity) {
+                                                   return StateBag(entity.GetId());
+                                               },
+                                               "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.")
+                                           // Replication placement is the server's to decide; a client writes only its own replica.
+                                           .Method("setVirtualWorld", &Entity::SetVirtualWorld, Doc("Moves this entity into another virtual world.").Param("world", "Virtual-world identifier used to partition replication and visibility."), Bind::Side::Server)
+                                           .Method("setVisibleTo", &SetVisibleToPlayer,
+                                               Doc("Restricts replication of this entity to one owning connection while preserving normal range and visibility checks.")
+                                                   .Param("player", Type::Custom("Entity | null", "Entity?"), "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction."),
+                                               Bind::Side::Server)
+                                           // Crosses between runtimes as its network id.
+                                           .Transfer(&Entity::GetId);
+        return definition;
+    }
+
     v8pp::class_<Entity> &Entity::GetClass(v8::Isolate *isolate) {
         return _classes.Get(isolate, [isolate]() {
-            auto cls = std::make_unique<v8pp::class_<Entity>>(isolate, GetScriptingCatalog(isolate), "Entity", "Base handle for a live replicated network entity.");
-            cls->auto_wrap_objects(true);
-            cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
-                .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
-                .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
-                .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))
-                .property("position", &Entity::GetPosition, &Entity::SetPosition, v8pp::metadata::property_docs("Vector3", "Authoritative world-space position; assignment forces replicated state."));
-
-            // Property: rotation. Getter returns a Quaternion; setter accepts a Quaternion or a Vector3 (euler degrees).
-            {
-                auto rotationGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (self) {
-                        auto &quatCls = Quaternion::GetClass(info.GetIsolate());
-                        info.GetReturnValue().Set(quatCls.import_external(info.GetIsolate(), new Quaternion(self->GetRotation())));
-                    }
-                });
-                auto rotationSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (!self || info.Length() < 1)
-                        return;
-
-                    auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
-                    if (vec) {
-                        self->SetRotationFromEuler(*vec);
-                        return;
-                    }
-                    auto *quat = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info[0]);
-                    if (quat) {
-                        self->SetRotationFromQuaternion(*quat);
-                        return;
-                    }
-                    ThrowTypeError(info.GetIsolate(), "rotation must be a Vector3 (euler degrees) or Quaternion");
-                });
-                cls->accessor_property("rotation", rotationGetter, rotationSetter, v8pp::metadata::property_docs("Quaternion | Vector3", "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees."));
-            }
-
-            // Property: state. Read-only handle onto this entity's state bag — the bag itself is mutable,
-            // the binding between entity and bag is not, so there is no setter.
-            {
-                auto stateGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (self) {
-                        info.GetReturnValue().Set(StateBag::NewInstance(info.GetIsolate(), self->GetId()));
-                    }
-                });
-                cls->accessor_property("state", stateGetter, v8::Local<v8::FunctionTemplate>(),
-                    v8pp::metadata::property_docs("StateBag", "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag."));
-            }
-
-            // Replication placement is the server's to decide; a client writes only its own replica.
-            if (IsClientScripting(isolate)) {
-                return cls;
-            }
-
-            cls->function("setVirtualWorld", &Entity::SetVirtualWorld, v8pp::metadata::docs("void", {v8pp::metadata::param("world", "number", false, "Virtual-world identifier used to partition replication and visibility.")}, "Moves this entity into another virtual world."));
-
-            // setVisibleTo(player|null): restrict streaming to one player's connection.
-            cls->prototype_function(
-                "setVisibleTo",
-                [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *isolate = info.GetIsolate();
-                    auto *self    = v8pp::class_<Entity>::unwrap_object(isolate, info.This());
-                    if (!self) {
-                        return;
-                    }
-                    if (info.Length() < 1 || info[0]->IsNullOrUndefined()) {
-                        self->SetVisibleTo(nullptr);
-                        return;
-                    }
-                    auto *target = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
-                    if (!target) {
-                        ThrowTypeError(isolate, "setVisibleTo: expected a Player (or null to clear)");
-                        return;
-                    }
-                    auto *targetEntity = target->Resolve();
-                    if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
-                        isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
-                        return;
-                    }
-                    self->SetVisibleTo(targetEntity);
-                },
-                v8pp::metadata::docs("void", {v8pp::metadata::param("player", "Entity | null", false, "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.")},
-                    "Restricts replication of this entity to one owning connection while preserving normal range and visibility checks."));
-
+            // What `rotation` reads as.
+            Quaternion::GetClass(isolate);
+            auto cls = Definition().MaterialiseV8(isolate, GetScriptingCatalog(isolate), ScriptingSide(isolate));
+            // StateBag is reached only through `entity.state`, which gives one from the first read on, and
+            // is built here so that it is in the generated declarations as well, which are exported long
+            // before that read. It is deliberately not put on the global: there is no bag without an
+            // entity, so there is nothing for a script to construct.
+            StateBag::GetClass(isolate);
             return cls;
         });
     }
@@ -181,11 +184,15 @@ namespace Framework::Scripting::Builtins {
         v8pp::class_<Entity> &cls = GetClass(isolate);
         auto ctx                  = isolate->GetCurrentContext();
         global->Set(ctx, v8pp::to_v8(isolate, "Entity"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
-        // StateBag is reached only through `entity.state`, so its class would otherwise not exist
-        // until the first read -- long after the metadata export runs, leaving it out of the
-        // generated declarations. Build it here instead. It is deliberately not put on the global:
-        // there is no bag without an entity, so there is nothing for a script to construct.
-        StateBag::GetClass(isolate);
+    }
+
+    void Entity::RegisterLua(LuaRuntime &runtime) {
+        const Bind::Side side = runtime.Options().side;
+        // What the properties of an entity read as, whether or not the state has them as globals.
+        Vector3::Definition().MaterialiseLua(runtime.State(), side);
+        Quaternion::Definition().MaterialiseLua(runtime.State(), side);
+        StateBag::RegisterLua(runtime);
+        Definition().RegisterLuaGlobal(runtime.State(), side);
     }
 
     Networking::Replication::NetworkEntity *Entity::Resolve() const {

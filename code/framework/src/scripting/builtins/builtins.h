@@ -69,8 +69,8 @@ namespace Framework::Scripting::Builtins {
     void UnregisterAll(v8::Isolate *isolate);
 
     // Teaches ValueTransfer the builtin value types and handles, so they cross between resources as themselves rather
-    // than as plain objects, and LuaTransfer the value types, with the same names and the same bytes, so they cross
-    // between the two languages too. Process-wide and idempotent; it must run before a project registers its own
+    // than as plain objects, and LuaTransfer the value types and the handles declared for both languages (Entity,
+    // StateBag), with the same names and the same bytes, so they cross between the two languages too. Process-wide and idempotent; it must run before a project registers its own
     // handle types, which the server scripting module's constructor sees to.
     void RegisterTransferTypes();
 

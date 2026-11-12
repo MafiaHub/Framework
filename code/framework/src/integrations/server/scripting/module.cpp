@@ -18,11 +18,13 @@
 #include "builtins/pending_connection.h"
 #include "builtins/voice.h"
 #include <scripting/builtins/console.h>
+#include <scripting/builtins/entity.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/builtins/state_bag.h>
 #include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
 #include <scripting/lua/lua_runtime.h>
@@ -64,6 +66,12 @@ namespace Framework::Integrations::Server::Scripting {
         // A function a builtin kept, and a result it still owes, hear of the runtime they belong to going.
         Framework::Scripting::Bind::WatchRuntimes(*_nodeEngine);
         Framework::Scripting::Bind::WatchRuntimes(*_luaEngine);
+
+        // After the above, which is what tells a handler that its runtime goes: the state changes a Lua
+        // runtime watched are let go of with it.
+        _luaEngine->AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &) {
+            Framework::Scripting::Builtins::StateBag::DropDeadSubscriptions();
+        });
 
         // Before any project registers its own handle types (PostInit runs ahead of Init): the newest is tried first,
         // so the framework's bases must come first.
@@ -183,6 +191,7 @@ namespace Framework::Integrations::Server::Scripting {
 
         Framework::Scripting::Builtins::Console::RegisterLua(runtime);
         Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, _modVersion);
+        Framework::Scripting::Builtins::Entity::RegisterLua(runtime);
     }
 
     bool ServerScriptingModule::PreShutdown() {
