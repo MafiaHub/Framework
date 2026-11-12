@@ -15,6 +15,7 @@
 #include "scripting/lua/lua_engine.h"
 #include "scripting/node_engine.h"
 #include "scripting/resource/resource_manager.h"
+#include "scripting/script_log.h"
 
 #include <algorithm>
 #include <chrono>
@@ -138,6 +139,18 @@ namespace LuaInteropTest {
             const auto byte = static_cast<unsigned char>(character);
             return (byte < 0x20 && byte != '\t' && byte != '\n') || byte == 0x7F;
         });
+    }
+
+    // Whether a log entry of a resource is fit for the log: no control character of the script's in it, and every
+    // line of it under the name of the resource.
+    inline bool EveryLineNames(const std::string &entry, const std::string &resource);
+    inline bool IsClean(const std::string &entry, const std::string &resource) {
+        return !entry.empty() && !HasControlCharacter(entry) && EveryLineNames(entry, resource);
+    }
+
+    // Whether a log entry has a line of a JavaScript stack in it, under the name of the resource.
+    inline bool HasStackLine(const std::string &entry, const std::string &resource) {
+        return entry.find("\n[" + resource + "]     at ") != std::string::npos;
     }
 
     // Whether every line of a log entry is under the name of the resource.
@@ -300,7 +313,7 @@ MODULE(lua_interop, {
         EQUALS(bus.Manager().IsResourceRunning("sleeper"), false);
     });
 
-    IT("shuts down with resources of both languages at work: the manager, then Lua, then Node", {
+    IT("shuts down with resources of both languages at work, their runtimes closed while both engines are up", {
         LogCapture log;
         // What each Lua runtime found standing when it was closed.
         std::vector<std::string> disposals;
@@ -390,6 +403,7 @@ MODULE(lua_interop, {
             Events.on('resourceStop', function(name) if name == 'bank' then sleep(5) end end)
         )"}},
             R"(,"exports":["deposit"])");
+        bus.server.files.Resource("control", {{"main.js", "globalThis.ran = 'yes';"}});
         bus.server.files.Resource("teller", {{"main.lua", R"(
             balance = 0
             beats = 0
@@ -424,6 +438,12 @@ MODULE(lua_interop, {
         EQUALS(node->GetResourceRuntime("teller") == nullptr, true);
         // The engine's own runtime is still the only one there is.
         EQUALS(node->GetRuntimeStats().size(), 1u);
+
+        // The count is of something: a resource with a JavaScript file is given a Node runtime, and is counted.
+        EQUALS(bus.Start("control"), "");
+        EQUALS(nodeRuntimes, 1);
+        EQUALS(node->GetRuntimeStats().size(), 2u);
+        EQUALS(bus.Js("control", "ran"), "yes");
     });
 
     // ==================== Globals ====================
@@ -566,9 +586,276 @@ MODULE(lua_interop, {
 
         const std::vector<std::string> lines = log.Lines();
         EQUALS(Count(lines, "[noisy] Runtime error"), 200u);
-        EQUALS(Count(lines, "[noisy] errors suppressed"), 1u);
+        EQUALS(Count(lines, "[noisy] errors suppressed: more than 200 in a second"), 1u);
         // The share is of each resource: another one is heard.
         EQUALS(Count(lines, "[quiet] Runtime error"), 1u);
+    });
+
+    IT("logs the uncaught error of a JavaScript resource blanked, with its stack under the name of the resource", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("rude", {{"main.js", "function fail() { throw new Error('first\\x1b[2J line\\r\\n[admin] forged line'); }\nsetTimeout(() => fail(), 0);"}}, R"(,"errorBehavior":"continue")");
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("rude"), "");
+        EQUALS(bus.Until([&] {
+            return bus.Manager().GetResource("rude")->HasError();
+        }),
+            true);
+
+        const std::string entry = Find(log.Lines(), "Runtime error");
+        EQUALS(Contains(entry, "[rude] Runtime error: "), true);
+        EQUALS(Contains(entry, "first"), true);
+        EQUALS(Contains(entry, "\n[rude] [admin] forged line"), true);
+        EQUALS(LuaInteropTest::IsClean(entry, "rude"), true);
+        EQUALS(LuaInteropTest::HasStackLine(entry, "rude"), true);
+        EQUALS(Contains(entry, "fail"), true);
+    });
+
+    IT("logs the error of a JavaScript event handler the same way, in its own runtime and from another", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("rude", {{"main.js", R"(
+            function fail(what) { throw new Error(what + '\x1b[31m\n[admin] forged line'); }
+            Events.on('near', () => fail('near'));
+            Events.on('far', () => fail('far'));
+            Events.on('veto\x1b[2J\nnamed', () => fail('named'));
+            globalThis.emit = (name) => { Events.emit(name).catch(() => {}); return 'emitted'; };
+        )"}},
+            R"(,"errorBehavior":"continue")");
+        bus.server.files.Resource("other", {{"main.js", "globalThis.emit = (name) => { Events.emit(name).catch(() => {}); return 'emitted'; };"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"rude", "other"}), true);
+        EQUALS(bus.Js("rude", "emit('near')"), "emitted");
+        EQUALS(bus.Js("other", "emit('far')"), "emitted");
+        EQUALS(bus.Js("other", "emit('veto\\x1b[2J\\nnamed')"), "emitted");
+        bus.server.module.Update();
+
+        const std::vector<std::string> lines = log.Lines();
+        const std::string near               = Find(lines, "Event 'near' handler error");
+        EQUALS(Contains(near, "[rude] Event 'near' handler error: "), true);
+        EQUALS(Contains(near, "\n[rude] [admin] forged line"), true);
+        EQUALS(LuaInteropTest::IsClean(near, "rude"), true);
+        EQUALS(LuaInteropTest::HasStackLine(near, "rude"), true);
+
+        const std::string far = Find(lines, "Event 'far' handler error");
+        EQUALS(Contains(far, "[rude] Event 'far' handler error: "), true);
+        EQUALS(Contains(far, "\n[rude] [admin] forged line"), true);
+        EQUALS(LuaInteropTest::IsClean(far, "rude"), true);
+        EQUALS(LuaInteropTest::HasStackLine(far, "rude"), true);
+
+        // The name of an event is the script's too.
+        const std::string named = Find(lines, "named' handler error");
+        EQUALS(Contains(named, "[rude] Event 'veto [2J named' handler error: "), true);
+        EQUALS(LuaInteropTest::IsClean(named, "rude"), true);
+    });
+
+    IT("logs the error of a JavaScript message handler the same way, awaited or not, from either runtime", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("rude", {{"main.js", R"(
+            function fail(what) { throw new Error(what + '\x1b[31m\n[admin] forged line'); }
+            for (const type of ['near-asked', 'near-told', 'far-asked', 'far-told']) {
+                Messages.handle(type, () => fail(type));
+            }
+            globalThis.ask = (type) => { Messages.request('rude', type, {}).catch(() => {}); return 'asked'; };
+            globalThis.tell = (type) => { Messages.send('rude', type, {}); return 'told'; };
+        )"}},
+            R"(,"errorBehavior":"continue")");
+        bus.server.files.Resource("other", {{"main.js", R"(
+            globalThis.ask = (type) => { Messages.request('rude', type, {}).catch(() => {}); return 'asked'; };
+            globalThis.tell = (type) => { Messages.send('rude', type, {}); return 'told'; };
+        )"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"rude", "other"}), true);
+        EQUALS(bus.Js("rude", "ask('near-asked')"), "asked");
+        EQUALS(bus.Js("rude", "tell('near-told')"), "told");
+        EQUALS(bus.Js("other", "ask('far-asked')"), "asked");
+        EQUALS(bus.Js("other", "tell('far-told')"), "told");
+        bus.server.module.Update();
+        bus.server.module.Update();
+
+        const std::vector<std::string> lines = log.Lines();
+        for (const char *type : {"near-asked", "near-told", "far-asked", "far-told"}) {
+            const std::string entry = Find(lines, std::string("Message handler '") + type + "' error");
+            EQUALS((Contains(entry, std::string(type) + "' error: ") ? std::string() : std::string(type)), "");
+            EQUALS((Contains(entry, "\n[rude] [admin] forged line") ? std::string() : std::string(type)), "");
+            EQUALS((LuaInteropTest::IsClean(entry, "rude") ? std::string() : std::string(type)), "");
+            EQUALS((LuaInteropTest::HasStackLine(entry, "rude") ? std::string() : std::string(type)), "");
+        }
+    });
+
+    IT("logs the failure of a Lua handler somebody waits for the same way", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("rude", {{"main.lua", R"(
+            Events.on('js-emits', function() error('emitted\27[31m\n[admin] forged line') end)
+            Events.on('lua-emits', function() error('emitted\27[31m\n[admin] forged line') end)
+            Messages.handle('js-asks', function() error('asked\27[31m\n[admin] forged line') end)
+            Messages.handle('lua-asks', function() error('asked\27[31m\n[admin] forged line') end)
+        )"}},
+            R"(,"errorBehavior":"continue")");
+        bus.server.files.Resource("js", {{"main.js", R"(
+            globalThis.settled = 0;
+            globalThis.go = () => {
+                Events.emit('js-emits').catch(() => { settled += 1; });
+                Messages.request('rude', 'js-asks', {}).catch(() => { settled += 1; });
+                return 'gone';
+            };
+        )"}});
+        bus.server.files.Resource("lua", {{"main.lua", "settled = 0 function go() pcall(Events.emit, 'lua-emits') settled = settled + 1 pcall(Messages.request, 'rude', 'lua-asks', {}) settled = settled + 1 end"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"rude", "js", "lua"}), true);
+        EQUALS(bus.Js("js", "go()"), "gone");
+        EQUALS(bus.Run("lua", "go()"), "");
+        EQUALS(bus.Until([&] {
+            return bus.Js("js", "settled") == "2" && bus.Lua("lua", "settled") == "2";
+        }),
+            true);
+
+        const std::vector<std::string> lines = log.Lines();
+        for (const char *what : {"Event 'js-emits' handler error", "Event 'lua-emits' handler error", "Message handler 'js-asks' error", "Message handler 'lua-asks' error"}) {
+            const std::string entry = Find(lines, what);
+            EQUALS((Contains(entry, "\n[rude] [admin] forged line") ? std::string() : std::string(what)), "");
+            EQUALS((LuaInteropTest::IsClean(entry, "rude") ? std::string() : std::string(what)), "");
+            // The traceback of Lua keeps its lines.
+            EQUALS((Contains(entry, "\n[rude] stack traceback:") ? std::string() : std::string(what)), "");
+        }
+    });
+
+    IT("logs what a handler failed with the same way when its resource is stopping or no longer runs", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("rude", {{"main.lua", "Messages.handle('note', function() error('noted\\27[31m\\n[admin] forged line') end)"}});
+        bus.server.files.Resource("js", {{"main.js", "globalThis.tell = () => { Messages.send('rude', 'note', {}); return 'told'; };"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.StartAll({"rude", "js"}), true);
+
+        // Reported and still queued when the resource stops: nothing is done about it any more, but it is said.
+        EQUALS(bus.Js("js", "tell()"), "told");
+        EQUALS((bool)bus.Manager().StopResource("rude"), true);
+        // Reported for a resource that has stopped by the time the manager gets to it.
+        bus.Manager().ReportHandlerFailure("rude", "late\x1b[31m\n[admin] forged line");
+        bus.server.module.Update();
+
+        const std::vector<std::string> lines = log.Lines();
+        const std::string stopping           = Find(lines, "(the resource is stopping)");
+        EQUALS(Contains(stopping, "[rude] Message handler 'note' error: "), true);
+        EQUALS(Contains(stopping, "\n[rude] [admin] forged line"), true);
+        EQUALS(LuaInteropTest::IsClean(stopping, "rude"), true);
+
+        const std::string stopped = Find(lines, "(the resource is not running)");
+        EQUALS(Contains(stopped, "[rude] late"), true);
+        EQUALS(Contains(stopped, "\n[rude] [admin] forged line (the resource is not running)"), true);
+        EQUALS(LuaInteropTest::IsClean(stopped, "rude"), true);
+        EQUALS(Count(lines, "Runtime error"), 0u);
+    });
+
+    IT("logs the error that fails the start or the stop of a resource the same way, in either language", {
+        LogCapture log;
+        Bus bus;
+        // Each fails as it loads, as it is told that it starts, or as it is told that it stops.
+        bus.server.files.Resource("load-js", {{"main.js", "throw new Error('broken\\x1b[31m\\n[admin] forged line');"}});
+        bus.server.files.Resource("load-lua", {{"main.lua", "error('broken\\27[31m\\n[admin] forged line')"}});
+        bus.server.files.Resource("start-js", {{"main.js", "Events.on('resourceStart', (name) => { if (name === 'start-js') throw new Error('broken\\x1b[31m\\n[admin] forged line'); });"}});
+        bus.server.files.Resource("start-lua", {{"main.lua", "Events.on('resourceStart', function(name) if name == 'start-lua' then error('broken\\27[31m\\n[admin] forged line') end end)"}});
+        bus.server.files.Resource("stop-js", {{"main.js", "Events.on('resourceStop', (name) => { if (name === 'stop-js') throw new Error('broken\\x1b[31m\\n[admin] forged line'); });"}});
+        bus.server.files.Resource("stop-lua", {{"main.lua", "Events.on('resourceStop', function(name) if name == 'stop-lua' then error('broken\\27[31m\\n[admin] forged line') end end)"}});
+        EQUALS(bus.Init(), true);
+        EQUALS((bool)bus.Manager().StartAll(), false);
+        EQUALS((bool)bus.Manager().StopResource("stop-js"), true);
+        EQUALS((bool)bus.Manager().StopResource("stop-lua"), true);
+
+        const std::vector<std::string> lines = log.Lines();
+        for (const char *resource : {"load-js", "load-lua", "start-js", "start-lua"}) {
+            const std::string entry = Find(lines, std::string("[") + resource + "] Failed to start resource: ");
+            EQUALS((Contains(entry, std::string("\n[") + resource + "] [admin] forged line") ? std::string() : std::string(resource)), "");
+            EQUALS((LuaInteropTest::IsClean(entry, resource) ? std::string() : std::string(resource)), "");
+        }
+        for (const char *resource : {"stop-js", "stop-lua"}) {
+            const std::string entry = Find(lines, std::string("[") + resource + "] resourceStop rejected; forcing cleanup: ");
+            EQUALS((Contains(entry, std::string("] [admin] forged line")) ? std::string() : std::string(resource)), "");
+            EQUALS((LuaInteropTest::IsClean(entry, resource) ? std::string() : std::string(resource)), "");
+        }
+        // Nothing a script wrote reached the log as it wrote it, through any of the ways there.
+        size_t unclean = 0;
+        for (const std::string &line : lines) {
+            unclean += LuaInteropTest::HasControlCharacter(line) || Contains(line, "\n[admin]") ? 1 : 0;
+        }
+        EQUALS(unclean, 0u);
+    });
+
+    IT("cuts an error that is too long for one entry of the log", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("long", {{"main.js", "setTimeout(() => { throw new Error('x'.repeat(100000)); }, 0);"}}, R"(,"errorBehavior":"continue")");
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("long"), "");
+        EQUALS(bus.Until([&] {
+            return bus.Manager().GetResource("long")->HasError();
+        }),
+            true);
+
+        const std::string entry = Find(log.Lines(), "Runtime error");
+        EQUALS(entry.size() > kMaxScriptErrorBytes, true);
+        EQUALS(entry.size() < kMaxScriptErrorBytes + 64, true);
+        EQUALS(entry.ends_with(" ...(truncated)"), true);
+    });
+
+    IT("sets the further lines of an error no resource owns in from the margin", {
+        LogCapture log;
+        LogScriptError(nullptr, "", "unowned\x1b[31m\n[admin] forged line");
+        LogScriptError(nullptr, "named\nforged", "of a name with a line end");
+
+        const std::vector<std::string> lines = log.Lines();
+        EQUALS(Count(lines, "unowned [31m\n    [admin] forged line"), 1u);
+        EQUALS(Count(lines, "[named forged] of a name with a line end"), 1u);
+        EQUALS(SanitisedScriptText("one\r\ntwo\x7f\tthree", "> "), "one \n> two \tthree");
+        EQUALS(BlankedLine("event\nname\xc2\x9b"), "event name  ");
+    });
+
+    IT("says how many errors were left out once a resource is heard again", {
+        LogCapture log;
+        Bus bus;
+        bus.server.files.Resource("noisy", {{"main.lua", "function burst(n) for i = 1, n do setTimeout(function() error('failure ' .. i) end, 0) end end burst(300)"}}, R"(,"errorBehavior":"continue")");
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("noisy"), "");
+        bus.server.module.Update();
+        bus.server.module.Update();
+        EQUALS(Count(log.Lines(), "[noisy] Runtime error"), 200u);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1050));
+        EQUALS(bus.Lua("noisy", "burst(1)"), "nil");
+        bus.server.module.Update();
+        bus.server.module.Update();
+
+        const std::vector<std::string> lines = log.Lines();
+        EQUALS(Count(lines, "[noisy] errors suppressed: more than 200 in a second"), 1u);
+        EQUALS(Count(lines, "[noisy] 100 error(s) were suppressed"), 1u);
+        EQUALS(Count(lines, "[noisy] Runtime error"), 201u);
+    });
+
+    IT("gives a resource that starts again its whole share of the log, and each manager its own", {
+        LogCapture log;
+        const char *noisy = "for i = 1, 300 do setTimeout(function() error('failure ' .. i) end, 0) end";
+        Bus bus;
+        bus.server.files.Resource("noisy", {{"main.lua", noisy}}, R"(,"errorBehavior":"continue")");
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("noisy"), "");
+        bus.server.module.Update();
+        bus.server.module.Update();
+        EQUALS(Count(log.Lines(), "[noisy] Runtime error"), 200u);
+
+        // Within the same second: the new run is not held to what the last one wrote.
+        EQUALS((bool)bus.Manager().RestartResource("noisy"), true);
+        bus.server.module.Update();
+        bus.server.module.Update();
+        EQUALS(Count(log.Lines(), "[noisy] Runtime error"), 400u);
+
+        // Nor is a resource of the same name under another manager held to either.
+        ResourceManager other(nullptr, {});
+        other.ReportHandlerFailure("noisy", "from another manager");
+        other.ProcessHandlerFailures();
+        EQUALS(Count(log.Lines(), "[noisy] from another manager (the resource is not running)"), 1u);
     });
 
     // ==================== The example ====================
@@ -577,6 +864,7 @@ MODULE(lua_interop, {
         LogCapture log;
         ServerScriptingModule module;
         module.SetResourcesPath(std::string(FW_TEST_FIXTURES_DIR) + "/resources");
+        // A failed check ends the test: nothing below asks a module that did not come up for its manager.
         EQUALS(module.Init() == ScriptingError::SCRIPTING_NONE, true);
         EQUALS(module.StartAllResources(), true);
         EQUALS(module.GetResourceManager()->IsResourceRunning("lua-example"), true);
