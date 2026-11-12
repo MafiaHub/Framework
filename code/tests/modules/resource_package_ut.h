@@ -406,6 +406,115 @@ MODULE(resource_package, {
         std::filesystem::remove_all(root);
     });
 
+    IT("ships the Lua scripts of each client list and never a server one", {
+        const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_lua_roles";
+        std::filesystem::remove_all(root);
+        writeFile(root / "package.json", "{\"name\":\"lua_roles\"}");
+        writeFile(root / "client.lua", "client = true");
+        writeFile(root / "shared.lua", "shared = true");
+        writeFile(root / "server.lua", "SECRET = 'server'");
+        writeFile(root / "lib" / "util.lua", "return {}");
+        writeFile(root / "lib" / "deep" / "init.lua", "return {}");
+        // Next to the client script, and in none of the lists.
+        writeFile(root / "private.lua", "SECRET = 'private'");
+
+        nlohmann::json manifestJson = {
+            {"name", "lua_roles"},
+            {"version", "1.0.0"},
+            {"mafiahub",
+                {{"clientScripts", nlohmann::json::array({"client.lua"})},
+                    {"serverScripts", nlohmann::json::array({"server.lua"})},
+                    {"sharedScripts", nlohmann::json::array({"shared.lua"})},
+                    {"files", nlohmann::json::array({"lib/**"})}}},
+        };
+        Framework::Scripting::PackageManifest manifest;
+        EQUALS(manifest.ParseJson(manifestJson), true);
+
+        Framework::Scripting::PackagedResource packaged;
+        std::string error, zip;
+        EQUALS(Framework::Scripting::ResourcePackager::Package("lua_roles", root.string(), manifest, nullptr, packaged, error), true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
+        // The manifest, the two scripts and the two modules.
+        EQUALS(packaged.fileCount, 5u);
+
+        EQUALS(Framework::Utils::Package::Open(packaged.blob, nullptr, zip, error), true);
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_lua_roles.zip", "/resources/ut_lua_roles", error), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_roles/client.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_roles/shared.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_roles/lib/util.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_roles/lib/deep/init.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_roles/server.lua"), false);
+        EQUALS(vfs.Contains("/resources/ut_lua_roles/private.lua"), false);
+
+        std::string shipped;
+        EQUALS(vfs.Read("/resources/ut_lua_roles/client.lua", shipped), true);
+        STREQUALS(shipped.c_str(), "client = true");
+
+        vfs.Unmount("ut_lua_roles.zip");
+        std::filesystem::remove_all(root);
+    });
+
+    IT("ships the Lua modules next to a client script when no files are declared, but for the server scripts", {
+        const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_lua_scan";
+        std::filesystem::remove_all(root);
+        writeFile(root / "package.json", "{\"name\":\"lua_scan\"}");
+        writeFile(root / "src" / "client.lua", "require('src.util')");
+        writeFile(root / "src" / "util.lua", "return {}");
+        writeFile(root / "src" / "nested" / "init.lua", "return {}");
+        writeFile(root / "src" / "server.lua", "SECRET = 'server'");
+        // In a directory no client script is in.
+        writeFile(root / "backend" / "store.lua", "SECRET = 'backend'");
+
+        nlohmann::json manifestJson = {
+            {"name", "lua_scan"},
+            {"version", "1.0.0"},
+            {"mafiahub", {{"clientScripts", nlohmann::json::array({"src/client.lua"})}, {"serverScripts", nlohmann::json::array({"src/server.lua", "backend/store.lua"})}}},
+        };
+        Framework::Scripting::PackageManifest manifest;
+        EQUALS(manifest.ParseJson(manifestJson), true);
+
+        Framework::Scripting::PackagedResource packaged;
+        std::string error, zip;
+        EQUALS(Framework::Scripting::ResourcePackager::Package("lua_scan", root.string(), manifest, nullptr, packaged, error), true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
+
+        EQUALS(Framework::Utils::Package::Open(packaged.blob, nullptr, zip, error), true);
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.MountMemory(std::move(zip), "ut_lua_scan.zip", "/resources/ut_lua_scan", error), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_scan/src/client.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_scan/src/util.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_scan/src/nested/init.lua"), true);
+        EQUALS(vfs.Contains("/resources/ut_lua_scan/src/server.lua"), false);
+        EQUALS(vfs.Contains("/resources/ut_lua_scan/backend/store.lua"), false);
+
+        vfs.Unmount("ut_lua_scan.zip");
+        std::filesystem::remove_all(root);
+    });
+
+    IT("ships nothing of a resource whose Lua scripts are all the server's", {
+        const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_lua_server";
+        std::filesystem::remove_all(root);
+        writeFile(root / "package.json", "{\"name\":\"lua_server\"}");
+        writeFile(root / "server.lua", "SECRET = 'server'");
+
+        nlohmann::json manifestJson = {
+            {"name", "lua_server"},
+            {"version", "1.0.0"},
+            {"mafiahub", {{"serverScripts", nlohmann::json::array({"server.lua"})}}},
+        };
+        Framework::Scripting::PackageManifest manifest;
+        EQUALS(manifest.ParseJson(manifestJson), true);
+        EQUALS(manifest.GetMafiaHubConfig().HasClientContent(), false);
+
+        Framework::Scripting::PackagedResource packaged;
+        std::string error;
+        EQUALS(Framework::Scripting::ResourcePackager::Package("lua_server", root.string(), manifest, nullptr, packaged, error), false);
+        STREQUALS(error.c_str(), "resource has no client scripts");
+        EQUALS(packaged.blob.empty(), true);
+        std::filesystem::remove_all(root);
+    });
+
     IT("keeps the server bundle out of the package", {
         // dist/server.js sits next to dist/client.js in the usual bundler layout.
         const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_fallback";
