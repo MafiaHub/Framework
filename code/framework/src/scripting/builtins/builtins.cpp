@@ -10,6 +10,7 @@
 
 #include "entity.h"
 #include "events.h"
+#include "messages.h"
 #include "player.h"
 #include "state_bag.h"
 #include "text_label.h"
@@ -51,6 +52,11 @@ namespace Framework::Scripting::Builtins {
 
         // The handlers and the waiting emissions of this isolate, whose handles go with it.
         Events::UnregisterIsolate(isolate);
+
+        // The message handlers, requests and replies of this isolate, when no manager was left to say so: a
+        // resource that failed and was left running is not stopped with the others, and its runtime goes with
+        // the engine.
+        Messages::ForgetIsolate(isolate);
 
         // The address of the isolate may be the next one's, which is not to answer with this one's manager.
         Bind::SetCallResourceManager(isolate, nullptr);
