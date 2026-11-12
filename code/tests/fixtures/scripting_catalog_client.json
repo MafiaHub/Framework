@@ -4,6 +4,532 @@
   "symbols": [
     {
       "bases": [],
+      "description": "A console call made by a page.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserConsoleMessageEvent",
+      "properties": [
+        {
+          "description": "Line number within that script.",
+          "name": "line",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Console message body.",
+          "name": "message",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Console severity.",
+          "name": "severity",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"debug\" | \"info\" | \"warning\" | \"error\" | \"fatal\"",
+            "optional": false
+          }
+        },
+        {
+          "description": "Script URL that logged it.",
+          "name": "source",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view's browser finished being created.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserCreatedEvent",
+      "properties": [
+        {
+          "description": "URL the view was created with.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "The cursor shape a page is asking for.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserCursorChangeEvent",
+      "properties": [
+        {
+          "description": "CSS-style cursor name, or \"custom\" for shapes without one.",
+          "name": "cursor",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Raw CEF cursor type.",
+          "name": "cursorType",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view's main frame finished loading.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserDocumentReadyEvent",
+      "properties": [
+        {
+          "description": "URL that finished loading.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A form control inside a page gained or lost focus.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserInputFocusChangeEvent",
+      "properties": [
+        {
+          "description": "True while the page holds keyboard input.",
+          "name": "focused",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A load inside a web view was aborted.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserLoadingFailedEvent",
+      "properties": [
+        {
+          "description": "CEF error text, such as ERR_CONNECTION_REFUSED.",
+          "name": "description",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "CEF error code.",
+          "name": "errorCode",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "False for sub-frame failures.",
+          "name": "isMainFrame",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL that failed to load.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A frame inside a web view started loading.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserLoadingStartEvent",
+      "properties": [
+        {
+          "description": "False for sub-frame loads.",
+          "name": "isMainFrame",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL being loaded.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view was asked to navigate.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserNavigateEvent",
+      "properties": [
+        {
+          "description": "Whether the request was refused.",
+          "name": "blocked",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "False for sub-frame navigation.",
+          "name": "isMainFrame",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "Requested URL.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view's allowed origin changed.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserOriginChangeEvent",
+      "properties": [
+        {
+          "description": "New locked origin, or \"null\" when the URL has none.",
+          "name": "origin",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL the lock was derived from.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A page tried to open a new window or tab.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserPopupEvent",
+      "properties": [
+        {
+          "description": "URL of the frame that requested it.",
+          "name": "openerUrl",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Target URL of the blocked popup.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view refused a request.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserResourceBlockedEvent",
+      "properties": [
+        {
+          "description": "Host component of that URL, empty when unparsable.",
+          "name": "domain",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Why the request was refused.",
+          "name": "reason",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"cross-origin\" | \"invalid-url\" | \"host-filter\" | \"foreign-event\"",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL that was refused.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A page wants to display a tooltip.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserTooltipEvent",
+      "properties": [
+        {
+          "description": "Tooltip text; empty when the tooltip is dismissed.",
+          "name": "text",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
       "description": "Client chat transport and native chat-box controls.",
       "functions": [
         {
@@ -849,11 +1375,143 @@
     },
     {
       "bases": [],
-      "description": "",
+      "description": "Native events dispatched through `Events.on`. Each property is the exact callback argument tuple for that event.",
       "functions": [],
       "kind": "dataType",
       "name": "EventMap",
       "properties": [
+        {
+          "description": "Dispatched for console output of an owned view; the framework logs these regardless.",
+          "name": "browserConsoleMessage",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserConsoleMessageEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched once per view, before any navigation, to the resource that created it.",
+          "name": "browserCreated",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserCreatedEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view's requested cursor shape changes.",
+          "name": "browserCursorChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserCursorChangeEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view's main document is ready; the earliest point at which the page can receive Web.emit.",
+          "name": "browserDocumentReady",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserDocumentReadyEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when focus enters or leaves an editable element of an owned view; use it to stop routing keys to the game.",
+          "name": "browserInputFocusChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserInputFocusChangeEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when a frame of an owned view fails to load.",
+          "name": "browserLoadingFailed",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserLoadingFailedEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when any frame of an owned view begins loading.",
+          "name": "browserLoadingStart",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserLoadingStartEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched for every navigation an owned view is asked to perform, refused or not.",
+          "name": "browserNavigate",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserNavigateEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched on view creation and whenever Web.loadURL re-locks an owned view to a different origin.",
+          "name": "browserOriginChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserOriginChangeEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view blocks a popup; windowless views cannot host one, so handle the URL yourself.",
+          "name": "browserPopup",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserPopupEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view rejects a navigation or a page event from outside its locked origin.",
+          "name": "browserResourceBlocked",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserResourceBlockedEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view requests a tooltip; windowless rendering draws none, so the script must.",
+          "name": "browserTooltip",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserTooltipEvent]",
+            "optional": false
+          }
+        },
         {
           "description": "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.",
           "name": "chatMessage",
@@ -1824,6 +2482,536 @@
       ],
       "kind": "globalObject",
       "name": "Voice",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Client-only, resource-owned CEF web-view API exposed as the global Web.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Creates an origin-locked web view owned by the calling resource.",
+          "examples": [],
+          "name": "createView",
+          "parameters": [
+            {
+              "description": "Resource-relative URL or allowed absolute URL loaded into the view.",
+              "name": "url",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional initial pixel geometry, stacking, visibility, and focus settings.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "{ width?: number; height?: number; x?: number; y?: number; zIndex?: number; visible?: boolean; focus?: boolean }",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "Numeric view ID used by the remaining Web methods.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Destroys an owned view and removes all of its script event handlers.",
+          "examples": [],
+          "name": "destroyView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when a view was destroyed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Dispatches a CustomEvent into an owned view.",
+          "examples": [],
+          "name": "emit",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "CustomEvent name dispatched in the page.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional JSON-serializable event detail.",
+              "name": "payload",
+              "type": {
+                "cppName": "",
+                "name": "unknown",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the dispatch script was queued.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes input focus for an owned view.",
+          "examples": [],
+          "name": "focusView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Whether the view captures keyboard and mouse input; defaults to true.",
+              "name": "focused",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and focus was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the current client viewport size.",
+          "examples": [],
+          "name": "getScreenSize",
+          "parameters": [],
+          "returns": {
+            "description": "Width and height in physical pixels.",
+            "type": {
+              "cppName": "",
+              "name": "{ width: number; height: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Hides an owned view.",
+          "examples": [],
+          "name": "hideView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether an owned view keeps painting while hidden.",
+          "examples": [],
+          "name": "isViewOffscreen",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "False for missing or unowned views.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether an owned view is currently visible.",
+          "examples": [],
+          "name": "isViewVisible",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "False for missing or unowned views.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Navigates a view and replaces its allowed origin with the new URL's origin.",
+          "examples": [],
+          "name": "loadURL",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New resource-relative or allowed absolute URL.",
+              "name": "url",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when navigation was requested.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes page-event handlers from an owned view.",
+          "examples": [],
+          "name": "off",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Page-to-script event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional exact callback; omitting it removes every matching handler owned by the resource.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "WebEventHandler",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when at least one handler was removed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a handler for an event emitted by an owned same-origin page.",
+          "examples": [],
+          "name": "on",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Page-to-script event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked by the view's callEvent bridge.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "WebEventHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Resizes an owned view's viewport.",
+          "examples": [],
+          "name": "resizeView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New viewport width in pixels.",
+              "name": "width",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New viewport height in pixels.",
+              "name": "height",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was resized.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.",
+          "examples": [],
+          "name": "setViewOffscreen",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Whether the page keeps painting without being drawn on screen; defaults to true.",
+              "name": "offscreen",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Moves an owned view on screen.",
+          "examples": [],
+          "name": "setViewPosition",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New horizontal screen position in pixels.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New vertical screen position in pixels.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was moved.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Makes an owned view visible.",
+          "examples": [],
+          "name": "showView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Web",
       "properties": []
     }
   ],

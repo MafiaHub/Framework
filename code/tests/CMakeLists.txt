@@ -105,22 +105,26 @@ target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_FIXTURE
 # on Windows only and with the whole of FrameworkClient. client_doubles has a stand-in for it, ahead of the
 # framework on the include path, and the functions of the chat box and of the Discord wrapper that the
 # builtins call. The activity type of Discord is plain data and is built from the vendored source.
+# The Web builtin reaches the web views through the GUI manager, which needs CEF and Direct3D: client_doubles
+# has a stand-in for the manager and for a view too (gui/manager.h, gui/view.h), which keep what they are told.
 target_include_directories(FrameworkClientScriptingTests BEFORE PRIVATE client_doubles)
 target_include_directories(FrameworkClientScriptingTests PRIVATE ../../vendors/discord/src)
 target_sources(FrameworkClientScriptingTests PRIVATE
     client_doubles/client_doubles.cpp
     ../framework/src/integrations/client/scripting/builtins/chat.cpp
     ../framework/src/integrations/client/scripting/builtins/discord.cpp
+    ../framework/src/integrations/client/scripting/builtins/web.cpp
     ../../vendors/discord/src/types.cpp)
-# The stand-in is another class under the name of the real one. That is sound only while the real one is not
-# in this binary: checked once everything in this directory has had its say.
+# Each stand-in is another class under the name of the real one. That is sound only while the real ones are
+# not in this binary: checked once everything in this directory has had its say.
 function(_fw_refuse_client_in_scripting_tests)
     get_target_property(_linked FrameworkClientScriptingTests LINK_LIBRARIES)
     foreach(_library FrameworkClient Framework::Client)
         if(_library IN_LIST _linked)
             message(FATAL_ERROR "FrameworkClientScriptingTests links ${_library}, and builds its client builtins against "
-                "the stand-in of code/tests/client_doubles for Integrations::Client::Instance: two definitions of one class. "
-                "Remove client_doubles from the target, and test against the real instance, before linking it.")
+                "the stand-ins of code/tests/client_doubles for Integrations::Client::Instance, GUI::Manager and GUI::View: "
+                "two definitions of one class. Remove client_doubles from the target, and test against the real classes, "
+                "before linking it.")
         endif()
     endforeach()
 endfunction()

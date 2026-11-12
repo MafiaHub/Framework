@@ -17,6 +17,7 @@
 #include "integrations/client/scripting/builtins/nametags.h"
 #endif
 #include "integrations/client/scripting/builtins/voice.h"
+#include "integrations/client/scripting/builtins/web.h"
 #include "scripting/engine_scope.h"
 #include "scripting/resource/resource_manager.h"
 #include "scripting/scripting_catalog.h"
@@ -59,6 +60,7 @@ namespace ClientCatalogGolden {
                 EngineScope scope(&engine);
                 SetScriptingCatalog(scope.Isolate(), "golden-client");
                 SetScriptingEnvironment(scope.Isolate(), /*isClient*/ true);
+                ClientBuiltins::Web::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
                 ClientBuiltins::Keybinds::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
                 ClientBuiltins::Chat::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
                 ClientBuiltins::Discord::Register(scope.Isolate(), scope.Context(), scope.Context()->Global(), &manager);
@@ -68,6 +70,7 @@ namespace ClientCatalogGolden {
 #endif
                 catalog = nlohmann::json::parse(v8pp::metadata::to_json(GetScriptingCatalog(scope.Isolate())), nullptr, /*allow_exceptions*/ false);
             }
+            ClientBuiltins::Web::Shutdown();
             ClientBuiltins::Keybinds::Shutdown();
             ClientBuiltins::Discord::Shutdown();
         }
@@ -120,7 +123,7 @@ MODULE(client_catalog_golden, {
         const nlohmann::json fixture = ClientCatalogGolden::ReadFixture();
         EQUALS(fixture.is_object(), true);
         EQUALS(ScriptingCatalogGolden::Difference(fixture, catalog), "");
-        for (const char *name : {"Key", "Chat", "Discord", "Voice", "EventMap"}) {
+        for (const char *name : {"Web", "Key", "Chat", "Discord", "Voice", "EventMap", "BrowserCreatedEvent", "BrowserOriginChangeEvent"}) {
             EQUALS(ScriptingCatalogGolden::HasSymbol(fixture, name), true);
         }
         EQUALS(ScriptingCatalogGolden::HasSymbol(fixture, "Nametags"), ClientCatalogGolden::HasEveryBuiltin());
