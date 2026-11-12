@@ -28,6 +28,7 @@
 #include "scripting/resource/resource_manager.h"
 
 #include "networking/channels.h"
+#include "networking/replication/client_entities.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/state.h"
 
@@ -566,7 +567,7 @@ namespace Framework::Integrations::Client {
             // them. Done here so a mod only has to supply the listener transform.
             if (auto *replication = _networkingEngine->GetNetworkClient()->GetReplicationManager()) {
                 _voiceClient.BeginSpeakerUpdate();
-                replication->ForEachAvatar([this](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
+                Framework::Networking::Replication::ClientEntities(*replication).ForEachAvatar([this](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
                     _voiceClient.SetSpeakerPosition(static_cast<uint64_t>(guid), avatar->position);
                 });
                 _voiceClient.EndSpeakerUpdate();

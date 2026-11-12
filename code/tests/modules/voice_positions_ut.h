@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "networking/replication/client_entities.h"
 #include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
@@ -62,9 +63,19 @@ MODULE(voice_positions, {
         MafiaNet::PeerGuid guid;
         glm::vec3 position;
     };
-    const auto avatars = [](const ReplicationManager *manager) {
+    // Where each peer finds its players: a server in its viewer map, a client in the avatars the
+    // server flagged.
+    const auto avatars = [](ReplicationManager *manager) {
         std::vector<Reported> out;
-        manager->ForEachAvatar([&out](MafiaNet::PeerGuid guid, NetworkEntity *avatar) {
+        if (manager->IsServer()) {
+            for (const auto &[guid, id] : manager->GetViewerIds()) {
+                if (const auto avatar = manager->GetWorld().Read<NetworkEntity>(id)) {
+                    out.push_back({guid, avatar->position});
+                }
+            }
+            return out;
+        }
+        Framework::Networking::Replication::ClientEntities(*manager).ForEachAvatar([&out](MafiaNet::PeerGuid guid, NetworkEntity *avatar) {
             out.push_back({guid, avatar->position});
         });
         return out;

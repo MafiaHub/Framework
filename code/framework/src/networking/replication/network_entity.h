@@ -338,7 +338,7 @@ namespace Framework::Networking::Replication {
 
         // Owning an entity -- simulating it for DelegationManager, say -- need
         // not mean owning its lifetime. Return false and the server refuses the
-        // owner's destruction; the server's own DestroyEntity is unaffected.
+        // owner's destruction; the server's own World::Destroy is unaffected.
         virtual bool CanOwnerDestroy() const {
             return true;
         }

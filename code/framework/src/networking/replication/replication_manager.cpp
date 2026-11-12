@@ -814,30 +814,6 @@ namespace Framework::Networking::Replication {
         return entity;
     }
 
-    void ReplicationManager::DestroyEntity(NetworkEntity *entity) {
-        if (!entity) {
-            return;
-        }
-        // An entity the world knows goes through it, so that a handle held on it stays valid. One
-        // already on its way out is left to that.
-        std::shared_ptr<Detail::WorldEntitySlot> unheld;
-        switch (_world.MarkDoomed(entity->GetNetworkID(), unheld)) {
-        case World::Doom::Marked:
-            if (unheld) {
-                _world.TeardownUnheld(std::move(unheld));
-            }
-            break;
-        case World::Doom::Pending: break;
-        case World::Doom::Unknown:
-            // A server entity the world does not know yet is inside its creation callback, with its
-            // creator about to adopt it: that one is refused.
-            if (!_isServer) {
-                TeardownEntity(entity);
-            }
-            break;
-        }
-    }
-
     bool ReplicationManager::DestroyByOwner(NetworkEntity *entity, MafiaNet::Connection_RM3 *source) {
         const uint64_t id = entity->GetNetworkID();
         std::shared_ptr<Detail::WorldEntitySlot> unheld;
@@ -857,7 +833,7 @@ namespace Framework::Networking::Replication {
             const WorldGuard world(*this);
             {
                 // Erase by value, not by ownerGUID: the owner key may have been reassigned since
-                // SetViewer, and on a respawn flow (SetViewer(newAvatar) then DestroyEntity(oldAvatar))
+                // SetViewer, and on a respawn flow (SetViewer(newAvatar) then destroying the old one)
                 // an erase by key would take out the replacement's mapping and silence that
                 // connection's streaming.
                 const std::lock_guard guard(_mutex);
@@ -907,19 +883,6 @@ namespace Framework::Networking::Replication {
                 fn(entity);
             }
         }
-    }
-
-    void ReplicationManager::SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity) {
-        if (!entity) {
-            ClearViewer(guid);
-            return;
-        }
-        if (NetworkEntity *previous = GetViewer(guid); previous && previous != entity) {
-            previous->streaming.isViewer = false;
-        }
-        entity->streaming.isViewer = true;
-        const std::lock_guard guard(_mutex);
-        _viewers[guid] = entity->GetNetworkID();
     }
 
     void ReplicationManager::SetViewer(MafiaNet::PeerGuid guid, uint64_t networkId) {
@@ -986,30 +949,6 @@ namespace Framework::Networking::Replication {
     NetworkEntity *ReplicationManager::GetViewer(MafiaNet::PeerGuid guid) const {
         const uint64_t id = GetViewerId(guid);
         return id != 0 ? GetEntityByNetworkID(id) : nullptr;
-    }
-
-    void ReplicationManager::ForEachViewer(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const {
-        for (const auto &[guid, id] : GetViewerIds()) {
-            if (NetworkEntity *viewer = GetEntityByNetworkID(id)) {
-                fn(guid, viewer);
-            }
-        }
-    }
-
-    void ReplicationManager::ForEachAvatar(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const {
-        // Owning an entity does not make it the player: a delegated NPC, a ridden horse or a dropped
-        // item all carry the player's guid, and taking the last of them as the avatar is what moved
-        // voice away from the speaker. The server has the viewer map; a client has the flag the
-        // server replicates off it.
-        if (_isServer) {
-            ForEachViewer(fn);
-            return;
-        }
-        ForEachEntity([&fn](NetworkEntity *entity) {
-            if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-                fn(entity->ownerGUID, entity);
-            }
-        });
     }
 
     void ReplicationManager::ClearViewer(MafiaNet::PeerGuid guid) {
@@ -1134,7 +1073,7 @@ namespace Framework::Networking::Replication {
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
         // The player's avatar is server-created, so the base PopConnection (which only tears down
         // replicas a dropped peer itself created) leaves it behind. Notify the game while the avatar
-        // is still resolvable, then destroy it — DestroyEntity broadcasts the destruction to the
+        // is still resolvable, then destroy it, which broadcasts the destruction to the
         // remaining clients and clears the viewer mapping. Clients keep the base behaviour: their
         // replicas all originate from the server, so PopConnection cleans them up on its own.
         if (_isServer) {

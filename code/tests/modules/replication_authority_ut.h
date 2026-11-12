@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_connection.h"
@@ -101,13 +102,13 @@ MODULE(replication_authority, {
         manager->SetInterestRebuildInterval(1000000);
         const MafiaNet::RakNetGUID player(3000), other(3001);
         const auto type   = EntityRegistry::Get().Register<NetworkEntity>("Test::OwnerDestruction");
-        auto *avatar      = manager->CreateEntity(type);
-        auto *prop        = manager->CreateEntity(type);
-        auto *watcher     = manager->CreateEntity(type);
+        auto *avatar      = TestWorld::Make(manager, type);
+        auto *prop        = TestWorld::Make(manager, type);
+        auto *watcher     = TestWorld::Make(manager, type);
         avatar->ownerGUID = MafiaNet::ToPeerGuid(player);
         prop->ownerGUID   = MafiaNet::ToPeerGuid(player);
-        manager->SetViewer(MafiaNet::ToPeerGuid(player), avatar);
-        manager->SetViewer(MafiaNet::ToPeerGuid(other), watcher);
+        manager->SetViewer(MafiaNet::ToPeerGuid(player), avatar->GetNetworkID());
+        manager->SetViewer(MafiaNet::ToPeerGuid(other), watcher->GetNetworkID());
         manager->SetOnEntityDestroyed([&destroyed](uint64_t networkId) {
             destroyed.push_back(networkId);
         });
@@ -152,21 +153,21 @@ MODULE(replication_authority, {
         EQUALS(offered(playerConnection, propReplica), true);
 
         destroyFrom(other, propId);
-        EQUALS(manager->GetEntityByNetworkID(propId) == prop, true);
+        EQUALS(TestWorld::Find(manager, propId) == prop, true);
         EQUALS(destroyed.size(), 0u);
 
         destroyFrom(player, propId);
-        EQUALS(manager->GetEntityByNetworkID(propId) == nullptr, true);
+        EQUALS(TestWorld::Find(manager, propId) == nullptr, true);
         EQUALS(destroyed.size(), 1u);
         EQUALS(destroyed[0], propId);
         EQUALS(offered(otherConnection, propReplica), false);
         EQUALS(offered(playerConnection, propReplica), false);
 
         destroyFrom(player, avatarId);
-        EQUALS(manager->GetEntityByNetworkID(avatarId) == nullptr, true);
+        EQUALS(TestWorld::Find(manager, avatarId) == nullptr, true);
         EQUALS(destroyed.size(), 2u);
-        EQUALS(manager->GetViewer(MafiaNet::ToPeerGuid(player)) == nullptr, true);
-        manager->DestroyEntity(watcher);
+        EQUALS(TestWorld::Find(manager, manager->GetViewerId(MafiaNet::ToPeerGuid(player))) == nullptr, true);
+        TestWorld::Destroy(manager, watcher);
     });
 
     IT("refuses a client's attempt to destroy an entity it does not own", {

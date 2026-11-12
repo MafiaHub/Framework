@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "alloc_counter.h"
 
 #include "networking/network_server.h"
@@ -52,14 +53,14 @@ namespace InterestScaleTests {
 
         ~ScaleWorld() {
             for (NetworkEntity *entity : entities) {
-                manager->DestroyEntity(entity);
+                TestWorld::Destroy(manager, entity);
             }
             manager->Clear();
             MafiaNet::SetTimeSourceOverride(nullptr);
         }
 
         NetworkEntity *Spawn(float x, float z) {
-            NetworkEntity *entity     = manager->CreateEntity(type);
+            NetworkEntity *entity     = TestWorld::Make(manager, type);
             entity->position          = glm::vec3(x, 0.0f, z);
             entity->streaming.range   = 100.0f;
             entities.push_back(entity);
@@ -68,14 +69,14 @@ namespace InterestScaleTests {
 
         void Despawn(NetworkEntity *entity) {
             std::erase(entities, entity);
-            manager->DestroyEntity(entity);
+            TestWorld::Destroy(manager, entity);
         }
 
         // A player: an avatar plus the connection that views through it.
         ReplicationConnection *Join(uint64_t guid, float x, float z) {
             NetworkEntity *avatar = Spawn(x, z);
             const MafiaNet::RakNetGUID rakGuid(guid);
-            manager->SetViewer(MafiaNet::ToPeerGuid(rakGuid), avatar);
+            manager->SetViewer(MafiaNet::ToPeerGuid(rakGuid), avatar->GetNetworkID());
             auto *connection = static_cast<ReplicationConnection *>(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, rakGuid));
             // Validation needs the remote's reply; there is no remote here.
             connection->isValidated = true;

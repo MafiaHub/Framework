@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "scripting/node_engine.h"
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
@@ -1100,11 +1101,11 @@ MODULE(js_features, {
         auto *manager = world.Manager();
         Framework::Networking::Replication::NetworkEntity *players[2];
         for (int i = 0; i < 2; ++i) {
-            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]            = TestWorld::Make(manager, world.targetType);
             players[i]->ownerGUID = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(71 + i));
-            manager->SetViewer(players[i]->ownerGUID, players[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]->GetNetworkID());
         }
-        auto *npc           = manager->CreateEntity(world.targetType);
+        auto *npc           = TestWorld::Make(manager, world.targetType);
         const std::string a = std::to_string(players[0]->GetNetworkID());
         const std::string b = std::to_string(players[1]->GetNetworkID());
         const std::string n = std::to_string(npc->GetNetworkID());
@@ -1149,9 +1150,9 @@ MODULE(js_features, {
         // A player with no avatar stays hidden through a getOptions() round trip, old or new, and is
         // only left out of what getAudience() can show.
         RunJSString(engine, ("globalThis.kept = TextLabel.create(0, 0, 0, 'k', { hideFrom: [" + a + "] }); globalThis.snapshot = kept.getOptions(); 'x'").c_str());
-        const auto *kept = manager->GetEntityByNetworkID(std::stoull(RunJSString(engine, "String(kept.id)")));
+        const auto *kept = TestWorld::Find(manager, std::stoull(RunJSString(engine, "String(kept.id)")));
         const auto guidA = players[0]->ownerGUID;
-        manager->DestroyEntity(players[0]);
+        TestWorld::Destroy(manager, players[0]);
         STREQUALS(RunJSString(engine, "kept.update(snapshot); kept.update(kept.getOptions()); JSON.stringify(kept.getAudience().hideFrom)").c_str(), "[]");
         EQUALS(kept->streaming.Admits(guidA), false);
 

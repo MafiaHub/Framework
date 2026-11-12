@@ -14,7 +14,6 @@
 #include "networking/replication/world.h"
 
 #include <cstdint>
-#include <vector>
 
 // Server entities for tests, made and reached through the world as a game's are. A test drives the
 // manager step by step on one thread and looks at an entity between two steps, so it keeps the
@@ -53,14 +52,6 @@ namespace TestWorld {
 
     inline void Destroy(ReplicationManager *manager, NetworkEntity *entity) {
         manager->GetWorld().Destroy(entity->GetNetworkID());
-    }
-
-    inline std::vector<NetworkEntity *> All(ReplicationManager *manager) {
-        std::vector<NetworkEntity *> all;
-        manager->GetWorld().ForEach<NetworkEntity>([&all](Framework::Networking::Replication::Ref<NetworkEntity> &entity) {
-            all.push_back(&*entity);
-        });
-        return all;
     }
 
     // An entity that lives as long as this object, as one on the stack did.

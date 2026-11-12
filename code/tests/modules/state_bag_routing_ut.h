@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "networking/replication/client_entities.h"
+#include "../replication_test_world.h"
 #include "alloc_counter.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_manager.h"
@@ -54,7 +56,7 @@ MODULE(state_bag_routing, {
         ~Rig() {
             // Destruction is broadcast, so it goes before the peers shut down and free the connections.
             if (npc != nullptr) {
-                manager->DestroyEntity(npc);
+                TestWorld::Destroy(manager, npc);
             }
             for (auto &client : clients) {
                 client->GetPeer()->Shutdown(0);
@@ -74,15 +76,15 @@ MODULE(state_bag_routing, {
             server.GetPeer()->SetMaximumIncomingConnections(static_cast<unsigned short>(clientCount));
 
             type     = EntityRegistry::Get().Register<NetworkEntity>(typeName);
-            npc      = manager->CreateEntity(type);
+            npc      = TestWorld::Make(manager, type);
             npc->position = glm::vec3(10.0f, 0.0f, 10.0f);
 
             std::vector<std::pair<MafiaNet::PeerGuid, NetworkEntity *>> avatarByGuid;
             server.SetOnPlayerConnectCallback([&](MafiaNet::Packet *packet) {
                 server.PushReplicationConnection(packet->guid);
-                NetworkEntity *avatar = manager->CreateEntity(type);
+                NetworkEntity *avatar = TestWorld::Make(manager, type);
                 avatar->ownerGUID     = MafiaNet::ToPeerGuid(packet->guid);
-                manager->SetViewer(avatar->ownerGUID, avatar);
+                manager->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
                 avatarByGuid.emplace_back(avatar->ownerGUID, avatar);
             });
 
@@ -161,7 +163,7 @@ MODULE(state_bag_routing, {
         }
 
         NetworkEntity *Copy(int client, NetworkEntity *entity) {
-            return clients[static_cast<size_t>(client)]->GetReplicationManager()->GetEntityByNetworkID(entity->GetNetworkID());
+            return Framework::Networking::Replication::ClientEntities(*clients[static_cast<size_t>(client)]->GetReplicationManager()).GetEntityByNetworkID(entity->GetNetworkID());
         }
 
         const StateValue *Seen(int client, NetworkEntity *entity, const std::string &key) {

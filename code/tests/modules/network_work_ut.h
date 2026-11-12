@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_connection.h"
 #include "networking/replication/replication_manager.h"
@@ -61,19 +62,19 @@ namespace NetworkWorkTest {
         }
         ~Server() {
             for (NetworkEntity *entity : entities) {
-                manager->DestroyEntity(entity);
+                TestWorld::Destroy(manager, entity);
             }
             manager->Clear();
         }
         MafiaNet::Connection_RM3 *Connect(uint64_t id, float x, float range) {
             static const uint32_t type = EntityRegistry::Get().Register<NetworkEntity>("Test::SerializeViewer");
             const MafiaNet::RakNetGUID guid(id);
-            NetworkEntity *viewer   = manager->CreateEntity(type);
+            NetworkEntity *viewer   = TestWorld::Make(manager, type);
             viewer->position.x      = x;
             viewer->streaming.range = range;
             viewer->ownerGUID       = MafiaNet::ToPeerGuid(guid);
             entities.push_back(viewer);
-            manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer);
+            manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer->GetNetworkID());
             manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
             MafiaNet::Connection_RM3 *connection = manager->GetConnectionByGUID(guid);
             connection->isValidated              = true;
@@ -81,14 +82,14 @@ namespace NetworkWorkTest {
         }
         SerializeProbe *Probe(float x) {
             static const uint32_t type = EntityRegistry::Get().Register<SerializeProbe>("Test::SerializeProbe");
-            auto *probe                = static_cast<SerializeProbe *>(manager->CreateEntity(type));
+            auto *probe                = static_cast<SerializeProbe *>(TestWorld::Make(manager, type));
             probe->position.x          = x;
             entities.push_back(probe);
             return probe;
         }
         void Destroy(NetworkEntity *entity) {
             entities.erase(std::find(entities.begin(), entities.end(), entity));
-            manager->DestroyEntity(entity);
+            TestWorld::Destroy(manager, entity);
         }
         void Pass(int passes = 1) {
             for (int i = 0; i < passes; ++i) {
@@ -125,22 +126,22 @@ MODULE(network_work, {
             manager->SetAutoSerializeInterval(tickMs);
             const auto type = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestTurns");
             for (int i = 0; i < players; ++i) {
-                NetworkEntity *avatar = manager->CreateEntity(type);
-                NetworkEntity *mover  = manager->CreateEntity(type);
+                NetworkEntity *avatar = TestWorld::Make(manager, type);
+                NetworkEntity *mover  = TestWorld::Make(manager, type);
                 avatar->position.x    = i * 1000.0f;
                 mover->position       = glm::vec3(i * 1000.0f, 0.0f, 500.0f);
                 entities.push_back(avatar);
                 entities.push_back(mover);
                 movers.push_back(mover);
                 const MafiaNet::RakNetGUID guid(1000 + i);
-                manager->SetViewer(MafiaNet::ToPeerGuid(guid), avatar);
+                manager->SetViewer(MafiaNet::ToPeerGuid(guid), avatar->GetNetworkID());
                 manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
                 connections.push_back(static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guid)));
             }
         }
         ~Turns() {
             for (auto *entity : entities) {
-                manager->DestroyEntity(entity);
+                TestWorld::Destroy(manager, entity);
             }
             manager->Clear();
         }
@@ -191,7 +192,7 @@ MODULE(network_work, {
         for (auto *mover : turns.movers) {
             mover->position.z = 10.0f;
         }
-        auto *spawned = turns.manager->CreateEntity(turns.entities.front()->GetTypeId());
+        auto *spawned = TestWorld::Make(turns.manager, turns.entities.front()->GetTypeId());
         spawned->position.x = 1000.0f + 20.0f;
         turns.entities.push_back(spawned);
         turns.Tick();
@@ -216,16 +217,16 @@ MODULE(network_work, {
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto type            = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestRefresh");
-        auto *viewer               = manager->CreateEntity(type);
-        auto *bystander            = manager->CreateEntity(type);
-        auto *nearby               = manager->CreateEntity(type);
-        auto *distant              = manager->CreateEntity(type);
+        auto *viewer               = TestWorld::Make(manager, type);
+        auto *bystander            = TestWorld::Make(manager, type);
+        auto *nearby               = TestWorld::Make(manager, type);
+        auto *distant              = TestWorld::Make(manager, type);
         viewer->streaming.range    = 100;
         bystander->streaming.range = 100;
         distant->position.x        = 1000;
         const MafiaNet::RakNetGUID viewerGuid(77), bystanderGuid(78);
-        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
-        manager->SetViewer(MafiaNet::ToPeerGuid(bystanderGuid), bystander);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
+        manager->SetViewer(MafiaNet::ToPeerGuid(bystanderGuid), bystander->GetNetworkID());
         manager->RebuildInterest();
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, bystanderGuid));
@@ -259,7 +260,7 @@ MODULE(network_work, {
         EQUALS(sees(bystanderConnection, nearby), true);
 
         // A destruction reaches every viewer before its phase.
-        manager->DestroyEntity(nearby);
+        TestWorld::Destroy(manager, nearby);
         EQUALS(sees(bystanderConnection, nearby), false);
 
         // Owned entities bypass world culling, so hand it back before testing a dimension change.
@@ -270,9 +271,9 @@ MODULE(network_work, {
         viewer->SetVirtualWorld(5);
         EQUALS(sees(viewerConnection, distant), false);
         EQUALS(viewerConnection->GetVirtualWorld(), 5);
-        manager->DestroyEntity(distant);
-        manager->DestroyEntity(bystander);
-        manager->DestroyEntity(viewer);
+        TestWorld::Destroy(manager, distant);
+        TestWorld::Destroy(manager, bystander);
+        TestWorld::Destroy(manager, viewer);
     });
 
     IT("adds a creation and drops a destruction without refreshing anyone", {
@@ -293,14 +294,14 @@ MODULE(network_work, {
         const auto budgeted  = EntityRegistry::Get().Register<NetworkEntity>("Test::InterestChurnBudgeted");
         const auto riderType = EntityRegistry::Get().Register<ChurnRider>("Test::InterestChurnRider");
         manager->SetInterestBudget(budgeted, 4);
-        auto *viewer            = manager->CreateEntity(type);
-        auto *mover             = manager->CreateEntity(type);
-        auto *rider             = static_cast<ChurnRider *>(manager->CreateEntity(riderType));
+        auto *viewer            = TestWorld::Make(manager, type);
+        auto *mover             = TestWorld::Make(manager, type);
+        auto *rider             = static_cast<ChurnRider *>(TestWorld::Make(manager, riderType));
         viewer->streaming.range = 100;
         mover->position.x       = 50;
         rider->position.x       = 30;
         const MafiaNet::RakNetGUID viewerGuid(91);
-        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
         auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
@@ -316,8 +317,8 @@ MODULE(network_work, {
         mover->position.x = 2000;
         manager->RebuildInterest();
 
-        auto *spawned       = manager->CreateEntity(type);
-        auto *farAway       = manager->CreateEntity(type);
+        auto *spawned       = TestWorld::Make(manager, type);
+        auto *farAway       = TestWorld::Make(manager, type);
         spawned->position.x = 20;
         farAway->position.x = 3000;
         manager->RebuildInterest();
@@ -326,7 +327,7 @@ MODULE(network_work, {
         EQUALS(sees(mover), true);
 
         // Something already shown that comes to ride a creation brings it, however far it is.
-        auto *mount       = manager->CreateEntity(type);
+        auto *mount       = TestWorld::Make(manager, type);
         mount->position.x = 3000;
         rider->mount      = mount->GetNetworkID();
         manager->RebuildInterest();
@@ -334,28 +335,28 @@ MODULE(network_work, {
         EQUALS(sees(mover), true);
 
         // Gone before the rebuild that would have handed it out.
-        manager->DestroyEntity(manager->CreateEntity(type));
+        TestWorld::Destroy(manager, TestWorld::Make(manager, type));
         manager->RebuildInterest();
         EQUALS(sees(mover), true);
 
-        manager->DestroyEntity(spawned);
+        TestWorld::Destroy(manager, spawned);
         EQUALS(sees(spawned), false);
         EQUALS(sees(mover), true);
 
         // A budgeted creation in reach has to be ranked: that viewer recomputes, and the quiet move shows.
-        auto *npc       = manager->CreateEntity(budgeted);
+        auto *npc       = TestWorld::Make(manager, budgeted);
         npc->position.x = 10;
         manager->RebuildInterest();
         EQUALS(sees(npc), true);
         EQUALS(sees(mover), false);
 
         rider->mount = 0;
-        manager->DestroyEntity(npc);
-        manager->DestroyEntity(mount);
-        manager->DestroyEntity(rider);
-        manager->DestroyEntity(farAway);
-        manager->DestroyEntity(mover);
-        manager->DestroyEntity(viewer);
+        TestWorld::Destroy(manager, npc);
+        TestWorld::Destroy(manager, mount);
+        TestWorld::Destroy(manager, rider);
+        TestWorld::Destroy(manager, farAway);
+        TestWorld::Destroy(manager, mover);
+        TestWorld::Destroy(manager, viewer);
     });
 
     IT("re-runs the replica diff after a change it did not make", {
@@ -374,11 +375,11 @@ MODULE(network_work, {
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::QueryDiff");
-        auto *viewer            = manager->CreateEntity(type);
-        auto *nearby            = manager->CreateEntity(type);
+        auto *viewer            = TestWorld::Make(manager, type);
+        auto *nearby            = TestWorld::Make(manager, type);
         viewer->streaming.range = 100;
         const MafiaNet::RakNetGUID viewerGuid(93);
-        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
         auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
@@ -405,8 +406,8 @@ MODULE(network_work, {
         pass();
         EQUALS(connection->HasReplicaConstructed(nearby), false);
 
-        manager->DestroyEntity(nearby);
-        manager->DestroyEntity(viewer);
+        TestWorld::Destroy(manager, nearby);
+        TestWorld::Destroy(manager, viewer);
     });
 
     IT("swaps one replica for another in a single refresh", {
@@ -422,13 +423,13 @@ MODULE(network_work, {
         } cleanup {manager};
         manager->ConfigureGrid(100, -4096, 4096);
         const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::QueryDiffSwap");
-        auto *viewer            = manager->CreateEntity(type);
-        auto *leaving           = manager->CreateEntity(type);
-        auto *arriving          = manager->CreateEntity(type);
+        auto *viewer            = TestWorld::Make(manager, type);
+        auto *leaving           = TestWorld::Make(manager, type);
+        auto *arriving          = TestWorld::Make(manager, type);
         viewer->streaming.range = 100;
         arriving->position.x    = 1000;
         const MafiaNet::RakNetGUID viewerGuid(95);
-        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
         auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
@@ -445,9 +446,9 @@ MODULE(network_work, {
         EQUALS(connection->HasReplicaConstructed(leaving), false);
         EQUALS(connection->HasReplicaConstructed(arriving), true);
 
-        manager->DestroyEntity(arriving);
-        manager->DestroyEntity(leaving);
-        manager->DestroyEntity(viewer);
+        TestWorld::Destroy(manager, arriving);
+        TestWorld::Destroy(manager, leaving);
+        TestWorld::Destroy(manager, viewer);
     });
 
     IT("refuses replica constructions from a client", {
@@ -463,12 +464,12 @@ MODULE(network_work, {
         } cleanup {manager};
         manager->ConfigureGrid(100, -4096, 4096);
         const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::ClientConstruction");
-        auto *viewer            = manager->CreateEntity(type);
-        auto *distant           = manager->CreateEntity(type);
+        auto *viewer            = TestWorld::Make(manager, type);
+        auto *distant           = TestWorld::Make(manager, type);
         viewer->streaming.range = 100;
         distant->position.x     = 1000;
         const MafiaNet::RakNetGUID viewerGuid(94);
-        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->RebuildInterest();
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
         auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
@@ -500,8 +501,8 @@ MODULE(network_work, {
         manager->OnReceive(&packet);
         EQUALS(connection->HasReplicaConstructed(distant), false);
 
-        manager->DestroyEntity(distant);
-        manager->DestroyEntity(viewer);
+        TestWorld::Destroy(manager, distant);
+        TestWorld::Destroy(manager, viewer);
     });
 
     IT("lets a viewer join after earlier passes consumed re-evaluations", {
@@ -517,25 +518,25 @@ MODULE(network_work, {
         } cleanup {manager};
         manager->ConfigureGrid(100, -4096, 4096);
         const auto type         = EntityRegistry::Get().Register<NetworkEntity>("Test::LateJoin");
-        auto *viewer            = manager->CreateEntity(type);
+        auto *viewer            = TestWorld::Make(manager, type);
         viewer->streaming.range = 100;
         manager->RebuildInterest();
         manager->Update();
         // Queued and consumed before the viewer's connection exists.
-        auto *nearby = manager->CreateEntity(type);
+        auto *nearby = TestWorld::Make(manager, type);
         manager->RebuildInterest();
         manager->Update();
         EQUALS(manager->ReevaluationBase() > 0, true);
 
         const MafiaNet::RakNetGUID viewerGuid(97);
-        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer);
+        manager->SetViewer(MafiaNet::ToPeerGuid(viewerGuid), viewer->GetNetworkID());
         manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, viewerGuid));
         auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(viewerGuid));
         connection->AutoConstructByQuery(manager, 0);
         EQUALS(connection->HasReplicaConstructed(nearby), true);
 
-        manager->DestroyEntity(nearby);
-        manager->DestroyEntity(viewer);
+        TestWorld::Destroy(manager, nearby);
+        TestWorld::Destroy(manager, viewer);
     });
 
     IT("sends a changed field to every viewer and nothing per viewer for an unchanged entity", {

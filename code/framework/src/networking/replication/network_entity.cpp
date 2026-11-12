@@ -195,7 +195,7 @@ namespace Framework::Networking::Replication {
                     return false;
                 }
             }
-            // Destroyed here, not by the base: its delete skips DestroyEntity's bookkeeping and leaves
+            // Destroyed here, not by the base: its delete skips the teardown's bookkeeping and leaves
             // the viewer map and interest sets on freed memory. The base re-resolves the id after
             // this returns and finds it gone; unless a handle still holds the entity, which then goes
             // when that is released, and the base, which would find it and delete it, is told to

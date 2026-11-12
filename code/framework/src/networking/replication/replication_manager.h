@@ -188,44 +188,12 @@ namespace Framework::Networking::Replication {
             return _myGUID;
         }
 
-        // --- Entity lifecycle ---
-        // Server: construct and start replicating an entity of the given type, nullptr if unknown.
-        // Non-owning: the manager owns it; destroy via DestroyEntity.
-        NetworkEntity *CreateEntity(uint32_t typeId) {
-            return CreateEntity(typeId, nullptr);
-        }
-        // Broadcast destruction and delete the entity; once the last handle on it is released, if
-        // the world has given any out (see World::Destroy). From then until it is deleted the entity
-        // is not returned by the lookups below nor as a viewer, and destroying it again does nothing.
-        void DestroyEntity(NetworkEntity *entity);
-        // Server: entities and registered state behind handles that lock them. See world.h.
+        // --- Entities ---
+        // Server: entities and registered state behind handles that lock them (world.h): how they
+        // are created, reached, visited and destroyed. A client reaches its own by pointer, through
+        // ClientEntities (client_entities.h).
         World &GetWorld() {
             return _world;
-        }
-        NetworkEntity *GetEntityByNetworkID(MafiaNet::NetworkID networkId) const;
-        void ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const;
-
-        // Typed wrappers over the base-pointer entity API (cast once inside). CreateEntity<T> resolves
-        // the type id from T::kTypeName.
-        template <typename T>
-        T *CreateEntity() {
-            return CheckedEntityCast<T>(CreateEntity(EntityTypeId<T>()));
-        }
-        template <typename T>
-        T *GetEntity(MafiaNet::NetworkID networkId) const {
-            return CheckedEntityCast<T>(GetEntityByNetworkID(networkId));
-        }
-        template <typename T>
-        T *GetViewerAs(MafiaNet::PeerGuid guid) const {
-            return CheckedEntityCast<T>(GetViewer(guid));
-        }
-        template <typename T>
-        void ForEach(const fu2::function<void(T *) const> &fn) const {
-            ForEachEntity([&fn](NetworkEntity *entity) {
-                if (T *typed = CheckedEntityCast<T>(entity)) {
-                    fn(typed);
-                }
-            });
         }
 
         // --- Viewers (a connection's controlled entity, e.g. a player's avatar) ---
@@ -242,15 +210,7 @@ namespace Framework::Networking::Replication {
         uint64_t GetViewerId(MafiaNet::PeerGuid guid) const;
         // Every connection that has a viewer, with its network id.
         std::vector<std::pair<MafiaNet::PeerGuid, uint64_t>> GetViewerIds() const;
-        void SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity);
-        NetworkEntity *GetViewer(MafiaNet::PeerGuid guid) const;
         void ClearViewer(MafiaNet::PeerGuid guid);
-        // Every connection that has one, for code that needs "where is each player" rather than one
-        // named player: interest is computed per viewer, and so is delegation.
-        void ForEachViewer(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const;
-        // Every player's avatar with the guid of the player it stands for, on either peer. What
-        // proximity voice keys a speaker's position on.
-        void ForEachAvatar(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const;
 
         // Server: every peer that has `entity` constructed -- the audience interest, virtual worlds
         // and budgets have already chosen, and so the one an event about the entity belongs to. The
@@ -422,7 +382,7 @@ namespace Framework::Networking::Replication {
         }
 
         // Fired with the NetworkID at the end of CreateEntity, before the world resolves the id, and
-        // when the entity is torn down (see DestroyEntity).
+        // when the entity is torn down (see World::Destroy).
         void SetOnEntityCreated(fu2::function<void(uint64_t) const> callback) {
             _onEntityCreated = std::move(callback);
         }
@@ -433,7 +393,7 @@ namespace Framework::Networking::Replication {
         // --- ReplicaManager3 hooks ---
         // Connection-drop teardown. The base only removes replicas a dropped peer itself created;
         // player avatars are server-created, so on the server we additionally notify the game and
-        // destroy the dropped peer's viewer (DestroyEntity broadcasts the destruction to remaining
+        // destroy the dropped peer's viewer (which broadcasts the destruction to remaining
         // clients), which is the missing half that otherwise leaks avatars across reconnects.
         void OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) override;
 
@@ -441,6 +401,17 @@ namespace Framework::Networking::Replication {
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
+        // --- Entities by pointer: this class's own, the world's, and a client's (ClientEntities) ---
+        // Construct and start replicating an entity of the given type, nullptr if unknown; taken for
+        // `hold`, if there is one, as it enters the world.
+        NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold *hold);
+        // Reads the NetworkIDManager's table under no lock of ReplicaManager3: on a server the
+        // caller holds its world, or the entity's handle, for as long as it uses the pointer.
+        NetworkEntity *GetEntityByNetworkID(MafiaNet::NetworkID networkId) const;
+        void ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const;
+        NetworkEntity *GetViewer(MafiaNet::PeerGuid guid) const;
+        friend class ClientEntities;
+
         // The effects above on an entity the caller holds.
         void ForceState(NetworkEntity &entity);
         void SetOwner(NetworkEntity &entity, MafiaNet::PeerGuid guid);
@@ -468,13 +439,14 @@ namespace Framework::Networking::Replication {
         // Queues the entity for every viewer to decide on again (see ReevaluationBase).
         void Reevaluate(NetworkEntity *entity);
         // The entity is leaving: out of the index and out of every viewer's set, before its pointer
-        // can be handed out again. From DestroyEntity, and from ~NetworkEntity for any other way out.
+        // can be handed out again. From its teardown, and from ~NetworkEntity for any other way out.
         void ForgetEntity(NetworkEntity *entity);
         void ForgetSlot(uint32_t slot);
         // Server: the owner's destruction of its entity, already accepted. True once the entity is
         // gone; false when it was on its way out already, or waits on a handle.
         bool DestroyByOwner(NetworkEntity *entity, MafiaNet::Connection_RM3 *source);
-        // What DestroyEntity ends in, with nothing left holding the entity.
+        // What World::Destroy ends in, with nothing left holding the entity: out of the viewer map,
+        // the index and delegation, then the destruction broadcast and the delete.
         void TeardownEntity(NetworkEntity *entity);
         // Destroyed through the world and waiting on a handle to be torn down.
         bool DestroyPending(NetworkEntity *entity) const {
@@ -485,8 +457,6 @@ namespace Framework::Networking::Replication {
         }
         // ForEachEntity with those included: the interest index keeps them until they are torn down.
         void ForEachReferenced(const fu2::function<void(NetworkEntity *) const> &fn) const;
-        // CreateEntity, with the entity taken for `hold` as it enters the world.
-        NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold *hold);
         // Recomputes the viewers RebuildInterest found due, across the worker pool when it pays.
         void ComputeDueInterest();
         // The worker pool, started on first use, for `work` independent items; null when that is too

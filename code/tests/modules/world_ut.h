@@ -182,17 +182,16 @@ MODULE(world, {
             EQUALS(handle->steps, 3);
         }
         EQUALS(tornDown, 1);
-        EQUALS(fixture.manager->GetEntityByNetworkID(walker) == nullptr, true);
         EQUALS(static_cast<bool>(world.Read<Walker>(walker)), false);
 
         // Nothing holds this one, so it goes at once.
         const uint64_t prop = fixture.Make<Prop>();
         EQUALS(world.Destroy(prop), true);
         EQUALS(tornDown, 2);
-        EQUALS(fixture.manager->GetEntityByNetworkID(prop) == nullptr, true);
+        EQUALS(static_cast<bool>(world.Read<Prop>(prop)), false);
     });
 
-    IT("hides an entity whose destruction waits on a handle from the raw lookups, and ignores a second destroy", {
+    IT("hides an entity whose destruction waits on a handle from every lookup, and ignores a second destroy", {
         Fixture fixture;
         World &world                   = fixture.world;
         ReplicationManager *manager    = fixture.manager;
@@ -200,54 +199,41 @@ MODULE(world, {
         const uint64_t other           = fixture.Make<Walker>();
         const MafiaNet::PeerGuid guid  = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(77));
         const MafiaNet::PeerGuid guid2 = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(78));
-        manager->SetViewer(guid, manager->GetEntityByNetworkID(walker));
-        manager->SetViewer(guid2, manager->GetEntityByNetworkID(other));
+        manager->SetViewer(guid, walker);
+        manager->SetViewer(guid2, other);
         int tornDown = 0;
         manager->SetOnEntityDestroyed([&tornDown](uint64_t) {
             ++tornDown;
         });
-        const auto countEntities = [manager] {
+        // Asked from another thread: this one holds a handle for part of the test.
+        const auto countEntities = [&world] {
             int count = 0;
-            manager->ForEachEntity([&count](NetworkEntity *) {
-                ++count;
+            std::thread counter([&] {
+                world.ForEach<NetworkEntity>([&count](Ref<NetworkEntity> &) {
+                    ++count;
+                });
             });
-            return count;
-        };
-        const auto countViewers = [manager] {
-            int count = 0;
-            manager->ForEachViewer([&count](MafiaNet::PeerGuid, NetworkEntity *) {
-                ++count;
-            });
-            return count;
-        };
-        const auto countAvatars = [manager] {
-            int count = 0;
-            manager->ForEachAvatar([&count](MafiaNet::PeerGuid, NetworkEntity *) {
-                ++count;
-            });
+            counter.join();
             return count;
         };
         EQUALS(countEntities(), 2);
-        EQUALS(countViewers(), 2);
+        EQUALS(manager->GetViewerIds().size(), size_t {2});
         {
             Ref<Walker> handle = world.Write<Walker>(walker);
-            NetworkEntity *raw = &*handle;
             EQUALS(world.Destroy(walker), true);
 
-            EQUALS(manager->GetEntityByNetworkID(walker) == nullptr, true);
-            EQUALS(manager->GetViewer(guid) == nullptr, true);
-            EQUALS(manager->GetViewer(guid2) != nullptr, true);
+            EQUALS(manager->GetViewerId(guid), uint64_t {0});
+            EQUALS(manager->GetViewerId(guid2), other);
             EQUALS(countEntities(), 1);
-            EQUALS(countViewers(), 1);
-            EQUALS(countAvatars(), 1);
+            EQUALS(manager->GetViewerIds().size(), size_t {1});
 
-            manager->DestroyEntity(raw);
+            EQUALS(world.Destroy(walker), false);
             EQUALS(tornDown, 0);
             EQUALS(handle->GetNetworkID(), walker);
         }
         EQUALS(tornDown, 1);
         EQUALS(countEntities(), 1);
-        EQUALS(manager->GetEntityByNetworkID(other) != nullptr, true);
+        EQUALS(static_cast<bool>(world.Read<Walker>(other)), true);
     });
 
     IT("tears an entity down only once the thread holds nothing", {
@@ -283,7 +269,12 @@ MODULE(world, {
             const ConstRef<Prop> unrelated = world.Read<Prop>(c);
             EQUALS(world.Destroy(b), true);
             EQUALS(tornDown, 1);
-            EQUALS(fixture.manager->GetEntityByNetworkID(b) == nullptr, true);
+            bool resolves = true;
+            std::thread other([&] {
+                resolves = static_cast<bool>(world.Read<Prop>(b));
+            });
+            other.join();
+            EQUALS(resolves, false);
         }
         EQUALS(tornDown, 2);
         EQUALS(heldAtMost, size_t {0});
@@ -359,7 +350,7 @@ MODULE(world, {
         }
         waiter.join();
         EQUALS(resolved, false);
-        EQUALS(fixture.manager->GetEntityByNetworkID(walker) == nullptr, true);
+        EQUALS(static_cast<bool>(world.Read<Walker>(walker)), false);
     });
 
     IT("visits every entity of a type one lock at a time", {

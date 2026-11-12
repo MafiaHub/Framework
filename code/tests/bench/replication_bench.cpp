@@ -16,6 +16,7 @@
 //
 //   FrameworkReplicationBench [players...]     default: 50 100 164 250
 
+#include "../replication_test_world.h"
 #include "logging/logger.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_connection.h"
@@ -88,18 +89,18 @@ namespace {
         std::uniform_real_distribution<float> step(-150.0f, 150.0f);
         std::vector<NetworkEntity *> movers;
         for (int i = 0; i < kNpcs; ++i) {
-            NetworkEntity *entity   = manager->CreateEntity(npc);
+            NetworkEntity *entity   = TestWorld::Make(manager, npc);
             entity->position        = glm::vec3(spread(rng), 0.0f, spread(rng));
             entity->streaming.range = 50000.0f;
             movers.push_back(entity);
         }
         for (int i = 0; i < players; ++i) {
-            NetworkEntity *avatar   = manager->CreateEntity(human);
+            NetworkEntity *avatar   = TestWorld::Make(manager, human);
             avatar->position        = glm::vec3(spread(rng), 0.0f, spread(rng));
             avatar->streaming.range = 50000.0f;
             const MafiaNet::RakNetGUID guid(10000 + i);
             avatar->ownerGUID = MafiaNet::ToPeerGuid(guid);
-            manager->SetViewer(avatar->ownerGUID, avatar);
+            manager->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
             auto *connection        = manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid);
             connection->isValidated = true;
             manager->PushConnection(connection);
@@ -126,7 +127,7 @@ namespace {
         }
 
         for (NetworkEntity *entity : movers) {
-            manager->DestroyEntity(entity);
+            TestWorld::Destroy(manager, entity);
         }
         manager->Clear();
 
