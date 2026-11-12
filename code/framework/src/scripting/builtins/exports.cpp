@@ -110,7 +110,7 @@ namespace Framework::Scripting::Builtins {
                 }
                 else {
                     // Export is in manifest but RegisterExport still failed - real error (isolate issue)
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Failed to register export '{}' - isolate initialization issue", resource->GetName(), exportName);
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Failed to register export '{}' - isolate initialization issue", resource->GetName(), BlankedLine(exportName));
                     call.ThrowError("Exports.register: failed to register export '" + exportName + "' - internal error");
                 }
             }

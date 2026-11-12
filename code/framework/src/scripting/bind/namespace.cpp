@@ -213,7 +213,7 @@ namespace Framework::Scripting::Bind {
                 symbol.add_property(constant.name, ToTypeScript(constant.type), constant.description, true);
             }
         }
-        target->Set(context, v8pp::to_v8(isolate, desc.name), object).Check();
+        target->CreateDataProperty(context, v8pp::to_v8(isolate, desc.name), object).Check();
         return scope.Escape(object);
     }
 
