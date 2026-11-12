@@ -82,7 +82,11 @@ A member's implementation is one of:
    come from the signature. JavaScript gets it through v8pp exactly as today; Lua gets a thunk built
    from `Bind::LuaConvert<T>`.
 2. **A context function**, `void(Bind::Call &)`, for anything dynamic: variadic arguments, option
-   objects, callbacks, promises. One body serves both languages (§1.4).
+   objects, callbacks, promises. One body serves both languages (§1.4). A property may be written as two
+   of them, `Property(name, type, getter, setter, description)`, when its setter takes more than one
+   signature says (`entity.rotation` reads a `Quaternion` and takes a `Quaternion` or a `Vector3`): the
+   getter answers with `Call::Return`, the setter reads `Call::Arg(0)`, an empty setter makes it read-only,
+   and `type` is what the catalog describes it as.
 3. **A per-language hook** (`V8Hook`, `LuaHook`) for what exists in one language only (`toJSON`).
 
 Members carry a `Bind::Side` (`Shared`, `Server`, `Client`); a runtime materialises `Shared` plus its own.
@@ -90,7 +94,7 @@ Members carry a `Bind::Side` (`Shared`, `Server`, `Client`); a runtime materiali
 A definition also says how its class leaves a runtime (§4.1):
 
 - `Transfer(get)`: an object crosses between runtimes as itself, as the bytes of what `get` reads from it
-  (`&Vector3::vec`, later the id of a handle), and is built again as `T(payload)` on the other side. One
+  (`&Vector3::vec`, `&Entity::GetId` for a handle), and is built again as `T(payload)` on the other side. One
   declaration serves `ValueTransfer` and `LuaTransfer`; `RegisterTransfer()` registers both, when
   `Builtins::RegisterTransferTypes()` calls it, so the order `ValueTransfer` depends on stays in one place.
 - `JsonProperties({"x", "y", "z"})`: the properties an object is written to JSON with from Lua, in that
