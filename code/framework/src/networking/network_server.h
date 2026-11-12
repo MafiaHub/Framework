@@ -96,15 +96,6 @@ namespace Framework::Networking {
         // Raw variant for handlers that decode the bitstream themselves.
         void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler);
 
-        template <RPC::Payload T>
-        [[deprecated("use the (payload, Sender, World &) form")]] void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
-            NetworkPeer::RegisterRPC<T>(std::move(handler));
-        }
-
-        [[deprecated("use the (payload, Sender, World &) form")]] void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
-            NetworkPeer::RegisterRawRPC(identifier, std::move(handler));
-        }
-
         // Signal an RPC to every connected system except one (typically the originator) — the
         // server-authoritative relay primitive, since RPC4::Signal has no exclusion parameter. The
         // bitstream holds the already-written RPC arguments.
