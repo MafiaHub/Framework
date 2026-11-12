@@ -67,19 +67,10 @@ namespace Framework::Integrations::Server::Scripting {
         luaOptions.entryDeadline    = std::chrono::milliseconds(0);
         _luaEngine                  = std::make_unique<Framework::Scripting::LuaEngine>(luaOptions);
 
-        // A function a builtin kept, and a result it still owes, hear of the runtime they belong to going.
+        // A function a builtin kept, and a result it still owes, hear of the runtime they belong to going. So
+        // does what the shared builtins keep for a Lua runtime.
         Framework::Scripting::Bind::WatchRuntimes(*_nodeEngine);
-        Framework::Scripting::Bind::WatchRuntimes(*_luaEngine);
-
-        // After the above, which is what tells a handler that its runtime goes: the state changes a Lua
-        // runtime watched are let go of with it.
-        _luaEngine->AddRuntimeDisposingListener([](Framework::Scripting::LuaRuntime &runtime) {
-            Framework::Scripting::Builtins::StateBag::DropDeadSubscriptions();
-            // So are the message requests its scripts were waiting on.
-            Framework::Scripting::Builtins::Messages::DropAbandonedRequests();
-            // The address of the runtime may be the next one's.
-            Framework::Scripting::Bind::SetCallResourceManager(&runtime, nullptr);
-        });
+        Framework::Scripting::Builtins::WatchLuaRuntimes(*_luaEngine);
 
         // A connection asking to join crosses as itself too. Ahead of the rest, so that it is asked last: the newest
         // registration is tried first, and values and entities cross far more often than a connection does.
@@ -194,23 +185,7 @@ namespace Framework::Integrations::Server::Scripting {
     }
 
     void ServerScriptingModule::RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime) {
-        // What a call made in the runtime answers GetResourceManager with, as the isolates are told through the
-        // console. Forgotten when the runtime goes, and when the manager does.
-        Framework::Scripting::Bind::SetCallResourceManager(&runtime, _resourceManager.get());
-
-        // As in JavaScript, every builtin is a global (Vector3.new, not Core.Vector3.new).
-        Framework::Scripting::Builtins::RegisterValueTypesLua(runtime.State(), Framework::Scripting::Bind::Side::Server);
-
-        Framework::Scripting::Builtins::Events::RegisterLua(runtime);
-        Framework::Scripting::Builtins::Messages::RegisterLua(runtime);
-        Framework::Scripting::Builtins::Imports::RegisterLua(runtime);
-        Framework::Scripting::Builtins::Exports::RegisterLua(runtime);
-        Framework::Scripting::Builtins::Console::RegisterLua(runtime);
-        Framework::Scripting::Builtins::ExecutionEnvironment::RegisterLua(runtime, _modVersion);
-        Framework::Scripting::Builtins::Entity::RegisterLua(runtime);
-        // In JavaScript a game publishes these two itself. A Lua state is set up here and nowhere else.
-        Framework::Scripting::Builtins::Player::RegisterLua(runtime);
-        Framework::Scripting::Builtins::TextLabel::RegisterLua(runtime);
+        Framework::Scripting::Builtins::RegisterSharedLua(runtime, _resourceManager.get(), _modVersion);
         Framework::Scripting::Builtins::Chat::RegisterLua(runtime);
         Builtins::Voice::RegisterLua(runtime);
         Builtins::PendingConnection::RegisterLua(runtime);

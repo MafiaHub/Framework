@@ -8,15 +8,22 @@
 
 #include "builtins.h"
 
+#include "console.h"
 #include "entity.h"
 #include "events.h"
+#include "execution_environment.h"
+#include "exports.h"
+#include "imports.h"
 #include "messages.h"
 #include "player.h"
 #include "state_bag.h"
 #include "text_label.h"
 
 #include "../bind/call.h"
+#include "../bind/callable.h"
 #include "../bind/v8_callable.h"
+#include "../lua/lua_engine.h"
+#include "../lua/lua_runtime.h"
 #include "../value_transfer.h"
 
 #include <exception>
@@ -43,6 +50,39 @@ namespace Framework::Scripting::Builtins {
         Player::Definition().RegisterTransfer();
         TextLabel::Definition().RegisterTransfer();
         StateBag::Definition().RegisterTransfer();
+    }
+
+    void RegisterSharedLua(LuaRuntime &runtime, ResourceManager *manager, const std::string &modVersion) {
+        // As the isolates are told through the console. Forgotten when the runtime goes (WatchLuaRuntimes), and
+        // when the manager does.
+        Bind::SetCallResourceManager(&runtime, manager);
+
+        // As in JavaScript, every builtin is a global (Vector3.new, not Core.Vector3.new).
+        RegisterValueTypesLua(runtime.State(), runtime.Options().side);
+
+        Events::RegisterLua(runtime);
+        Messages::RegisterLua(runtime);
+        Imports::RegisterLua(runtime);
+        Exports::RegisterLua(runtime);
+        Console::RegisterLua(runtime);
+        ExecutionEnvironment::RegisterLua(runtime, modVersion);
+        Entity::RegisterLua(runtime);
+        Player::RegisterLua(runtime);
+        TextLabel::RegisterLua(runtime);
+    }
+
+    void WatchLuaRuntimes(LuaEngine &engine) {
+        Bind::WatchRuntimes(engine);
+
+        // After the above, which is what tells a handler that its runtime goes: the state changes a Lua runtime
+        // watched are let go of with it.
+        engine.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+            StateBag::DropDeadSubscriptions();
+            // So are the message requests its scripts were waiting on.
+            Messages::DropAbandonedRequests();
+            // The address of the runtime may be the next one's.
+            Bind::SetCallResourceManager(&runtime, nullptr);
+        });
     }
 
     void UnregisterAll(v8::Isolate *isolate) {

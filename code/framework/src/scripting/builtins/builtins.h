@@ -24,7 +24,14 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <string>
 #include <vector>
+
+namespace Framework::Scripting {
+    class LuaEngine;
+    class LuaRuntime;
+    class ResourceManager;
+} // namespace Framework::Scripting
 
 // Conventions every builtin here follows — namespace, throw idiom, registration
 // shape — are documented in README.md next to this file. Match them when adding
@@ -58,6 +65,23 @@ namespace Framework::Scripting::Builtins {
         Color::RegisterLua(L, side);
     }
 
+    /**
+     * Publishes in a Lua runtime what a script has on both sides: the value types, Events, Messages, Imports,
+     * Exports, console, ExecutionEnvironment, Entity, Player and TextLabel, each with the members of the side of
+     * the runtime. In JavaScript a game publishes Player and TextLabel itself; a Lua state is set up by its
+     * scripting module and nowhere else. `manager` is what a call made in the runtime answers GetResourceManager
+     * with (Bind::SetCallResourceManager). Call it from the setup callback of the Lua engine, which protects it.
+     */
+    void RegisterSharedLua(LuaRuntime &runtime, ResourceManager *manager, const std::string &modVersion);
+
+    /**
+     * Has what the shared builtins keep for a Lua runtime dropped as the engine disposes of it: its callables and
+     * the results it is owed (Bind::WatchRuntimes), the state changes it watched, the message requests its scripts
+     * waited on and the manager RegisterSharedLua named for it. Call it once for each engine, before a script
+     * runs in it.
+     */
+    void WatchLuaRuntimes(LuaEngine &engine);
+
     // Drops every builtin type's cached class wrapper for this isolate, then everything v8pp holds for it
     // (class registries, the objects they wrap, bound functions' data), after telling the callables and the
     // deferred results of the binding layer that the isolate goes (bind/callable.h). Call once, just before disposal:
@@ -70,7 +94,7 @@ namespace Framework::Scripting::Builtins {
 
     // Teaches ValueTransfer the builtin value types and handles, so they cross between resources as themselves rather
     // than as plain objects, and LuaTransfer the same types, with the same names and the same bytes, so they cross between the two languages too. Process-wide and idempotent; it must run before a project registers its own
-    // handle types, which the server scripting module's constructor sees to.
+    // handle types, which the constructor of the server scripting module sees to, and on a client that of its Lua host.
     void RegisterTransferTypes();
 
     /**
