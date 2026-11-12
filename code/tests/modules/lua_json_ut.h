@@ -330,9 +330,9 @@ MODULE(lua_json, {
         LuaRuntimeTest::Run(worlds.lua, "wide = {} for index = 1, 200000 do wide[string.rep('k', 40) .. index] = index end");
         Framework::Scripting::LuaValueLimits few;
         few.values = 1000;
-        Framework::Scripting::LuaValueLimits small;
-        small.bytes = 64 * 1024;
-        for (const Framework::Scripting::LuaValueLimits &limits : {few, small}) {
+        Framework::Scripting::LuaValueLimits tight;
+        tight.bytes = 64 * 1024;
+        for (const Framework::Scripting::LuaValueLimits &limits : {few, tight}) {
             std::string json;
             uint64_t allocations = 0;
             {

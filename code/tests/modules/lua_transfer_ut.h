@@ -1166,15 +1166,15 @@ MODULE(lua_transfer, {
         lua_settop(L, 0);
 
         // The bytes of strings and of keys: exactly what it may hold, and one byte more.
-        Framework::Scripting::LuaValueLimits small;
-        small.bytes = 1024;
+        Framework::Scripting::LuaValueLimits tight;
+        tight.bytes = 1024;
         LuaRuntimeTest::Run(worlds.lua, "fits = { text = string.rep('a', 1020) } long = { text = string.rep('a', 1021) } key = { [string.rep('k', 1025)] = 1 }");
         LuaTransferTest::PushGlobal(L, "fits");
         LuaTransferTest::PushGlobal(L, "long");
         LuaTransferTest::PushGlobal(L, "key");
-        EQUALS(Framework::Scripting::LuaTransfer::Copy(L, -3, small).IsOk(), true);
-        EQUALS(Framework::Scripting::LuaTransfer::Copy(L, -2, small).GetError(), "Cannot copy value.text: it is too large to copy");
-        EQUALS(Framework::Scripting::LuaTransfer::Copy(L, -1, small).GetError(), "Cannot copy value: it is too large to copy");
+        EQUALS(Framework::Scripting::LuaTransfer::Copy(L, -3, tight).IsOk(), true);
+        EQUALS(Framework::Scripting::LuaTransfer::Copy(L, -2, tight).GetError(), "Cannot copy value.text: it is too large to copy");
+        EQUALS(Framework::Scripting::LuaTransfer::Copy(L, -1, tight).GetError(), "Cannot copy value: it is too large to copy");
         lua_settop(L, 0);
     });
 
@@ -1187,9 +1187,9 @@ MODULE(lua_transfer, {
 
         Framework::Scripting::LuaValueLimits few;
         few.values = 1000;
-        Framework::Scripting::LuaValueLimits small;
-        small.bytes = 64 * 1024;
-        for (const Framework::Scripting::LuaValueLimits &limits : {few, small}) {
+        Framework::Scripting::LuaValueLimits tight;
+        tight.bytes = 64 * 1024;
+        for (const Framework::Scripting::LuaValueLimits &limits : {few, tight}) {
             std::string error;
             uint64_t allocations = 0;
             {

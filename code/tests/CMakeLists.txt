@@ -127,6 +127,12 @@ target_sources(FrameworkClientScriptingTests PRIVATE
     ../framework/src/integrations/client/scripting/builtins/discord.cpp
     ../framework/src/integrations/client/scripting/builtins/web.cpp
     ../../vendors/discord/src/types.cpp)
+# The Discord SDK sources use the fixed-width integers without including <cstdint>, which only the Windows
+# headers they include elsewhere bring in.
+if(NOT MSVC)
+    set_source_files_properties(../../vendors/discord/src/types.cpp ../framework/src/integrations/client/scripting/builtins/discord.cpp
+        TARGET_DIRECTORY FrameworkClientScriptingTests PROPERTIES COMPILE_OPTIONS "-include;cstdint")
+endif()
 # Each stand-in is another class under the name of the real one. That is sound only while the real ones are
 # not in this binary: checked once everything in this directory has had its say.
 function(_fw_refuse_client_in_scripting_tests)
