@@ -222,6 +222,12 @@ JavaScript `undefined` and `null` are both `Nil`. `Array` is a JavaScript array 
   `Register` was given (`Bind::SetCallResourceManager`), which is forgotten when the isolate is
   unregistered or the manager is destroyed, and otherwise the scripting module's.
 
+Where the meaning of an API hangs on JavaScript's `null`, which a `Value` reads as `Nil` like `undefined`, the
+function asks the copy: `ToTransfer()` of a JavaScript `null` is `Kind::Null`. `TextLabel` does so for its options,
+where `attachTo: null` detaches and `showTo: null` is everyone while a key left out changes nothing. A Lua table
+cannot hold `nil`, so such an option takes `false` from Lua. What these functions answer `null` with is
+`Call::Null()`, and so no key in Lua.
+
 `Call::OwnerOf(function)` names the resource a function belongs to, for a builtin that keeps it beyond the
 call and drops it when that resource stops. In JavaScript it is `ResourceManager::ResolveResourceContext`
 with the function: the resource of the runtime, and in the one isolate of the client the resource whose
@@ -366,7 +372,7 @@ both a raised string, `"<Api>.<method>: <what went wrong>"`; a stale receiver st
     the next one.
 - The Lua engine holds no V8. A server running only Lua resources executes no JavaScript for them.
 - The server scripting module owns the Lua engine: 512 MB a state, no deadline, and the value types,
-  `console` and `ExecutionEnvironment` for bindings so far. It ticks it once in every `Update()`. While it waits for its next tick the wait is
+  `console`, `ExecutionEnvironment`, `Entity`, `Player` and `TextLabel` for bindings so far. It ticks it once in every `Update()`. While it waits for its next tick the wait is
   Node's, and Lua is ticked only for a timer or a sleep that comes due after its last tick, 4 ms after
   that tick at the earliest, so Node keeps its share of the wait. A wait for no time (`sleep(0)`,
   `setTimeout(fn, 0)`) is due at the tick that armed it, not after it: it goes on at the next `Update()`,
@@ -417,7 +423,8 @@ One value crosses per call result: a Lua function's first return value.
   refused. A null or undefined property, Map value or Set member is absent.
 - A bound object crosses when its class, or one of its bases, is a host type (`Bind::Class::Transfer`),
   under the name and with the bytes JavaScript uses; any other is refused, as is a host type Lua has no
-  class for (`host type 'Player' is not available in Lua`).
+  class for (`host type 'Vehicle' is not available in Lua`), as a handle a project registered for JavaScript
+  alone is.
 - The bounds are `ValueTransfer`'s: 128 levels, about a million values, 256 MB of strings and binary
   data (`LuaValueLimits`, which a caller may tighten). They bound what the host allocates, not only what
   it returns: a table is counted, keys and their bytes, as its keys are read, so one with more keys
