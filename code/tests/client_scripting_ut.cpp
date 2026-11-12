@@ -30,6 +30,7 @@
 #include <thread>
 
 #include "modules/client_callable_ut.h"
+#include "modules/lua_client_ut.h"
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
 #endif
@@ -346,6 +347,7 @@ int main() {
     Framework::Logging::GetInstance()->PauseLogging(true);
     UNIT_MODULE(client_scripting);
     UNIT_MODULE(client_callable);
+    UNIT_MODULE(lua_client);
 #ifdef _WIN32
     UNIT_MODULE(keybinds);
 #endif

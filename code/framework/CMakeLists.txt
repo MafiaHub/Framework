@@ -58,6 +58,7 @@ set(FRAMEWORK_SRC
     src/scripting/bind/namespace.cpp
     src/scripting/bind/v8_call.cpp
     src/scripting/bind/v8_callable.cpp
+    src/scripting/lua/lua_client_host.cpp
     src/scripting/lua/lua_engine.cpp
     src/scripting/lua/lua_json.cpp
     src/scripting/lua/lua_runtime.cpp

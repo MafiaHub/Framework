@@ -30,6 +30,15 @@ namespace Framework::Scripting {
         Bind::Side side         = Bind::Side::Server;
         size_t memoryLimitBytes = 512u << 20;        // of each state; 0: no cap
         std::chrono::milliseconds entryDeadline {0}; // of each entry into a state; 0: off
+
+        // What a client runs the scripts a server sent it under: a smaller state, and no entry that runs on.
+        static LuaEngineOptions Client() {
+            LuaEngineOptions options;
+            options.side             = Bind::Side::Client;
+            options.memoryLimitBytes = 128u << 20;
+            options.entryDeadline    = std::chrono::milliseconds(5000);
+            return options;
+        }
     };
 
     // The Lua engine: one LuaRuntime (lua_runtime.h) for each resource that has Lua scripts, created, ticked and
