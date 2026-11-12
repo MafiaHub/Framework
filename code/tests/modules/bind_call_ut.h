@@ -769,7 +769,8 @@ namespace BindCallTest {
 
     // The symbol `name` of a catalog as it is exported, or null.
     inline nlohmann::json SymbolOf(const v8pp::metadata::registry &catalog, const std::string &name) {
-        for (const nlohmann::json &symbol : nlohmann::json::parse(v8pp::metadata::to_json(catalog))["symbols"]) {
+        const nlohmann::json recorded = nlohmann::json::parse(v8pp::metadata::to_json(catalog));
+        for (const nlohmann::json &symbol : recorded["symbols"]) {
             if (symbol["name"] == name) {
                 return symbol;
             }
@@ -1827,7 +1828,8 @@ MODULE(bind_call, {
         EQUALS(client.Lua("(function() ProbeTold.label = 'x' end)()"), "<error> eval:1: attempt to set 'label' on ProbeTold");
         const nlohmann::json expected = {{"description", "A label of the runtime."}, {"name", "label"}, {"readonly", true}, {"static", false}, {"type", {{"cppName", ""}, {"name", "string"}, {"optional", false}}}};
         nlohmann::json label;
-        for (const nlohmann::json &property : BindCallTest::SymbolOf(recorded, "ProbeTold")["properties"]) {
+        const nlohmann::json toldSymbol = BindCallTest::SymbolOf(recorded, "ProbeTold");
+        for (const nlohmann::json &property : toldSymbol["properties"]) {
             if (property["name"] == "label") {
                 label = property;
             }
