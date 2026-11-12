@@ -366,9 +366,15 @@ namespace Framework::Networking::Replication {
         std::vector<uint64_t> IdsOfType(uint32_t typeId, bool anyType);
         void AddState(const void *key, void *object, void (*destroy)(void *));
 
-        // From the manager: an entity it created, taken for `hold` if there is one before any other
-        // thread can find it, and one deleted by another way than Destroy.
-        void Adopt(NetworkEntity *entity, Detail::WorldHold *hold);
+        // From the manager, for an entity it creates. Prepare gives it its lock, taken for the
+        // creator, before the manager lets any other thread find the entity; Publish makes the id
+        // resolve and counts the lock among the creator's, as `hold`.
+        std::shared_ptr<Detail::WorldEntitySlot> Prepare(NetworkEntity *entity);
+        void Publish(std::shared_ptr<Detail::WorldEntitySlot> slot, Detail::WorldHold &hold);
+        // A client's entity, which the server constructed there: known by id, with no lock to take
+        // around the Framework's own calls on it.
+        void Adopt(NetworkEntity *entity);
+        // An entity deleted by another way than Destroy.
         void Forget(NetworkEntity *entity);
 
         // Destroy in two steps, for a caller with something to do in between. The first answers in

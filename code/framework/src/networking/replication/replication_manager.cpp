@@ -796,7 +796,7 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId, Detail::WorldHold *hold) {
+    NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId, Detail::WorldHold &hold) {
         NetworkEntity *entity = EntityRegistry::Get().Create(typeId);
         if (!entity) {
             return nullptr;
@@ -805,23 +805,23 @@ namespace Framework::Networking::Replication {
         // under it. Ids must stay within JavaScript's 2^53 exact-integer range so scripts can hold
         // them as plain numbers. Clients adopt this id via the construction snapshot.
         entity->SetNetworkID(_nextNetworkId.fetch_add(1) + 1);
+        // Its lock first, held for the creator: once referenced, the tick finds the entity through
+        // ReplicaManager3 and must wait until the creator has let go of it.
+        std::shared_ptr<Detail::WorldEntitySlot> slot = _world.Prepare(entity);
         {
             const WorldGuard world(*this);
             Reference(entity);
-            if (_isServer) {
-                // Into the index now, so it has its slot; every viewer decides on it at its next
-                // query, from what the index takes of it then: by that time the caller has placed it.
-                _interest.Sync(entity);
-                Queue({Pending::Kind::Reevaluate, entity->GetNetworkID()});
-            }
+            // Into the index now, so it has its slot; every viewer decides on it at its next query,
+            // from what the index takes of it then: by that time the caller has placed it.
+            _interest.Sync(entity);
+            Queue({Pending::Kind::Reevaluate, entity->GetNetworkID()});
         }
+        // Before the id resolves and before the lock counts as one this thread holds: the callback
+        // may ask the world for other entities, and finds nothing under this id.
         if (_onEntityCreated) {
             _onEntityCreated(entity->GetNetworkID());
         }
-        // After the callback, which then runs with no handle held on the entity.
-        if (_isServer) {
-            _world.Adopt(entity, hold);
-        }
+        _world.Publish(std::move(slot), hold);
         return entity;
     }
 

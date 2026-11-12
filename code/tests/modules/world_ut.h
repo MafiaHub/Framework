@@ -328,6 +328,37 @@ MODULE(world, {
         EQUALS(sawUnfinished.load(), 0);
     });
 
+    IT("keeps the tick off a new entity until its creator lets go, its creation callback included", {
+        Fixture fixture;
+        World &world                = fixture.world;
+        ReplicationManager *manager = fixture.manager;
+        std::atomic<bool> inCallback {false};
+        std::atomic<bool> released {false};
+        std::atomic<bool> reachedEarly {false};
+        manager->SetOnEntityCreated([&](uint64_t) {
+            inCallback = true;
+            // Long enough for the tick to get to the entity, which is referenced by now.
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        });
+        // What the tick does first: bring the interest index up to date with every entity.
+        std::thread tick([&] {
+            while (!inCallback) {
+                std::this_thread::yield();
+            }
+            manager->RebuildInterest();
+            reachedEarly = !released;
+        });
+        {
+            const Ref<Walker> created = world.Create<Walker>();
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+            created->steps = 1;
+            released       = true;
+        }
+        tick.join();
+        manager->SetOnEntityCreated({});
+        EQUALS(reachedEarly.load(), false);
+    });
+
     IT("gives an empty handle to a thread that waited for an entity destroyed meanwhile", {
         Fixture fixture;
         World &world          = fixture.world;

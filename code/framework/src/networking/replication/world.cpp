@@ -243,7 +243,7 @@ namespace Framework::Networking::Replication {
         if (!_manager.IsServer()) {
             return nullptr;
         }
-        return _manager.CreateEntity(typeId, &hold);
+        return _manager.CreateEntity(typeId, hold);
     }
 
     bool World::Destroy(uint64_t id) {
@@ -305,19 +305,29 @@ namespace Framework::Networking::Replication {
         _states.push_back(std::move(state));
     }
 
-    void World::Adopt(NetworkEntity *entity, Detail::WorldHold *hold) {
+    std::shared_ptr<Detail::WorldEntitySlot> World::Prepare(NetworkEntity *entity) {
         auto slot    = std::make_shared<Detail::WorldEntitySlot>();
         slot->entity = entity;
         slot->id     = entity->GetNetworkID();
-        if (_manager.IsServer()) {
-            entity->_worldLock = slot.get();
-        }
-        if (hold) {
-            slot->mutex.lock();
-            slot->holders = 1;
-            t_locks.push_back(slot.get());
-            *hold = Detail::WorldHold(this, slot.get(), slot, true);
-        }
+        // Locked for its creator before anything can reach the entity: whoever finds it through
+        // ReplicaManager3 from here on waits on this lock.
+        slot->mutex.lock();
+        slot->holders      = 1;
+        entity->_worldLock = slot.get();
+        return slot;
+    }
+
+    void World::Publish(std::shared_ptr<Detail::WorldEntitySlot> slot, Detail::WorldHold &hold) {
+        t_locks.push_back(slot.get());
+        hold = Detail::WorldHold(this, slot.get(), slot, true);
+        const std::lock_guard guard(_slotsMutex);
+        _slots[slot->id] = std::move(slot);
+    }
+
+    void World::Adopt(NetworkEntity *entity) {
+        auto slot    = std::make_shared<Detail::WorldEntitySlot>();
+        slot->entity = entity;
+        slot->id     = entity->GetNetworkID();
         const std::lock_guard guard(_slotsMutex);
         _slots[slot->id] = std::move(slot);
     }

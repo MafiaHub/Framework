@@ -233,7 +233,7 @@ namespace Framework::Networking::Replication {
         void DeclineSimulation(NetworkEntity *entity, bool declined);
         // Client: an entity the server constructed here, made known to the world.
         void AdoptRemote(NetworkEntity *entity) {
-            _world.Adopt(entity, nullptr);
+            _world.Adopt(entity);
         }
 
         // --- Interest management ---
@@ -402,9 +402,9 @@ namespace Framework::Networking::Replication {
 
       private:
         // --- Entities by pointer: this class's own, the world's, and a client's (ClientEntities) ---
-        // Construct and start replicating an entity of the given type, nullptr if unknown; taken for
-        // `hold`, if there is one, as it enters the world.
-        NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold *hold);
+        // Server: construct and start replicating an entity of the given type, nullptr if unknown.
+        // It is locked for its creator, as `hold`, from before any other thread can find it.
+        NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold &hold);
         // Reads the NetworkIDManager's table under no lock of ReplicaManager3: on a server the
         // caller holds its world, or the entity's handle, for as long as it uses the pointer.
         NetworkEntity *GetEntityByNetworkID(MafiaNet::NetworkID networkId) const;
