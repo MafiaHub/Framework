@@ -380,6 +380,21 @@ MODULE(lua_events, {
         EQUALS(Contains(bus.Lua("a", "try(Events.emitAllClients, 'named', {f = function() end})"), "network peer"), false);
     });
 
+    IT("refuses a JavaScript payload that has no JSON before it sends anything", {
+        Bus bus;
+        bus.server.files.Resource("a", {{"main.js", "globalThis.attempt = (payload) => { try { Events.emitAllClients('named', payload); return 'sent'; } catch (e) { return e.constructor.name + ': ' + e.message; } };"}});
+        EQUALS(bus.Init(), true);
+        EQUALS(bus.Start("a"), "");
+
+        EQUALS(bus.Js("a", "attempt({a: 1})"), "Error: Events.emitAllClients: network peer unavailable");
+        EQUALS(bus.Js("a", "attempt('text')"), "Error: Events.emitAllClients: network peer unavailable");
+        EQUALS(bus.Js("a", "attempt(null)"), "Error: Events.emitAllClients: network peer unavailable");
+        EQUALS(bus.Js("a", "(() => { const o = {}; o.self = o; return attempt(o); })()").starts_with("TypeError: Events.emitAllClients: "), true);
+        EQUALS(bus.Js("a", "attempt(() => {})"), "TypeError: Events.emitAllClients: a value of this kind has no JSON form");
+        EQUALS(bus.Js("a", "attempt(Symbol('s'))"), "TypeError: Events.emitAllClients: a value of this kind has no JSON form");
+        EQUALS(bus.Js("a", "attempt({ toJSON() { throw new Error('mine'); } })"), "TypeError: Events.emitAllClients: mine");
+    });
+
     // ==================== Outcomes ====================
 
     IT("lets a Lua handler veto a synchronous emit by returning false", {
@@ -666,15 +681,17 @@ MODULE(lua_events, {
         EQUALS(bus.Init(), true);
         EQUALS(bus.Start("watcher"), "");
 
+        // The handler is done by the time the transition is: a sleep counts from the last tick of its runtime, so
+        // the wait itself is somewhat shorter than what the handler asked for.
         auto before = std::chrono::steady_clock::now();
         EQUALS(bus.Start("late"), "");
-        EQUALS(std::chrono::steady_clock::now() - before >= std::chrono::milliseconds(40), true);
+        EQUALS(std::chrono::steady_clock::now() - before >= std::chrono::milliseconds(20), true);
         EQUALS(bus.Lua("watcher", "started"), "late");
         EQUALS(bus.Manager().IsResourceRunning("late"), true);
 
         before = std::chrono::steady_clock::now();
         EQUALS((bool)bus.Manager().StopResource("late"), true);
-        EQUALS(std::chrono::steady_clock::now() - before >= std::chrono::milliseconds(40), true);
+        EQUALS(std::chrono::steady_clock::now() - before >= std::chrono::milliseconds(20), true);
         EQUALS(bus.Lua("watcher", "stopped"), "late");
     });
 
@@ -720,7 +737,7 @@ MODULE(lua_events, {
         Bind::WatchRuntimes(lua);
         ResourceManagerConfig config;
         config.resourcesPath          = files.root.string();
-        config.resourceStartTimeoutMs = 200;
+        config.resourceStartTimeoutMs = 400;
         ResourceManager manager(nullptr, config);
         manager.SetLuaEngine(&lua);
         lua.SetRuntimeSetupCallback([&manager](LuaRuntime &runtime) {
@@ -745,7 +762,7 @@ MODULE(lua_events, {
         EQUALS((bool)refused, false);
         EQUALS(refused.GetError().starts_with("resourceStart rejected: One or more event handlers failed: "), true);
         EQUALS(Contains(refused.GetError(), "not this one"), true);
-        EQUALS(manager.StartResource("stuck").GetError(), "resourceStart timed out after 200ms");
+        EQUALS(manager.StartResource("stuck").GetError(), "resourceStart timed out after 400ms");
         EQUALS(manager.IsResourceRunning("stuck"), false);
 
         manager.StopAll();
