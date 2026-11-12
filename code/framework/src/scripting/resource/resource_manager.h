@@ -358,9 +358,11 @@ namespace Framework::Scripting {
         void OnEntityCreated(uint64_t networkId);
         void OnEntityDestroyed(uint64_t networkId);
 
-        // Makes `resourceName` the one resource that owns the entity, which is destroyed when that resource stops:
-        // for a builtin that knows which resource made an entity, in a language OnEntityCreated cannot see the
-        // running script of. Does nothing for a name that is no resource of this manager.
+        // Makes `resourceName` the one resource that owns the entity, which is destroyed when that resource stops or
+        // fails: any other resource stops tracking it. For a builtin that knows from its call which resource made an
+        // entity. OnEntityCreated names the owner from the JavaScript isolate that is running, which is none
+        // while a Lua script runs outside the load of its file. Does nothing for a name that is no resource of
+        // this manager.
         void AssignEntity(std::string_view resourceName, uint64_t networkId);
 
         // Statistics

@@ -13,6 +13,7 @@
 #include "lua_runtime_ut.h"
 #include "nametag_ut.h"
 #include "node_test_helpers.h"
+#include "resource_manager_ut.h"
 #include "text_label_ut.h"
 
 #include "networking/replication/nametag_state.h"
@@ -30,7 +31,9 @@
 #include "scripting/scripting_catalog.h"
 #include "scripting/value_transfer.h"
 
+#include <chrono>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -196,6 +199,91 @@ namespace LuaBuiltinsPlayerTest {
             return '{' + Object.keys(value).sort().filter((key) => value[key] != null).map((key) => key + '=' + show(value[key])).join(',') + '}';
         }; 0
     )";
+
+    // A handle a project wrote by hand with v8pp: it has an id and does not derive from Entity.
+    struct ForeignHandle final {
+        explicit ForeignHandle(double id): id(id) {}
+
+        double GetId() const {
+            return id;
+        }
+        double GetX() const {
+            return 1.0;
+        }
+        double GetY() const {
+            return 2.0;
+        }
+        double GetZ() const {
+            return 3.0;
+        }
+
+        double id;
+
+        // Publishes the class as the global ForeignHandle. v8pp keeps it for the isolate until Builtins::UnregisterAll.
+        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            v8pp::class_<ForeignHandle> cls(isolate);
+            cls.ctor<double>().property("id", &ForeignHandle::GetId).property("x", &ForeignHandle::GetX).property("y", &ForeignHandle::GetY).property("z", &ForeignHandle::GetZ);
+            context->Global()->Set(context, v8pp::to_v8(isolate, "ForeignHandle"), cls.js_function_template()->GetFunction(context).ToLocalChecked()).Check();
+        }
+    };
+
+    // Resources of both languages under one manager, each runtime with TextLabel, over a world whose replication
+    // manager tells the resource manager of its entities, as the server instance wires it.
+    struct Owners final {
+        TextLabelWorld world;
+        LuaResourcesTest::Rig rig;
+
+        Owners() {
+            TestManagerHelper::RegisterEvents(rig.node, rig.manager, [this](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+                Builtins::RegisterValueTypes(isolate, context->Global());
+                TextLabel::Register(isolate, context->Global());
+                Bind::SetCallResourceManager(isolate, &rig.manager);
+            });
+            rig.lua.SetRuntimeSetupCallback([this](LuaRuntime &runtime) {
+                Bind::SetCallResourceManager(&runtime, &rig.manager);
+                Builtins::RegisterValueTypesLua(runtime.State(), Bind::Side::Server);
+                TextLabel::RegisterLua(runtime);
+            });
+            rig.lua.AddRuntimeDisposingListener([](LuaRuntime &runtime) {
+                Bind::SetCallResourceManager(&runtime, nullptr);
+            });
+            world.Manager()->SetOnEntityCreated([this](uint64_t networkId) {
+                rig.manager.OnEntityCreated(networkId);
+            });
+            world.Manager()->SetOnEntityDestroyed([this](uint64_t networkId) {
+                rig.manager.OnEntityDestroyed(networkId);
+            });
+        }
+
+        ~Owners() {
+            world.Manager()->SetOnEntityCreated({});
+            world.Manager()->SetOnEntityDestroyed({});
+        }
+
+        // What `expression` gives in the JavaScript runtime of the resource.
+        std::string Js(const std::string &resource, const std::string &expression) {
+            NodeRuntime *runtime = rig.node.GetResourceRuntime(resource);
+            return runtime != nullptr ? NodeTest::Eval(*runtime, expression) : "<no runtime>";
+        }
+
+        // Ticks both engines until the JavaScript `expression` is "true" in the resource, or time runs out.
+        bool Until(const std::string &resource, const std::string &expression) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while (std::chrono::steady_clock::now() < deadline) {
+                rig.node.Tick();
+                rig.Advance(5);
+                if (Js(resource, expression) == "true") {
+                    return true;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return false;
+        }
+
+        bool Lives(const std::string &id) {
+            return world.Manager()->GetEntityByNetworkID(std::stoull(id)) != nullptr;
+        }
+    };
 } // namespace LuaBuiltinsPlayerTest
 
 MODULE(lua_builtins_player, {
@@ -723,11 +811,105 @@ MODULE(lua_builtins_player, {
         EQUALS(world.Manager()->GetEntityByNetworkID(later) == nullptr, true);
         EQUALS(world.Manager()->GetEntityByNetworkID(mine) != nullptr, true);
 
-        // A label a script destroyed itself is nobody's any more.
-        EQUALS(server.Eval("other", "TextLabel.new(mine):destroy()"), "nil");
         server.module.GetResourceManager()->StopResource("other");
         EQUALS(world.Manager()->GetEntityByNetworkID(mine) == nullptr, true);
         server.module.Shutdown();
+    });
+
+    IT("gives a label to the resource whose script created it, in JavaScript and in Lua", {
+        LuaBuiltinsPlayerTest::Owners owners;
+        auto &rig = owners.rig;
+        EQUALS(rig.ready, true);
+        // `maker` exports a function that creates a label; `caller` creates one as it loads, one from a timer and
+        // one through that export.
+        rig.files.Resource("maker", {{"main.js", "Exports.register('make', (text) => String(TextLabel.create(0, 0, 0, text).id)); globalThis.own = String(TextLabel.create(0, 0, 0, 'maker').id);"}}, ",\"exports\":[\"make\"]");
+        rig.files.Resource("caller", {{"main.js", "globalThis.atLoad = String(TextLabel.create(0, 0, 0, 'load').id); globalThis.viaExport = Exports.get('maker', 'make')('export'); setTimeout(() => { globalThis.later = String(TextLabel.create(0, 0, 0, 'timer').id); }, 1);"}},
+            ",\"dependencies\":[\"maker\"]");
+        rig.files.Resource("luaside", {{"main.lua", "atLoad = math.tointeger(TextLabel.create(0, 0, 0, 'lua load').id)\nsetTimeout(function() later = math.tointeger(TextLabel.create(0, 0, 0, 'lua timer').id) end, 1)"}});
+        EQUALS(rig.Start("maker"), "");
+        EQUALS(rig.Start("caller"), "");
+        EQUALS(rig.Start("luaside"), "");
+        EQUALS(owners.Until("caller", "typeof later === 'string'"), true);
+        // The Lua clock is the rig's to move.
+        rig.Advance(60000);
+        EQUALS(rig.Eval("luaside", "later ~= nil"), "true");
+
+        const std::string own = owners.Js("maker", "own"), atLoad = owners.Js("caller", "atLoad"), later = owners.Js("caller", "later"), viaExport = owners.Js("caller", "viaExport");
+        const std::string luaLoad = rig.Eval("luaside", "atLoad"), luaLater = rig.Eval("luaside", "later");
+        EQUALS(owners.Lives(own) && owners.Lives(atLoad) && owners.Lives(later) && owners.Lives(viaExport) && owners.Lives(luaLoad) && owners.Lives(luaLater), true);
+
+        // The caller takes what it created itself, at load and from its timer. What the export created is the
+        // maker's, though the caller asked for it.
+        EQUALS((bool)rig.manager.StopResource("caller"), true);
+        EQUALS(owners.Lives(atLoad), false);
+        EQUALS(owners.Lives(later), false);
+        EQUALS(owners.Lives(viaExport), true);
+        EQUALS(owners.Lives(own) && owners.Lives(luaLoad) && owners.Lives(luaLater), true);
+
+        EQUALS((bool)rig.manager.StopResource("luaside"), true);
+        EQUALS(owners.Lives(luaLoad), false);
+        EQUALS(owners.Lives(luaLater), false);
+        EQUALS(owners.Lives(own) && owners.Lives(viaExport), true);
+
+        EQUALS((bool)rig.manager.StopResource("maker"), true);
+        EQUALS(owners.Lives(own), false);
+        EQUALS(owners.Lives(viaExport), false);
+    });
+
+    IT("forgets a label its script destroyed, so that the id is nobody's when it is used again", {
+        LuaBuiltinsPlayerTest::Owners owners;
+        auto &rig = owners.rig;
+        rig.files.Resource("fleeting", {{"main.js", "const label = TextLabel.create(0, 0, 0, 'gone'); globalThis.id = String(label.id); label.destroy();"}});
+        rig.files.Resource("luafleeting", {{"main.lua", "local label = TextLabel.create(0, 0, 0, 'gone')\nid = math.tointeger(label.id)\nlabel:destroy()"}});
+        EQUALS(rig.Start("fleeting"), "");
+        EQUALS(rig.Start("luafleeting"), "");
+        const std::string ids[] {owners.Js("fleeting", "id"), rig.Eval("luafleeting", "id")};
+        EQUALS(owners.Lives(ids[0]) || owners.Lives(ids[1]), false);
+
+        // Entities of the host under the ids the labels had: a resource that still tracked one would destroy it.
+        for (const std::string &id : ids) {
+            owners.world.Manager()->CreateEntity(owners.world.targetType)->SetNetworkID(std::stoull(id));
+        }
+        EQUALS(owners.Lives(ids[0]) && owners.Lives(ids[1]), true);
+        EQUALS((bool)rig.manager.StopResource("fleeting"), true);
+        EQUALS((bool)rig.manager.StopResource("luafleeting"), true);
+        EQUALS(owners.Lives(ids[0]) && owners.Lives(ids[1]), true);
+    });
+
+    // ==================== Handles of other classes ====================
+
+    IT("takes a handle a project bound by hand, with an id and no Entity behind it, as JavaScript always did", {
+        Stage stage;
+        stage.js.js.Enter([](v8::Isolate *isolate, v8::Local<v8::Context> context) {
+            LuaBuiltinsPlayerTest::ForeignHandle::Register(isolate, context);
+        });
+        stage.js.Eval(LuaBuiltinsPlayerTest::kJsShow);
+        stage.js.Eval("globalThis.fe = new ForeignHandle(" + stage.e + "); globalThis.fa = new ForeignHandle(" + stage.a + "); globalThis.fb = new ForeignHandle(" + stage.b + "); globalThis.none = new ForeignHandle(99999); 0");
+
+        EQUALS(stage.js.Thrown("globalThis.l = TextLabel.create(0, 0, 0, 'x', { attachTo: fe, showTo: [fa], hideFrom: [fb] })"), "no error");
+        EQUALS(stage.js.Eval("l.getOptions().attachTo + ' ' + show(l.getAudience())"), stage.e + " {hideForTarget=false,hideFrom=[" + stage.b + "],showTo=[" + stage.a + "]}");
+        EQUALS(stage.js.Thrown("l.detach(); l.attachTo(fa); l.setVisibleFor(fb, true); l.setVisibleFor(fa, false)"), "no error");
+        EQUALS(stage.js.Eval("l.getOptions().attachTo + ' ' + show(l.getAudience())"), stage.a + " {hideForTarget=false,hideFrom=[" + stage.a + "],showTo=[" + stage.b + "]}");
+        EQUALS(stage.js.Thrown("l.update({ attachTo: fe })"), "no error");
+        EQUALS(stage.js.Eval("String(l.getOptions().attachTo)"), stage.e);
+
+        // Its id is checked as any id is.
+        EQUALS(stage.js.Thrown("l.attachTo(none)"), "TypeError: TextLabel: attachTo must be another live entity");
+        EQUALS(stage.js.Thrown("l.setVisibleFor(none, true)"), "Error: TextLabel: setVisibleFor: 99999 is not a player's avatar");
+        EQUALS(stage.js.Thrown("l.attachTo(new ForeignHandle(1.5))"), "TypeError: TextLabel: target must be an entity or its network id");
+        // A bound object without an id is no target.
+        EQUALS(stage.js.Thrown("l.attachTo(new Vector3(1, 2, 3))"), "TypeError: TextLabel: target must be an entity or its network id");
+
+        // Any bound object with an x, a y and a z is a place.
+        EQUALS(stage.js.Thrown("l.update({ offset: fe, position: new Vector4(7, 8, 9, 1) })"), "no error");
+        EQUALS(stage.js.Eval("show(l.getOptions().offset) + show(l.getOptions().position)"), "{x=1,y=2,z=3}{x=7,y=8,z=9}");
+        EQUALS(stage.js.Thrown("l.update({ offset: new Vector2(1, 2) })"), "TypeError: TextLabel: offset must be a number from -1e+09 to 1e+09");
+
+        // In Lua a bound object is read through the properties its class declares.
+        EQUALS(stage.lua.Run("l = TextLabel.create(0, 0, 0, 'x') l:update({ attachTo = Entity.new(" + stage.e + "), offset = Vector4.new(4, 5, 6, 1) })"), "");
+        EQUALS(stage.lua.Eval("math.tointeger(l:getOptions().attachTo) .. ' ' .. l:getOptions().offset.x .. l:getOptions().offset.z"), stage.e + " 4.06.0");
+        EQUALS(stage.lua.Raised("l:attachTo(Vector3.new(1, 2, 3))"), "TextLabel: target must be an entity or its network id");
+        EQUALS(stage.lua.Raised("l:update({ offset = Vector2.new(1, 2) })"), "TextLabel: offset must be a number from -1e+09 to 1e+09");
     });
 
     IT("carries a Player and a TextLabel to another runtime as themselves, in both languages", {

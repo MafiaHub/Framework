@@ -10,11 +10,8 @@
 #include "../lua/lua_runtime.h"
 #include "../resource/resource_manager.h"
 #include "../scripting_catalog.h"
-#include "../transferred_value.h"
 #include "color.h"
-#include "quaternion.h"
 #include "vector3.h"
-#include "vector4.h"
 
 #include <core_modules.h>
 #include <external/imgui/widgets/world_text_markup.h>
@@ -105,25 +102,13 @@ namespace Framework::Scripting::Builtins {
             return false;
         }
 
-        // Whether a value that reads as Nil is JavaScript's null. This API gives null a meaning a key left out
-        // does not have (attachTo: null detaches, showTo: null is everyone), and refuses it where a value of
-        // another type is refused. A Value has the one Nil for both; a copy of it tells them apart. Lua has no
-        // null.
-        bool IsNull(const Bind::Call &call, const Bind::Value &value) {
-            if (!value.IsNil() || call.GetLanguage() != Language::JavaScript) {
-                return false;
-            }
-            const auto copied = value.ToTransfer();
-            return copied && copied.GetValue().kind == TransferredValue::Kind::Null;
-        }
-
         // What stands for "none" where an option takes null with a meaning: null in JavaScript. A Lua table
         // cannot hold nil, so a Lua script passes false.
         bool IsNone(const Bind::Call &call, const Bind::Value &value) {
             if (call.GetLanguage() == Language::Lua) {
                 return value.IsBoolean() && !value.AsBoolean();
             }
-            return IsNull(call, value);
+            return value.IsNull();
         }
 
         // What JavaScript calls an object and not an array: a plain object or table, a bound object, a function.
@@ -178,17 +163,8 @@ namespace Framework::Scripting::Builtins {
                 return glm::vec3(vector->getX(), vector->getY(), vector->getZ());
             }
             Bind::Value parts[3];
-            // The other bound vectors have an x, a y and a z to read, as an object with these keys has.
-            const auto *vector4    = value.AsBound<Vector4>();
-            const auto *quaternion = value.AsBound<Quaternion>();
-            const auto kind        = value.Kind();
-            if (vector4 || quaternion) {
-                const glm::vec3 xyz = vector4 ? glm::vec3(vector4->getX(), vector4->getY(), vector4->getZ()) : glm::vec3(quaternion->getX(), quaternion->getY(), quaternion->getZ());
-                for (int i = 0; i < 3; ++i) {
-                    parts[i] = call.Number(xyz[i]);
-                }
-            }
-            else if (kind == Bind::ValueKind::Array && value.Length() == 3) {
+            const auto kind = value.Kind();
+            if (kind == Bind::ValueKind::Array && value.Length() == 3) {
                 for (size_t i = 0; i < 3; ++i) {
                     parts[i] = value.At(i);
                     if (call.HasThrown()) {
@@ -199,8 +175,9 @@ namespace Framework::Scripting::Builtins {
             else if (kind == Bind::ValueKind::Array || IsObject(value)) {
                 constexpr std::string_view keys[] {"x", "y", "z"};
                 for (int i = 0; i < 3; ++i) {
-                    // Empty when a getter of the script threw.
-                    parts[i] = value.Get(keys[i]);
+                    // As a script reads them: the keys of a table, the properties of any bound vector. Empty when
+                    // a getter threw.
+                    parts[i] = value.Member(keys[i]);
                     if (call.HasThrown()) {
                         return std::nullopt;
                     }
@@ -239,27 +216,23 @@ namespace Framework::Scripting::Builtins {
             return std::nullopt;
         }
 
-        // An entity handle, a table or an object with a numeric id, or a network id. `none` is whether the value
+        // An entity handle (anything with a numeric id) or a network id. `none` is whether the value
         // stands for no entity, which detaches, as 0 does.
         std::optional<uint64_t> Target(Bind::Call &call, const Bind::Value &value, const std::string &name, bool none) {
             if (none) {
                 return 0;
             }
-            double n = NAN;
-            if (const auto *entity = value.AsBound<Entity>()) {
-                n = static_cast<double>(entity->GetId());
-            }
-            else {
-                Bind::Value id  = value;
-                const auto kind = value.Kind();
-                if (kind == Bind::ValueKind::Object || kind == Bind::ValueKind::Array) {
-                    id = value.Get("id");
-                    if (call.HasThrown()) {
-                        return std::nullopt;
-                    }
+            // The id of a handle is read as a script reads it, so a handle of any bound class has one, whether or
+            // not it derives from Entity.
+            Bind::Value id  = value;
+            const auto kind = value.Kind();
+            if (kind == Bind::ValueKind::Object || kind == Bind::ValueKind::Array || kind == Bind::ValueKind::Bound) {
+                id = value.Member("id");
+                if (call.HasThrown()) {
+                    return std::nullopt;
                 }
-                n = id.IsNumber() ? id.AsNumber() : NAN;
             }
+            const double n = id.IsNumber() ? id.AsNumber() : NAN;
             if (!std::isfinite(n) || n < 0.0 || n > 9007199254740991.0 || std::floor(n) != n) {
                 Fail(call, name + " must be an entity or its network id");
                 return std::nullopt;
@@ -310,7 +283,7 @@ namespace Framework::Scripting::Builtins {
             Object,
         };
         BlockState Block(Bind::Call &call, const Bind::Value &value, const std::string &name) {
-            if (IsNull(call, value) || (value.IsBoolean() && !value.AsBoolean())) {
+            if (value.IsNull() || (value.IsBoolean() && !value.AsBoolean())) {
                 return BlockState::Off;
             }
             if (value.IsBoolean()) {
@@ -330,7 +303,7 @@ namespace Framework::Scripting::Builtins {
             if (call.HasThrown()) {
                 return false;
             }
-            if (value.IsNil() && !IsNull(call, value)) {
+            if (value.IsNil() && !value.IsNull()) {
                 return true;
             }
             const auto parsed = read(value);
@@ -359,7 +332,7 @@ namespace Framework::Scripting::Builtins {
                     return false;
                 }
                 // A key left out. null is a value, wrong for most keys and with a meaning of its own for some.
-                if (value.IsNil() && !IsNull(call, value)) {
+                if (value.IsNil() && !value.IsNull()) {
                     continue;
                 }
                 const std::string name(key);
@@ -892,12 +865,12 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
             // null detaches, as 0 does. Lua, which has no null, has 0 and detach().
-            const auto target = Target(call, call.Arg(0), "target", IsNull(call, call.Arg(0)));
+            const auto target = Target(call, call.Arg(0), "target", call.Arg(0).IsNull());
             if (!target) {
                 return;
             }
             std::optional<glm::vec3> offset = glm::vec3(0.0f);
-            if (!call.Arg(1).IsNil() || IsNull(call, call.Arg(1))) {
+            if (!call.Arg(1).IsNil() || call.Arg(1).IsNull()) {
                 offset = Vec3(call, call.Arg(1), "offset");
                 if (!offset) {
                     return;
@@ -971,9 +944,15 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
 
-            // A resource owns the labels it makes, and they go when it stops. The resource manager is told of every
-            // entity made and names its owner from the JavaScript that is running (ResourceManager::OnEntityCreated);
-            // the call names it in either language.
+            // A resource owns the labels it makes, and they go when it stops. The owner is the resource that is
+            // calling, named by the call: the resource of the isolate or of the Lua state the script runs in. So a
+            // label made at load, from a timer or from a handler is the calling resource's, and one an export of B
+            // makes while A calls it is B's.
+            //
+            // The server also tells the resource manager of every entity made (ResourceManager::OnEntityCreated),
+            // which names the same resource for JavaScript, from the isolate that is running, and none for Lua
+            // outside the load of a script, where no JavaScript runs. This call is what makes a Lua resource the
+            // owner, and what makes a JavaScript one the owner where a host wired no such hook.
             if (auto *manager = call.GetResourceManager()) {
                 manager->AssignEntity(call.ResourceName(), label->GetNetworkID());
             }
