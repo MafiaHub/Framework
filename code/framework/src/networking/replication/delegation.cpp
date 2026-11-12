@@ -24,6 +24,17 @@ namespace Framework::Networking::Replication {
         // Above zero while this thread is inside a pass, a disconnect's walk, or the delivery that
         // follows either: a pass asked for meanwhile is left to the next one.
         thread_local int t_walking = 0;
+        // Counts this thread into a pass or walk for a scope, whichever way the scope is left.
+        struct Walking final {
+            Walking() {
+                ++t_walking;
+            }
+            ~Walking() {
+                --t_walking;
+            }
+            Walking(const Walking &)            = delete;
+            Walking &operator=(const Walking &) = delete;
+        };
     } // namespace
 
     // One handover, for the handlers that were subscribed when it was made.
@@ -187,7 +198,7 @@ namespace Framework::Networking::Replication {
         // gone can never report again. Hand those entities back to the server here, so they are
         // dormant rather than owned-by-nobody until the next pass, and drop any pin naming that
         // client -- a pin is to a player, and that player has left.
-        ++t_walking;
+        const Walking walking;
         _manager->GetWorld().ForEach<NetworkEntity>([&](Ref<NetworkEntity> &entity) {
             if (entity->GetDelegationPolicy() == nullptr) {
                 return;
@@ -211,7 +222,6 @@ namespace Framework::Networking::Replication {
         if (t_walking == 1) {
             DeliverNotices();
         }
-        --t_walking;
     }
 
     void DelegationManager::Update() {
@@ -396,13 +406,12 @@ namespace Framework::Networking::Replication {
             return;
         }
         World::RequireNoneHeld("a delegation pass was run");
-        ++t_walking;
+        const Walking walking;
         RunPass();
         // What the pass put off while it had ReplicaManager3's world: functions queued with
         // World::WhenNoneHeld (an entity's OnSimulatorChanged), state-change handlers, teardowns.
         World::Settle();
         DeliverNotices();
-        --t_walking;
     }
 
     void DelegationManager::RunPass() {

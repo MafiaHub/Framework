@@ -298,7 +298,9 @@ namespace Framework::Integrations::Server {
                     ready = _readyPlayerGuids.contains(static_cast<uint64_t>(guid));
                 }
                 if (ready) {
-                    OnPlayerDisconnect(guid, replication->GetWorld());
+                    GuardOverride("OnPlayerDisconnect", static_cast<uint64_t>(guid), [&] {
+                        OnPlayerDisconnect(guid, replication->GetWorld());
+                    });
                 }
             });
         }
@@ -453,6 +455,18 @@ namespace Framework::Integrations::Server {
         }
         _resourcesBooted = true;
         return {};
+    }
+
+    void Instance::GuardOverride(const char *name, uint64_t guid, const fu2::function<void() const> &call) {
+        try {
+            call();
+        }
+        catch (const std::exception &error) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("{} threw for guid {}: {}", name, guid, error.what());
+        }
+        catch (...) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("{} threw for guid {}", name, guid);
+        }
     }
 
     void Instance::PostToScripts(Utils::TaskScheduler::Task task) {
@@ -776,7 +790,9 @@ namespace Framework::Integrations::Server {
                 }
             }
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client spawn ready for player guid {}", guid.g);
-            OnPlayerReady(MafiaNet::ToPeerGuid(guid), net->GetReplicationManager()->GetWorld());
+            GuardOverride("OnPlayerReady", guid.g, [&] {
+                OnPlayerReady(MafiaNet::ToPeerGuid(guid), net->GetReplicationManager()->GetWorld());
+            });
             net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
@@ -838,7 +854,11 @@ namespace Framework::Integrations::Server {
             data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
             data.discordName = identity.discordName;
-            OnPlayerConnect(data, world);
+            // Whatever the override leaves undone, the connection goes on to replicate: it is not
+            // left half joined.
+            GuardOverride("OnPlayerConnect", guid.g, [&] {
+                OnPlayerConnect(data, world);
+            });
 
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);

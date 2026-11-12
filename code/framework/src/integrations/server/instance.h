@@ -282,6 +282,10 @@ namespace Framework::Integrations::Server {
 
         void InitEndpoints();
         void InitNetworkingMessages();
+        // Calls a mod's override where a packet is handled. One that throws is logged and the packet
+        // thread carries on with what the Framework does next for that connection: thrown out of
+        // RakPeer::Receive it would end the thread and the process.
+        static void GuardOverride(const char *name, uint64_t guid, const fu2::function<void() const> &call);
         // A connection request arrived: hand it to the admission gate, or admit it at once when no
         // script gates connections. Refused outright when it carries no identity.
         void OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &identity);

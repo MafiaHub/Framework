@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -49,7 +50,18 @@ namespace Framework::Networking {
                 return;
             }
             const auto start = std::chrono::steady_clock::now();
-            cb(bs, Sender(*this, packet->guid), _replicationManager->GetWorld());
+            // A handler that throws loses its own packet and nothing else: left to unwind through
+            // RakPeer::Receive it would end the packet thread, and the process with it. Its handles
+            // are let go by the unwinding; the sender is not dropped.
+            try {
+                cb(bs, Sender(*this, packet->guid), _replicationManager->GetWorld());
+            }
+            catch (const std::exception &error) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Handler of RPC {:016x} threw on a packet from {}: {}", identifier.digest, packet->guid.g, error.what());
+            }
+            catch (...) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Handler of RPC {:016x} threw on a packet from {}", identifier.digest, packet->guid.g);
+            }
             NoteHandlerTime(identifier, std::chrono::steady_clock::now() - start);
         });
     }

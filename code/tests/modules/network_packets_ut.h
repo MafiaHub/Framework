@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -507,6 +508,76 @@ MODULE(network_packets, {
         GREATEREQ(warnings, 1);
         LESSEREQ(warnings, 3);
         EQUALS(named, true);
+    });
+
+    IT("loses only its own packet when a handler throws, with nothing left held", {
+        using namespace Framework::Networking;
+        NetworkPacketsTest::Loopback net;
+        EQUALS(net.Connect(), true);
+
+        auto logger = Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING, false);
+        auto logs   = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(8);
+        logs->set_pattern("%v");
+        struct RestoreLogger {
+            std::shared_ptr<spdlog::logger> logger;
+            spdlog::level::level_enum level;
+            ~RestoreLogger() {
+                logger->sinks().pop_back();
+                logger->set_level(level);
+            }
+        } restoreLogger {logger, logger->level()};
+        logger->sinks().push_back(logs);
+        logger->set_level(spdlog::level::err);
+
+        Replication::World &world = net.server.GetReplicationManager()->GetWorld();
+        uint64_t avatarId         = 0;
+        {
+            auto avatar = world.Create<NetworkPacketsTest::Avatar>();
+            avatarId    = avatar.Id();
+            net.server.GetReplicationManager()->SetViewer(net.ClientGuid(), avatar);
+        }
+        std::vector<std::string> handled;
+        int deferredRan = 0;
+        net.server.RegisterRPC<RPC::ChatMessage>([&](const RPC::ChatMessage &message, Sender sender, Replication::World &handlerWorld) {
+            const auto avatar = handlerWorld.Write<NetworkPacketsTest::Avatar>(sender.Avatar());
+            if (message.text == "throw") {
+                // With an entity held and work put off until it is let go, as a real handler may have.
+                Replication::World::WhenNoneHeld([&] {
+                    ++deferredRan;
+                });
+                throw std::runtime_error("the handler gave up");
+            }
+            ++avatar->messages;
+            handled.push_back(message.text);
+        });
+
+        RPC::ChatMessage message {};
+        message.text = "throw";
+        net.client.BroadcastRPC(message);
+        message.text = "after";
+        net.client.BroadcastRPC(message);
+        EQUALS(net.rig.PumpUntil([&] { return !handled.empty(); }), true);
+
+        EQUALS(handled.size(), static_cast<size_t>(1));
+        STREQUALS(handled.empty() ? "" : handled.front().c_str(), "after");
+        // The handle went with the unwinding, and what was put off ran when it did.
+        EQUALS(Replication::World::HeldByThisThread(), static_cast<size_t>(0));
+        EQUALS(deferredRan, 1);
+        int messages = 0;
+        {
+            const auto avatar = world.Read<NetworkPacketsTest::Avatar>(avatarId);
+            messages          = avatar ? avatar->messages : -1;
+        }
+        EQUALS(messages, 1);
+        // Said once, with the RPC and what was thrown; the sender is still connected.
+        char digest[32];
+        snprintf(digest, sizeof(digest), "%016llx", static_cast<unsigned long long>(RPC::ChatMessage::kIdentifier.digest));
+        int reports = 0;
+        for (const std::string &line : logs->last_formatted()) {
+            reports += line.find(std::string("Handler of RPC ") + digest) != std::string::npos && line.find("the handler gave up") != std::string::npos ? 1 : 0;
+        }
+        EQUALS(reports, 1);
+        EQUALS(net.server.GetPlayerCount(), 1u);
     });
 
     IT("gives a sender without an avatar the id 0", {

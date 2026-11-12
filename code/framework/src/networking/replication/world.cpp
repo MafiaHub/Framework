@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <deque>
+#include <exception>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -25,9 +27,9 @@ namespace Framework::Networking::Replication {
             World *world;
             std::shared_ptr<Detail::WorldEntitySlot> slot;
         };
-        thread_local std::vector<Doomed> t_doomed;
+        thread_local std::deque<Doomed> t_doomed;
         // What this thread put off until it holds nothing (World::WhenNoneHeld), oldest first.
-        thread_local std::vector<fu2::unique_function<void()>> t_deferred;
+        thread_local std::deque<fu2::unique_function<void()>> t_deferred;
         // Set while this thread tears one down or runs one of those: a handle taken and released
         // inside must not start the next.
         thread_local bool t_draining = false;
@@ -201,19 +203,35 @@ namespace Framework::Networking::Replication {
         if (t_draining || t_heldOff != 0) {
             return;
         }
-        t_draining = true;
-        while (t_locks.empty() && (!t_deferred.empty() || !t_doomed.empty())) {
-            if (!t_deferred.empty()) {
-                fu2::unique_function<void()> next = std::move(t_deferred.front());
-                t_deferred.erase(t_deferred.begin());
-                next();
-                continue;
+        struct Draining {
+            Draining() {
+                t_draining = true;
             }
-            const Doomed next = std::move(t_doomed.front());
-            t_doomed.erase(t_doomed.begin());
-            next.world->Teardown(next.slot);
+            ~Draining() {
+                t_draining = false;
+            }
+        } draining;
+        while (t_locks.empty() && (!t_deferred.empty() || !t_doomed.empty())) {
+            // This runs from a handle's release, which is a destructor: what is thrown here has
+            // nowhere to go. It is logged, and the rest still runs.
+            try {
+                if (!t_deferred.empty()) {
+                    fu2::unique_function<void()> next = std::move(t_deferred.front());
+                    t_deferred.pop_front();
+                    next();
+                    continue;
+                }
+                const Doomed next = std::move(t_doomed.front());
+                t_doomed.pop_front();
+                next.world->Teardown(next.slot);
+            }
+            catch (const std::exception &error) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("World: what was put off until nothing was held threw: {}", error.what());
+            }
+            catch (...) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("World: what was put off until nothing was held threw");
+            }
         }
-        t_draining = false;
     }
 
     World::HoldOff::HoldOff() {
