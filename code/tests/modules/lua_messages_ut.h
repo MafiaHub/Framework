@@ -792,7 +792,8 @@ MODULE(lua_messages, {
 
             // A frame: time moves on by `ms`, and the manager acts on what its handlers failed with.
             void Frame(int ms) {
-                clock += std::chrono::milliseconds(ms);
+                // A script's sleep starts from the real clock: a frame never falls behind it.
+                clock = std::max(clock, std::chrono::steady_clock::now()) + std::chrono::milliseconds(ms);
                 lua.Tick(clock);
                 if (manager != nullptr) {
                     manager->ProcessHandlerFailures();

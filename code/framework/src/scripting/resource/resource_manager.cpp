@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <set>
 #include <stack>
 #include <thread>
@@ -201,7 +202,9 @@ namespace Framework::Scripting {
                 return 0;
             }
             std::error_code ec;
-            int64_t newest = 0;
+            // The epoch of the file clock is the library's: libstdc++ puts it in 2174, which makes every count
+            // of today negative, so start below all of them.
+            int64_t newest = std::numeric_limits<int64_t>::min();
             std::filesystem::recursive_directory_iterator it(path, std::filesystem::directory_options::skip_permission_denied, ec);
             const std::filesystem::recursive_directory_iterator end;
             if (ec) {

@@ -706,17 +706,17 @@ MODULE(lua_interop, {
         bus.server.module.Update();
 
         const std::vector<std::string> lines = log.Lines();
-        const std::string near               = LuaInteropTest::Find(lines, "Event 'near' handler error");
-        EQUALS(LuaRuntimeTest::Contains(near, "[rude] Event 'near' handler error: "), true);
-        EQUALS(LuaRuntimeTest::Contains(near, "\n[rude] [admin] forged line"), true);
-        EQUALS(LuaInteropTest::IsClean(near, "rude"), true);
-        EQUALS(LuaInteropTest::HasStackLine(near, "rude"), true);
+        const std::string nearLine               = LuaInteropTest::Find(lines, "Event 'near' handler error");
+        EQUALS(LuaRuntimeTest::Contains(nearLine, "[rude] Event 'near' handler error: "), true);
+        EQUALS(LuaRuntimeTest::Contains(nearLine, "\n[rude] [admin] forged line"), true);
+        EQUALS(LuaInteropTest::IsClean(nearLine, "rude"), true);
+        EQUALS(LuaInteropTest::HasStackLine(nearLine, "rude"), true);
 
-        const std::string far = LuaInteropTest::Find(lines, "Event 'far' handler error");
-        EQUALS(LuaRuntimeTest::Contains(far, "[rude] Event 'far' handler error: "), true);
-        EQUALS(LuaRuntimeTest::Contains(far, "\n[rude] [admin] forged line"), true);
-        EQUALS(LuaInteropTest::IsClean(far, "rude"), true);
-        EQUALS(LuaInteropTest::HasStackLine(far, "rude"), true);
+        const std::string farLine = LuaInteropTest::Find(lines, "Event 'far' handler error");
+        EQUALS(LuaRuntimeTest::Contains(farLine, "[rude] Event 'far' handler error: "), true);
+        EQUALS(LuaRuntimeTest::Contains(farLine, "\n[rude] [admin] forged line"), true);
+        EQUALS(LuaInteropTest::IsClean(farLine, "rude"), true);
+        EQUALS(LuaInteropTest::HasStackLine(farLine, "rude"), true);
 
         // The name of an event is the script's too.
         const std::string named = LuaInteropTest::Find(lines, "named' handler error");
