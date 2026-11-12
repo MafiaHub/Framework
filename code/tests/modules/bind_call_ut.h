@@ -166,7 +166,38 @@ namespace BindCallTest {
                                                [](Call &call) {
                                                    call.Return(call.Self<Counter>() != nullptr);
                                                },
-                                               Doc("Tells whether a static has a receiver.").ReturnType(TypeOf<bool>()));
+                                               Doc("Tells whether a static has a receiver.").ReturnType(TypeOf<bool>()))
+                                           .Property(
+                                               "level", Type::Custom("number | string", "number|string"),
+                                               [](Call &call) {
+                                                   if (const Counter *self = call.Self<Counter>()) {
+                                                       call.Return(self->get());
+                                                   }
+                                               },
+                                               [](Call &call) {
+                                                   Counter *self = call.Self<Counter>();
+                                                   if (self == nullptr) {
+                                                       return;
+                                                   }
+                                                   if (const auto number = call.Arg(0).AsInteger()) {
+                                                       self->set(static_cast<int>(*number));
+                                                   }
+                                                   else if (call.Arg(0).IsString()) {
+                                                       self->set(static_cast<int>(call.Arg(0).AsString().size()));
+                                                   }
+                                                   else {
+                                                       call.ThrowTypeError("CallCounter.level: expected a number or a string");
+                                                   }
+                                               },
+                                               "The value, set from a number or from the length of a string.")
+                                           .Property(
+                                               "doubled", TypeOf<int>(),
+                                               [](Call &call) {
+                                                   if (const Counter *self = call.Self<Counter>()) {
+                                                       call.Return(self->get() * 2);
+                                                   }
+                                               },
+                                               {}, "Twice the value.", Side::Server);
         return definition;
     }
 
@@ -1349,10 +1380,36 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("(function() local c = CallCounter.new(1) return c.late() .. ' ' .. c:get() end)()"), "none:Nil:Bound 1");
     });
 
+    IT("reads and writes a property written as context functions", {
+        Runtimes runtimes;
+        std::string mismatches;
+        mismatches += runtimes.Both("new CallCounter(4).level", "CallCounter.new(4).level", "4");
+        mismatches += runtimes.Both("{ const c = new CallCounter(1); c.level = 9; c.get() }", "(function() local c = CallCounter.new(1) c.level = 9 return c:get() end)()", "9");
+        // The setter takes what no one signature says.
+        mismatches += runtimes.Both("{ const c = new CallCounter(1); c.level = 'four'; c.level }", "(function() local c = CallCounter.new(1) c.level = 'four' return c.level end)()", "4");
+        // A class derived from the receiver's has the property.
+        mismatches += runtimes.Both("{ const s = new CallStepper(1); s.level = 6; s.level + s.doubled }", "(function() local s = CallStepper.new(1) s.level = 6 return s.level + s.doubled end)()", "18");
+        EQUALS(mismatches, "");
+
+        EQUALS(runtimes.Js("try { new CallCounter(1).level = true } catch (e) { e.name + ': ' + e.message }"), "TypeError: CallCounter.level: expected a number or a string");
+        EQUALS(runtimes.Lua("(function() local c = CallCounter.new(1) c.level = true end)()"), "<error> eval:1: CallCounter.level: expected a number or a string");
+
+        // Without a setter it is read-only, as a typed one is.
+        EQUALS(runtimes.Js("{ const c = new CallCounter(2); c.doubled = 50; c.doubled }"), "4");
+        EQUALS(runtimes.Lua("(function() local c = CallCounter.new(2) c.doubled = 50 end)()"), "<error> eval:1: attempt to set 'doubled' on CallCounter");
+
+        const Bind::ClassDesc &desc = CounterDefinition().Describe();
+        EQUALS(desc.properties.size(), 2u);
+        EQUALS(desc.properties[0].name + ":" + Bind::ToTypeScript(desc.properties[0].type) + ":" + Bind::ToLuaAnnotation(desc.properties[0].type) + ":" + (desc.properties[0].readonly ? "readonly" : "writable"), "level:number | string:number|string:writable");
+        EQUALS(desc.properties[1].name + ":" + Bind::ToTypeScript(desc.properties[1].type) + ":" + (desc.properties[1].readonly ? "readonly" : "writable"), "doubled:number:readonly");
+    });
+
     IT("leaves a method of another side out", {
         Runtimes runtimes(Side::Client);
         EQUALS(runtimes.Js("typeof new CallCounter(1).serverBump"), "undefined");
         EQUALS(runtimes.Lua("type(CallCounter.new(1).serverBump)"), "nil");
+        EQUALS(runtimes.Js("typeof new CallCounter(1).doubled + typeof new CallCounter(1).level"), "undefinednumber");
+        EQUALS(runtimes.Lua("type(CallCounter.new(1).doubled) .. type(CallCounter.new(1).level)"), "nilnumber");
         EQUALS(runtimes.Both("new CallCounter(1).bump(1)", "CallCounter.new(1):bump(1)", "1"), "");
     });
 

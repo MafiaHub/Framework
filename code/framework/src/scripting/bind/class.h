@@ -487,6 +487,26 @@ namespace Framework::Scripting::Bind {
             return *this;
         }
 
+        // A property written as context functions, for what a signature cannot say, such as a setter that takes one
+        // of several types: `type` is what the property is described as. Each finds its receiver with
+        // Call::Self<T>(), as a method does. The getter answers with Call::Return, and nothing is nil; the setter
+        // reads the new value as Call::Arg(0). An empty setter makes the property read-only.
+        Class &Property(std::string name, TypeRef type, NativeFunction getter, NativeFunction setter, std::string description, Side side = Side::Shared) {
+            PropertyDesc desc;
+            desc.name        = name;
+            desc.type        = std::move(type);
+            desc.description = std::move(description);
+            desc.readonly    = setter.empty();
+            desc.side        = side;
+
+            auto read  = std::make_shared<NativeFunction>(std::move(getter));
+            auto write = desc.readonly ? nullptr : std::make_shared<NativeFunction>(std::move(setter));
+            Detail::LuaAddProperty(*_record, name, side, Detail::LuaNativeThunk(read), write != nullptr ? std::optional<Detail::LuaThunk>(Detail::LuaNativeThunk(write)) : std::nullopt);
+            _v8->members.push_back(Detail::V8NativeProperty<T>(side, std::move(name), std::move(read), std::move(write), Detail::V8PropertyOptions(desc)));
+            _record->desc.properties.push_back(std::move(desc));
+            return *this;
+        }
+
         // Gives the class a Lua operator. `function` takes every operand: two, or one for Unm and Len. Several
         // functions declared for one event are tried in order and the first that takes the operands is called,
         // which is how `vector * number` and `number * vector` coexist. Eq is false, not an error, when none

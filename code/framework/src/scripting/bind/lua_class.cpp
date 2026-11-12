@@ -233,6 +233,17 @@ namespace Framework::Scripting::Bind::Detail {
             return luaL_error(L, "attempt to set '%s' on %s", luaL_tolstring(L, 2, nullptr), lua_tostring(L, lua_upvalueindex(1)));
         }
 
+        // Calls the getter or the setter of a property on the stack as it stands: the receiver, then what a setter
+        // is given. One written as a context function looks for its receiver and reads the value itself.
+        int InvokeAccessor(lua_State *L, const LuaFunction &accessor) {
+            if (accessor.thunk.native != nullptr) {
+                return LuaInvokeNative(L, *accessor.thunk.native, true, accessor.label.c_str());
+            }
+            void *self = CheckReceiver(L, accessor);
+            CheckArguments(L, accessor, 2);
+            return Invoke(L, accessor, self);
+        }
+
         // __index. Upvalue 1 maps a name to a method, which is returned, or to the getter of a property, a light
         // userdata, which is called.
         int Index(lua_State *L) {
@@ -243,7 +254,7 @@ namespace Framework::Scripting::Bind::Detail {
             }
             const LuaFunction &getter = *static_cast<const LuaFunction *>(lua_touserdata(L, 2));
             lua_settop(L, 1);
-            return Invoke(L, getter, CheckReceiver(L, getter));
+            return InvokeAccessor(L, getter);
         }
 
         // __newindex. Upvalue 1 maps a name to the setter of a property, upvalue 2 is the class.
@@ -257,9 +268,7 @@ namespace Framework::Scripting::Bind::Detail {
             }
             lua_settop(L, 3);
             lua_remove(L, 2);
-            void *self = CheckReceiver(L, *setter);
-            CheckArguments(L, *setter, 2);
-            Invoke(L, *setter, self);
+            InvokeAccessor(L, *setter);
             return 0;
         }
 
@@ -267,7 +276,7 @@ namespace Framework::Scripting::Bind::Detail {
         int ReadProperty(lua_State *L) {
             const LuaFunction &getter = *static_cast<const LuaFunction *>(lua_touserdata(L, 2));
             lua_settop(L, 1);
-            return Invoke(L, getter, CheckReceiver(L, getter));
+            return InvokeAccessor(L, getter);
         }
 
         // __gc. A finalizer that ran earlier in the same collection may have kept the userdata, so it loses its

@@ -357,6 +357,19 @@ namespace Framework::Scripting::Bind {
                 {}};
         }
 
+        // A property written as context functions is an accessor of the prototype, recorded the way
+        // v8pp::class_::accessor_property records one. Without a setter it is read-only.
+        template <typename T>
+        V8Member<T> V8NativeProperty(Side side, std::string name, std::shared_ptr<NativeFunction> getter, std::shared_ptr<NativeFunction> setter, v8pp::metadata::property_options options) {
+            return {side,
+                [name = std::move(name), getter = std::move(getter), setter = std::move(setter), options = std::move(options)](v8pp::class_<T> &cls, v8pp::metadata::symbol &) {
+                    v8::Isolate *isolate = cls.isolate();
+                    v8::HandleScope scope(isolate);
+                    cls.accessor_property(name, V8NativeTemplate(isolate, getter, true), setter != nullptr ? V8NativeTemplate(isolate, setter, true) : v8::Local<v8::FunctionTemplate>(), V8Copy(options));
+                },
+                {}};
+        }
+
         // A getter or a setter as v8pp calls one: a member function as it is. v8pp gives the receiver to a function
         // only when that takes a reference to the class itself first, so a function that takes a pointer, or a base
         // of the class, is called through one that does.
