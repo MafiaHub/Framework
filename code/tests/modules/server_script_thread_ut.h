@@ -612,6 +612,65 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
+    IT("leaves a thread that binds a runtime nobody created on the tick thread's", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_unknown", "");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        auto *engine                   = server.GetScriptingModule()->GetEngine();
+        v8::Isolate *const tickIsolate = engine->GetIsolate();
+        v8::Isolate *bound             = nullptr;
+        v8::Isolate *afterUnknown      = nullptr;
+        std::thread other([&] {
+            engine->BindOffThreadRuntime("packet");
+            bound = engine->GetIsolate();
+            engine->BindOffThreadRuntime("nobody-created-this");
+            afterUnknown = engine->GetIsolate();
+        });
+        other.join();
+        EQUALS(bound != nullptr, true);
+        EQUALS(bound != tickIsolate, true);
+        EQUALS(afterUnknown == tickIsolate, true);
+        server.Stop();
+    });
+
+    IT("forgets what a thread bound once that server is gone", {
+        v8::Isolate *boundBefore = nullptr;
+        v8::Isolate *tickBefore  = nullptr;
+        {
+            Server first;
+            const bool firstUp = first.Start("fw_script_thread_stale_first", "");
+            EQUALS(firstUp, true);
+            if (!firstUp) {
+                break;
+            }
+            auto *engine = first.GetScriptingModule()->GetEngine();
+            tickBefore   = engine->GetIsolate();
+            engine->BindOffThreadRuntime("packet");
+            boundBefore = engine->GetIsolate();
+            first.Stop();
+        }
+        EQUALS(boundBefore != tickBefore, true);
+
+        Server second;
+        const bool secondUp = second.Start("fw_script_thread_stale_second", "");
+        EQUALS(secondUp, true);
+        if (!secondUp) {
+            break;
+        }
+        auto *engine = second.GetScriptingModule()->GetEngine();
+        // A thread that never bound anything sees "tick"; so does this one, whose binding was the first server's.
+        v8::Isolate *unbound = nullptr;
+        std::thread other([&] {
+            unbound = engine->GetIsolate();
+        });
+        other.join();
+        EQUALS(engine->GetIsolate() == unbound, true);
+        second.Stop();
+    });
+
     IT("still lets another thread start and stop resources, once the running script is out of the way", {
         Server server;
         // Uses a binding as it loads: a runtime started from the tick thread has to have its own.

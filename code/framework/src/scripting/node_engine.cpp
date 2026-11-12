@@ -37,6 +37,7 @@ namespace {
 
     // The off-thread runtime of a thread that bound none.
     constexpr std::string_view kDefaultOffThreadRuntime = "tick";
+    constexpr size_t kOffThreadRuntimesReserved         = 8;
 
     // Which off-thread runtime this thread bound, and in which engine's set: an engine that went away, or shut down,
     // leaves a set no later one has, so what is left here of it names nothing.
@@ -172,19 +173,23 @@ namespace Framework::Scripting {
         }
 
         // An off-thread runtime goes like a resource's: out of the references, its bindings dropped, then freed.
-        for (OffThreadRuntime &entry : _offThreadRuntimes) {
-            v8::Isolate *offThread = entry.runtime->GetIsolate();
+        while (!_offThreadRuntimes.empty()) {
             {
-                v8::Locker locker(offThread);
-                v8::Isolate::Scope isolateScope(offThread);
-                v8::HandleScope handleScope(offThread);
-                v8::Context::Scope contextScope(entry.runtime->GetContext());
-                _references->RemoveRuntime(entry.reference);
+                const OffThreadRuntime &entry = _offThreadRuntimes.back();
+                v8::Isolate *offThread        = entry.runtime->GetIsolate();
+                {
+                    v8::Locker locker(offThread);
+                    v8::Isolate::Scope isolateScope(offThread);
+                    v8::HandleScope handleScope(offThread);
+                    v8::Context::Scope contextScope(entry.runtime->GetContext());
+                    _references->RemoveRuntime(entry.reference);
+                }
+                Builtins::UnregisterAll(offThread);
             }
-            Builtins::UnregisterAll(offThread);
-            entry.runtime.reset();
+            // Out of the list before it is freed: nothing looked up while it goes finds it half gone.
+            OffThreadRuntime last = std::move(_offThreadRuntimes.back());
+            _offThreadRuntimes.pop_back();
         }
-        _offThreadRuntimes.clear();
         _offThreadSet = 0;
 
         v8::Isolate *isolate = _runtime->GetIsolate();
@@ -816,6 +821,9 @@ namespace Framework::Scripting {
 
         if (_offThreadRuntimes.empty()) {
             _offThreadSet = gNextOffThreadSet.fetch_add(1);
+            // Other threads read the list without a lock once they run, which is after the last of these was made;
+            // room up front keeps it where it is all the same.
+            _offThreadRuntimes.reserve(kOffThreadRuntimesReserved);
         }
         const uint32_t reference = _references->AddRuntime(isolate, context, std::string(name));
         _offThreadRuntimes.push_back({std::string(name), std::move(runtime), reference});
@@ -833,7 +841,8 @@ namespace Framework::Scripting {
                 return;
             }
         }
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("No off-thread scripting runtime is named '{}'; this thread stays on '{}'", name, kDefaultOffThreadRuntime);
+        tOffThreadBinding = {};
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("No off-thread scripting runtime is named '{}'; this thread uses '{}'", name, kDefaultOffThreadRuntime);
     }
 
     v8::Isolate *NodeEngine::GetIsolate() const {

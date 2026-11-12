@@ -168,12 +168,13 @@ namespace Framework::Scripting {
         // another thread. Code there builds values the way it always did (an EngineScope, or V8's own scopes,
         // on the engine's isolate), in an isolate the engine's thread never enters, so neither side waits for the
         // other's lock; what it emits is copied across. It has the bindings a resource's runtime has and runs no
-        // script. From the engine's thread, once per name, after Init().
+        // script. From the engine's thread, once per name, after Init() and before any other thread uses the
+        // engine: the threads the runtimes are for read the list of them without a lock.
         bool CreateOffThreadRuntime(std::string_view name);
 
         // Makes the runtime of that name the one the calling thread sees, so that two threads off the engine's never
-        // wait for each other's isolate either. A thread that bound none sees "tick". A name that was not created is
-        // logged and leaves the thread where it was.
+        // wait for each other's isolate either. A thread that bound none sees "tick", and so does one that asks for
+        // a name that was not created, which is logged.
         void BindOffThreadRuntime(std::string_view name);
 
         // Whether the last RunUntil() ended because the gate turned it away.
