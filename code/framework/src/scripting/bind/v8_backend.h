@@ -68,6 +68,17 @@ namespace Framework::Scripting::Bind {
     // drops what the isolate still holds (Builtins::UnregisterAll). Call with `context` entered.
     v8::Local<v8::Function> MakeV8Function(v8::Isolate *isolate, v8::Local<v8::Context> context, NativeFunction function);
 
+    // The JavaScript value behind `value`, a value of `call`, for the one thing a copy cannot do: a function that
+    // hands the values of a JavaScript call on to JavaScript of the same isolate as they are, so that an object
+    // arrives as itself (Events.emit to a handler of the same runtime). The handle is good until the function
+    // returns. undefined for a value of another call, and empty when the call is not a JavaScript one.
+    v8::Local<v8::Value> V8ValueOf(const Call &call, const Value &value);
+
+    // `value`, a value of the isolate of `call`, as a value of the call: what a function returns that was given a
+    // JavaScript value by code that speaks V8, as the promise of an emission is. Nil when the call is not a
+    // JavaScript one.
+    Value V8ValueIn(Call &call, v8::Local<v8::Value> value);
+
     // What V8 needs of a bound class: Class<T> fills a V8Class, and materialising it builds the v8pp class a
     // hand-written binding would, with the same records in the catalog.
     namespace Detail {

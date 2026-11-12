@@ -85,6 +85,15 @@ namespace Framework::Scripting::Bind {
                 }
             }
 
+            // For V8ValueOf and V8ValueIn.
+            v8::Local<v8::Value> Handle(const Value &value) const {
+                return Local(Slot(value));
+            }
+
+            Value Adopt(v8::Local<v8::Value> value) {
+                return Keep(value);
+            }
+
             // --- Call ---
 
             Language GetLanguage() const override {
@@ -683,6 +692,15 @@ namespace Framework::Scripting::Bind {
             Invoke(info, true);
         }
     } // namespace
+
+    // Every JavaScript call is a V8Call.
+    v8::Local<v8::Value> V8ValueOf(const Call &call, const Value &value) {
+        return call.GetLanguage() == Language::JavaScript ? static_cast<const V8Call &>(call).Handle(value) : v8::Local<v8::Value>();
+    }
+
+    Value V8ValueIn(Call &call, v8::Local<v8::Value> value) {
+        return call.GetLanguage() == Language::JavaScript ? static_cast<V8Call &>(call).Adopt(value) : call.Nil();
+    }
 
     v8::Local<v8::Function> MakeV8Function(v8::Isolate *isolate, v8::Local<v8::Context> context, NativeFunction function) {
         return Detail::V8NativeFunction(isolate, context, std::make_shared<NativeFunction>(std::move(function))).ToLocalChecked();

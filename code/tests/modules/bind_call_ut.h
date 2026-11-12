@@ -286,6 +286,19 @@ namespace BindCallTest {
                     },
                     Doc("Returns its argument.").Param("value", Type::Any(), "Value to return.").ReturnType(Type::Any()))
                 .Function(
+                    "handle",
+                    [](Call &call) {
+                        // Out as a V8 handle and back in: the same object in JavaScript, nothing in Lua.
+                        const v8::Local<v8::Value> handle = Bind::V8ValueOf(call, call.Arg(0));
+                        if (call.GetLanguage() == Framework::Scripting::Language::JavaScript) {
+                            call.Return(Bind::V8ValueIn(call, handle));
+                        }
+                        else {
+                            call.Return(handle.IsEmpty() && Bind::V8ValueIn(call, handle).IsNil());
+                        }
+                    },
+                    Doc("Returns its argument by its V8 handle.").Param("value", Type::Any(), "Value to return.").ReturnType(Type::Any()))
+                .Function(
                     "nothing",
                     [](Call &) {},
                     Doc("Returns nothing."))
@@ -1045,6 +1058,14 @@ MODULE(bind_call, {
         EQUALS(runtimes.Lua("select('#', Probe.echo(nil))"), "1");
         EQUALS(runtimes.Lua("math.type(Probe.sum(1, 2))"), "float");
         EQUALS(runtimes.Lua("math.type(Probe.argc(1, 2))"), "integer");
+    });
+
+    IT("gives the V8 handle of a JavaScript value, and takes one back", {
+        Runtimes runtimes;
+        EQUALS(runtimes.Js("{ const o = {}; Probe.handle(o) === o }"), "true");
+        EQUALS(runtimes.Js("Probe.handle(7)"), "7");
+        EQUALS(runtimes.Js("Probe.handle() === undefined"), "true");
+        EQUALS(runtimes.Lua("Probe.handle({})"), "true");
     });
 
     IT("builds objects and arrays", {
