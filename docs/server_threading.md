@@ -19,7 +19,7 @@ none.
 | Thread | What it does | Sized by |
 | --- | --- | --- |
 | Tick | Packets, RPC handlers, replication, `PostUpdate`, completions | one |
-| Script | Every resource's runtime, and what the tick thread posts to scripts | one (`script-thread`) |
+| Script | Every resource's runtime, and what the tick thread posts to scripts | one |
 | Network (MafiaNet) | Sockets, reliability, the voice relay | one |
 | Replication workers | Viewer interest, construct/destroy lists, the serialize pass, a game's own per-tick loops | `replication-threads` |
 | Background workers | Blocking work handed off the tick | `background-threads` |
@@ -136,8 +136,8 @@ a handler given up on is never run afterwards; 500 when the handler throws.
 
 ## Scripts on their own thread
 
-With `"script-thread": true`, the default, every runtime is created, run and
-freed on the script thread. A script that computes for 300 ms holds up the
+Every runtime is created, run and freed on the script thread. This is how
+the server works; there is no setting to turn it off. A script that computes for 300 ms holds up the
 other scripts and nothing else: the tick asks for the world and takes it at
 the script's next **safe point**, replicates, and gives it back.
 
@@ -153,59 +153,83 @@ function call; the script keeps its place and carries on afterwards). So:
   stale answer, never a dangling one.
 - No safe point is taken while native code that the script called is on the
   stack and has called back into script (an event handler run from
-  `Events.emit`, a state-bag listener, an export of another resource): that
-  native code is in the middle of its work. The tick waits for that call to
-  return and keeps asking meanwhile. V8 does not report the return, so it is
-  read off the stack: the call is over once the script is no deeper than
-  where it made it. A script that went into deeper calls of its own right
-  after is taken for still being inside it until it comes back up.
+  `Events.emit`, a state-bag listener, an export of another resource, a
+  wrapped object's constructor): that native code is in the middle of its
+  work. The tick waits for that call to return and keeps asking meanwhile.
+  V8 does not report the return, so each such call is remembered by where
+  it was made from (how deep the stack was, and which call in which script
+  was at the top of it): it is over once the stack is no deeper than that,
+  or that place on the stack holds something else. Up to eight are
+  remembered at once; past that, or made from deeper than 48 frames, no
+  safe point is taken until the outermost call into the isolate returns.
 - A script blocked inside a native call that takes long on its own
   (`fs.readFileSync` of a large file, `execSync`) cannot be interrupted
   either. Use the asynchronous forms.
 
-`"script-thread": false` runs scripts inside the tick, as before.
-
 ### What changes for code on the tick thread
 
 Code on the tick thread is `PostUpdate`, RPC and packet handlers, and the
-`On*` overrides the tick calls. It may still do what it always did: open an
-`EngineScope`, emit an event, start or stop a resource. That now first puts
-the script thread out of whatever it is running and keeps it out until the
-scope closes, which **waits for the running script**. It is correct and it
-gives up, for that tick, what the script thread is for.
-
-Hand the work over instead:
+`On*` overrides the tick calls. It raises events the way it always did, and
+needs no change:
 
 ```cpp
-void MyServer::OnPlayerConnect(const PlayerConnectionData &data) {
-    SpawnAvatar(data); // the world: stays here
-    PostToScripts([this, guid = data.guid] {
-        // The script thread, with the world: an EngineScope, an event, anything tick code may do.
-        EmitPlayerJoined(guid);
-    });
-}
+v8::Isolate *isolate = engine->GetIsolate();
+v8::Locker locker(isolate);
+v8::Isolate::Scope isolateScope(isolate);
+v8::HandleScope handleScope(isolate);
+v8::Local<v8::Context> context = engine->GetContext();
+v8::Context::Scope contextScope(context);
+std::vector<v8::Local<v8::Value>> args {WrapPlayer(isolate, player)};
+resourceManager->GetEvents().EmitReserved(isolate, context, "playerDied", args);
+```
+
+or the same with an `EngineScope`. What changed is underneath:
+
+- Off the script thread, `engine->GetIsolate()` and `GetContext()` name a
+  runtime of the tick side's own (`NodeEngine::CreateOffThreadRuntime`). It
+  has the bindings a resource's runtime has, runs no script, and the script
+  thread never enters it, so locking it waits for no script.
+- An emit made there (`EmitReserved`, `EmitReservedTo`, `EmitClient`) copies
+  its arguments out of that isolate, the way arguments cross between two
+  resources, and posts the dispatch to the script thread. It returns at
+  once, with a promise that is already settled: nothing of the handlers
+  comes back. An argument that cannot be copied (a promise, a cycle) is
+  logged and the event is not raised.
+- `EmitReservedSync` runs the dispatch on the script thread and waits for
+  the handlers' veto. That waits for whatever script is running there to
+  finish its task, so keep it for events whose answer the tick needs.
+
+For anything else that ends in script, hand it over:
+
+```cpp
+PostToScripts([this, guid = data.guid] {
+    // The script thread, with the world: an EngineScope, a resource's function, anything tick code may do.
+    CallResourceHook(guid);
+});
 ```
 
 - `PostToScripts(task)` queues `task` for the script thread, which looks at
   its queue about every 2 ms between the scripts it runs. That is an
   interval, not a deadline: a task waits behind the tasks queued before it
-  and behind a script that is in the middle of a long callback. With scripts
-  inside the tick it runs at once.
+  and behind a script that is in the middle of a long callback.
 - `RunOnScriptThread(task)` waits for it. From the tick thread the world may
   have changed when it returns.
-- A handler's answer can no longer be read on the line after the emit. Have
-  the task act on it, or post the outcome back with
-  `GetScheduler()->PostToOwner`.
 
-The framework's own events already go this way: client events
+The framework's own events go the same way: client events
 (`Events.onClient`), `playerConnecting` and the admission that follows,
 voice events, console commands and resource hot reload.
 
-Two things are not supported and deadlock or crash:
+Starting, stopping or restarting a resource from the tick thread, and
+calling a resource's function directly, go into the script side's runtimes.
+That first puts the script thread out of whatever it is running
+(`Scripting::RuntimeEntry`), which waits for the running script's task.
 
-- Entering a runtime from the tick thread with V8's own scopes (`v8::Locker`
-  and a `Function::Call`) instead of `EngineScope`. The script thread may be
-  stopped in the middle of that runtime.
+Two things are not supported:
+
+- Entering a *resource's* isolate from the tick thread with V8's own scopes
+  (a `v8::Locker` on an isolate taken from a handler or a stored function
+  rather than from `engine->GetIsolate()`). The script thread may be stopped
+  in the middle of that runtime.
 - Calling into script from native code while holding a pointer the tick may
   free, without `Scripting::NoSafePoint` around the call. The framework's
   entries (`EngineScope`, calls between runtimes) hold safe points off by
@@ -215,7 +239,11 @@ Two things are not supported and deadlock or crash:
 ### What it costs
 
 - An event raised by the tick reaches its handlers about 2 ms later when the
-  script thread is idle, and later than that behind a long callback.
+  script thread is idle, and later than that behind a long callback. Its
+  arguments are copied once more on the way.
+- A handler's answer to an asynchronous emit can no longer be read on the
+  tick thread; a synchronous emit waits for the script thread.
+- One more runtime (the tick side's) is kept for the life of the server.
 - The resource monitor charges a script for the time it stood at a safe
   point, so a script that was interrupted reads slower than it ran.
 - `tick.scriptsMs` in the slow-tick warning is now the time the tick waited

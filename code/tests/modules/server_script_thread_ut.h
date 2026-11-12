@@ -94,6 +94,14 @@ namespace ServerScriptThreadTest {
                 },
                 v8::External::New(isolate, this));
             context->Global()->Set(context, v8pp::to_v8(isolate, "touchWorld"), touch.ToLocalChecked()).Check();
+            // callBack(fn): a native that calls back into script and returns, as any binding that constructs a
+            // wrapped object does (v8pp runs the class's constructor function).
+            v8::MaybeLocal<v8::Function> callBack = v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                if (info.Length() > 0 && info[0]->IsFunction()) {
+                    (void)info[0].As<v8::Function>()->Call(info.GetIsolate()->GetCurrentContext(), v8::Undefined(info.GetIsolate()), 0, nullptr);
+                }
+            });
+            context->Global()->Set(context, v8pp::to_v8(isolate, "callBack"), callBack.ToLocalChecked()).Check();
         }
 
         static void Write(const std::filesystem::path &path, const std::string &text) {
@@ -105,7 +113,7 @@ namespace ServerScriptThreadTest {
             return (root / name).generic_string();
         }
 
-        bool Start(const char *name, bool scriptThread, const std::string &serverScript) {
+        bool Start(const char *name, const std::string &serverScript) {
             root = std::filesystem::temp_directory_path() / name;
             std::filesystem::remove_all(root);
             Write(root / "resources" / "demo" / "package.json", R"({"name":"demo","version":"1.0.0","main":"server.js","mafiahub":{"server":"server.js"}})");
@@ -133,7 +141,6 @@ namespace ServerScriptThreadTest {
             opts.resourcesPath      = (root / "resources").string();
             opts.replicationThreads = 0;
             opts.backgroundThreads  = 1;
-            opts.scriptThread       = scriptThread;
             // The slow-script warnings are the point of some of these scripts.
             opts.slowScriptWarnMs = 0;
             opts.argc             = 1;
@@ -182,6 +189,34 @@ namespace ServerScriptThreadTest {
             std::filesystem::remove_all(root, code);
         }
 
+        // Raises an event the way projects do from an RPC handler on the tick thread: V8's own scopes on the
+        // engine's isolate, values built there, and an emit. No EngineScope, no hand-over.
+        template <typename Emit>
+        auto WithProjectScopes(Emit emit) {
+            auto *engine         = GetScriptingModule()->GetEngine();
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+            std::vector<v8::Local<v8::Value>> args {v8pp::to_v8(isolate, std::string("from-a-project")), v8::Array::New(isolate, 0)};
+            return emit(isolate, context, GetScriptingModule()->GetResourceManager()->GetEvents(), args);
+        }
+
+        void EmitAsProjectsDo(const std::string &eventName) {
+            WithProjectScopes([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events, std::vector<v8::Local<v8::Value>> &args) {
+                events.EmitReserved(isolate, context, eventName, args);
+                return 0;
+            });
+        }
+
+        bool EmitSyncAsProjectsDo(const std::string &eventName) {
+            return WithProjectScopes([&](v8::Isolate *isolate, v8::Local<v8::Context> context, Framework::Scripting::Builtins::Events &events, std::vector<v8::Local<v8::Value>> &args) {
+                return events.EmitReservedSync(isolate, context, eventName, args);
+            });
+        }
+
         // Raises consoleCommand in every resource, the way the server raises its own events. Wherever it is called.
         void EmitConsoleCommand(const std::string &command) {
             auto *engine = GetScriptingModule()->GetEngine();
@@ -213,12 +248,11 @@ MODULE(server_script_thread, {
 
     IT("keeps ticking while a script computes, with scripts on their own thread", {
         Server server;
-        const bool up = server.Start("fw_script_thread_busy", true, kBusyScript);
+        const bool up = server.Start("fw_script_thread_busy", kBusyScript);
         EQUALS(up, true);
         if (!up) {
             break;
         }
-        EQUALS(server.ScriptsHaveOwnThread(), true);
         EQUALS(server.TickUntil([&] {
             return std::filesystem::exists(server.Marker("busy"));
         }),
@@ -232,7 +266,7 @@ MODULE(server_script_thread, {
 
     IT("keeps ticking while a script computes after a native call that called back into script", {
         Server server;
-        const bool up = server.Start("fw_script_thread_nested", true, R"(
+        const bool up = server.Start("fw_script_thread_nested", R"(
             const fs = require('node:fs');
             let rounds = 0;
             let heard = 0;
@@ -262,25 +296,66 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
-    IT("waits for that script with scripts inside the tick, as before", {
+    IT("keeps ticking while a script computes beside other timers of its own", {
+        // What a real resource looks like, and what M2O's showed: several timers at different intervals. Node runs
+        // its queued callbacks between two timer lists from native code, which is a call back into script that has
+        // long returned by the time the next timer computes.
         Server server;
-        const bool up = server.Start("fw_script_thread_busy_inline", false, kBusyScript);
+        const bool up = server.Start("fw_script_thread_timers", R"(
+            const fs = require('node:fs');
+            let rounds = 0;
+            setInterval(() => { callBack(() => touchWorld()); }, 5);
+            setInterval(() => { Promise.resolve().then(() => callBack(() => {})); }, 7);
+            setInterval(() => {
+                const end = Date.now() + 600;
+                while (Date.now() < end) {}
+                if (++rounds === 3) { fs.writeFileSync('$ROOT/busy', 'done'); }
+            }, 650);
+        )");
         EQUALS(up, true);
         if (!up) {
             break;
         }
-        EQUALS(server.ScriptsHaveOwnThread(), false);
         EQUALS(server.TickUntil([&] {
             return std::filesystem::exists(server.Marker("busy"));
         }),
             true);
-        GREATER(server.longestGapMs, 500.0);
+        fprintf(stderr, "server_script_thread: beside other timers, longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
+        LESSER(server.longestGapMs, 300.0);
+        server.Stop();
+    });
+
+    IT("does not take the world from a script while native code it called is still on the stack", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_held", R"(
+            const fs = require('node:fs');
+            let rounds = 0;
+            setInterval(() => {
+                // The native is in the middle of its call for as long as the function it was handed runs: it may
+                // hold on to things a tick would free, so the tick has to wait this one out.
+                callBack(() => {
+                    const end = Date.now() + 400;
+                    while (Date.now() < end) {}
+                });
+                if (++rounds === 2) { fs.writeFileSync('$ROOT/held', 'done'); }
+            }, 450);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        EQUALS(server.TickUntil([&] {
+            return std::filesystem::exists(server.Marker("held"));
+        }),
+            true);
+        fprintf(stderr, "server_script_thread: under a native call, longest gap between ticks %.1f ms\n", server.longestGapMs);
+        GREATER(server.longestGapMs, 300.0);
         server.Stop();
     });
 
     IT("never runs a script's native call while the tick has the world", {
         Server server;
-        const bool up = server.Start("fw_script_thread_touch", true, R"(
+        const bool up = server.Start("fw_script_thread_touch", R"(
             setInterval(() => { for (let i = 0; i < 5000; i++) { touchWorld(); } }, 1);
         )");
         EQUALS(up, true);
@@ -296,7 +371,7 @@ MODULE(server_script_thread, {
 
     IT("runs what the tick thread posts to scripts, and its handlers, off the tick", {
         Server server;
-        const bool up = server.Start("fw_script_thread_post", true, R"(
+        const bool up = server.Start("fw_script_thread_post", R"(
             const fs = require('node:fs');
             Events.on('consoleCommand', (command) => {
                 // A handler that takes its time: the tick that raised the event does not wait for it.
@@ -329,22 +404,63 @@ MODULE(server_script_thread, {
         server.Stop();
     });
 
-    IT("still lets tick-thread code enter script itself, once the running script is out of the way", {
+    IT("raises a project's event from the tick thread without waiting for a script that is computing", {
         Server server;
-        const bool up = server.Start("fw_script_thread_enter", true, std::string(kBusyScript) + R"(
-            Events.on('consoleCommand', (command) => { fs.writeFileSync('$ROOT/direct', command); });
+        const bool up = server.Start("fw_script_thread_project", std::string(kBusyScript) + R"(
+            Events.on('projectEvent', (text) => { fs.writeFileSync('$ROOT/project', text); });
         )");
         EQUALS(up, true);
         if (!up) {
             break;
         }
-        // Until the script is in the middle of its work.
+        // Until the script is in the middle of its 600 ms.
         server.TickFor(900ms);
-        // The way server code always raised events: an EngineScope on the tick thread. It has to wait for the
-        // script, which is why PostToScripts exists, but it must work and must not deadlock.
-        server.EmitConsoleCommand("from-the-tick-thread");
-        EQUALS(std::filesystem::exists(server.Marker("direct")), true);
-        // And the same through the resource manager, which frees and starts runtimes.
+        const auto before = std::chrono::steady_clock::now();
+        server.EmitAsProjectsDo("projectEvent");
+        const double emitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - before).count();
+        fprintf(stderr, "server_script_thread: a project's emit from the tick thread took %.2f ms\n", emitMs);
+        // The emit only hands the event over: the handler has not run, and the tick thread did not wait for the script.
+        LESSER(emitMs, 100.0);
+        EQUALS(server.TickUntil([&] {
+            return std::filesystem::exists(server.Marker("project"));
+        }),
+            true);
+        std::string text;
+        std::ifstream(server.Marker("project")) >> text;
+        EQUALS(text == "from-a-project", true);
+        server.Stop();
+    });
+
+    IT("brings a project's synchronous event back with the handlers' veto", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_veto", R"(
+            const fs = require('node:fs');
+            let asked = 0;
+            Events.on('mayProceed', () => { asked++; fs.writeFileSync('$ROOT/asked', String(asked)); return true; });
+            Events.on('mayNot', () => false);
+        )");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(300ms);
+        // The handlers ran on the script thread and their answer came back to this one.
+        EQUALS(server.EmitSyncAsProjectsDo("mayProceed"), true);
+        EQUALS(std::filesystem::exists(server.Marker("asked")), true);
+        EQUALS(server.EmitSyncAsProjectsDo("mayNot"), false);
+        EQUALS(server.EmitSyncAsProjectsDo("nobodyListens"), true);
+        server.Stop();
+    });
+
+    IT("still lets another thread start and stop resources, once the running script is out of the way", {
+        Server server;
+        const bool up = server.Start("fw_script_thread_enter", kBusyScript);
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        server.TickFor(900ms);
+        // Goes into the script side's runtimes, so it has to wait for the script; it must work and not deadlock.
         EQUALS(static_cast<bool>(server.GetScriptingModule()->GetResourceManager()->RestartResource("demo")), true);
         server.TickFor(100ms);
         GREATER(server.ticks, 10);
@@ -353,7 +469,7 @@ MODULE(server_script_thread, {
 
     IT("shuts down while a script is in the middle of computing", {
         Server server;
-        const bool up = server.Start("fw_script_thread_shutdown", true, kBusyScript);
+        const bool up = server.Start("fw_script_thread_shutdown", kBusyScript);
         EQUALS(up, true);
         if (!up) {
             break;

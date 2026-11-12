@@ -215,7 +215,7 @@ Other agents do not run these hooks; the rules still apply to them as written.
 4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
 5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
-   - **Server threading** (`docs/server_threading.md`) is separate: `Utils::TaskScheduler` (Asio) takes blocking work off the tick thread and brings results back to it, `Utils::ForkJoinPool` spreads per-tick loops over the replication workers, and `Utils::ThreadBudget` sizes both to the host. Scripts run on their own thread (`ScriptThread`); it and the tick thread hand the world to each other (`Utils::WorldLock`), so tick-thread code hands script work over with `Instance::PostToScripts` rather than opening an `EngineScope` itself.
+   - **Server threading** (`docs/server_threading.md`) is separate: `Utils::TaskScheduler` (Asio) takes blocking work off the tick thread and brings results back to it, `Utils::ForkJoinPool` spreads per-tick loops over the replication workers, and `Utils::ThreadBudget` sizes both to the host. Scripts run on their own thread (`ScriptThread`); it and the tick thread hand the world to each other (`Utils::WorldLock`), and this is not optional. Off the script thread `engine->GetIsolate()` is the tick side's own runtime, and an event emitted there is copied to the script thread; anything else that ends in script goes through `Instance::PostToScripts`.
 7. **Voice** (`voice/`) - Proximity voice chat; the server relays opaque Opus frames (RakVoice) without decoding, routed by `VoiceRouter`
 
 ### Integration Layer

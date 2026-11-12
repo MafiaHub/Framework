@@ -100,12 +100,6 @@ namespace Framework::Integrations::Server {
         // Background: blocking work such as packaging a hot-reloaded resource.
         int32_t backgroundThreads = -1;
 
-        // Run scripts on a thread of their own (server.json "script-thread"), so a script that computes for
-        // a long time does not hold up the tick: replication, packets and PostUpdate carry on, and take the
-        // world from the script between two of its instructions. False runs them inside the tick, as
-        // before. See docs/server_threading.md for what code on the tick thread has to do differently.
-        bool scriptThread = true;
-
         // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
         // ships none. See AssetPakBuilder.
         std::shared_ptr<const Utils::StreamedAssets::Policy> assetPakPolicy;
@@ -228,9 +222,6 @@ namespace Framework::Integrations::Server {
         std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
         TickBreakdown _lastTick;
-        // Script work run between ticks that came back past the tick's due time; warned about like a slow tick.
-        std::chrono::steady_clock::time_point _lastLateTickWarnAt {};
-        uint32_t _suppressedLateTicks = 0;
 
         InstanceOptions _opts;
 
@@ -360,13 +351,13 @@ namespace Framework::Integrations::Server {
         // Subscription raising entityStateChange; released on shutdown.
         Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
 
-        // Scripts' own thread, when they have one. With it, a tick has the world from its first line to
-        // its last, and so does the thread that runs Init() and Shutdown().
+        // The thread scripts run on. A tick has the world from its first line to its last, and so does
+        // the thread that runs Init() and Shutdown().
         std::unique_ptr<ScriptThread> _scriptThread;
         bool _worldHeld = false;
-        // What the tick did for scripts, once per tick interval, on whichever thread runs them.
+        // What a tick owes scripts, once per tick interval, on their thread.
         void ScriptRound();
-        // The scripting half of Init(), on the thread scripts run on. Empty on success.
+        // The scripting half of Init(), on the script thread. Empty on success.
         std::string InitScripting(Framework::Networking::Replication::ReplicationManager *replication);
 
         // Declared last, so they are stopped first: background work reads the asset pak builder above.
@@ -473,16 +464,11 @@ namespace Framework::Integrations::Server {
             return _webServer.get();
         }
 
-        // Whether scripts run on a thread of their own. Then code on the tick thread (PostUpdate, RPC and
-        // packet handlers, the On* overrides the tick calls) should hand its script work over with
-        // PostToScripts: entering script from the tick thread itself still works, but waits for
-        // whatever script is running.
-        bool ScriptsHaveOwnThread() const {
-            return _scriptThread != nullptr;
-        }
-
-        // Runs `task` on the thread scripts run on, with the world: it may open an EngineScope, emit
-        // events and touch the world like tick code. At once when scripts share the tick thread.
+        // Scripts run on a thread of their own. Code on the tick thread (PostUpdate, RPC and packet
+        // handlers, the On* overrides the tick calls) raises events as it always did, and they are
+        // carried to that thread; for anything else that ends in script, this runs `task` there, with
+        // the world: it may open an EngineScope, call into resources and touch the world like tick
+        // code. Before Init() and after Shutdown() it runs at once.
         void PostToScripts(Utils::TaskScheduler::Task task);
         // The same, and waits for it. From the tick thread the world may have changed when it returns.
         void RunOnScriptThread(Utils::TaskScheduler::Task task);

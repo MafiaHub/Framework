@@ -239,11 +239,9 @@ namespace Framework::Integrations::Server {
 
         // From here to the end of Init() this thread has the world, as a tick has: what Init() sets up is
         // not seen half-made by a script that is already running.
-        if (_opts.scriptThread) {
-            _scriptThread = std::make_unique<ScriptThread>(_opts.worldConfig.tickInterval);
-            _scriptThread->LockWorld();
-            _worldHeld = true;
-        }
+        _scriptThread = std::make_unique<ScriptThread>(_opts.worldConfig.tickInterval);
+        _scriptThread->LockWorld();
+        _worldHeld = true;
 
         // Initialize our networking engine
         // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
@@ -330,20 +328,18 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
 
-        // Every runtime is made, run and freed on the thread scripts run on.
-        if (_scriptThread) {
-            if (auto *engine = _scriptingModule->GetEngine()) {
-                engine->SetRunGate(_scriptThread.get());
-            }
-            ScriptThread::Hooks hooks;
-            hooks.round = [this] {
-                ScriptRound();
-            };
-            hooks.runUntil = [this](std::chrono::steady_clock::time_point until) {
-                return _scriptingModule->RunScriptsUntil(until);
-            };
-            _scriptThread->Start(std::move(hooks));
+        // Every runtime is made, run and freed on the script thread.
+        if (auto *engine = _scriptingModule->GetEngine()) {
+            engine->SetRunGate(_scriptThread.get());
         }
+        ScriptThread::Hooks hooks;
+        hooks.round = [this] {
+            ScriptRound();
+        };
+        hooks.runUntil = [this](std::chrono::steady_clock::time_point until) {
+            return _scriptingModule->RunScriptsUntil(until);
+        };
+        _scriptThread->Start(std::move(hooks));
         std::string scriptingError;
         RunOnScriptThread([&] {
             scriptingError = InitScripting(replication);
@@ -381,6 +377,10 @@ namespace Framework::Integrations::Server {
         }
         if (auto *engine = _scriptingModule->GetEngine()) {
             engine->GetMonitor().SetSlowThresholdMs(_opts.slowScriptWarnMs);
+            // What the tick thread builds its script values in, so it never waits for a script to do it.
+            if (!engine->CreateOffThreadRuntime()) {
+                return "Failed to create the tick thread's scripting runtime: " + engine->GetLastError();
+            }
         }
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
@@ -510,8 +510,7 @@ namespace Framework::Integrations::Server {
                 {"max-downloading", "Connections admitted beyond maxplayers while they download; 0 keeps downloads on player slots", cxxopts::value<int32_t>()},
                 {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()},
                 {"replication-threads", "Threads sharing the replication pass with the tick thread; -1 sizes them to the host, 0 uses none", cxxopts::value<int32_t>()},
-                {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()},
-                {"script-thread", "Run scripts on a thread of their own (true) or inside the tick (false)", cxxopts::value<bool>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -533,7 +532,6 @@ namespace Framework::Integrations::Server {
         read("slow-script-ms", opts.slowScriptWarnMs);
         read("replication-threads", opts.replicationThreads);
         read("background-threads", opts.backgroundThreads);
-        read("script-thread", opts.scriptThread);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -554,7 +552,6 @@ namespace Framework::Integrations::Server {
         read("package-secret", opts.packageSecret);
         read("replication-threads", opts.replicationThreads);
         read("background-threads", opts.backgroundThreads);
-        read("script-thread", opts.scriptThread);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -647,7 +644,6 @@ namespace Framework::Integrations::Server {
         frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
         frameworkKeys["replication-threads"] = _opts.replicationThreads;
         frameworkKeys["background-threads"]  = _opts.backgroundThreads;
-        frameworkKeys["script-thread"]       = _opts.scriptThread;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -1801,20 +1797,14 @@ namespace Framework::Integrations::Server {
                 lapStart = now;
             };
 
-            // With scripts on their own thread the tick takes the world from them: at once when they are idle,
-            // at a running script's next safe point otherwise. That wait is what the tick still owes scripts.
-            if (_scriptThread) {
-                if (!_worldHeld) {
-                    FW_PROFILE_SCOPE_N("Server::WaitForScripts");
-                    _scriptThread->LockWorld();
-                    _worldHeld = true;
-                }
-                lap(tick.scriptsMs);
+            // The tick takes the world from the script thread: at once when scripts are idle, at a running
+            // script's next safe point otherwise. That wait is all a tick spends on scripts.
+            if (!_worldHeld) {
+                FW_PROFILE_SCOPE_N("Server::WaitForScripts");
+                _scriptThread->LockWorld();
+                _worldHeld = true;
             }
-            // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
-            else if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
-                engine->CloseMonitorTick();
-            }
+            lap(tick.scriptsMs);
 
             // What background work finished and what other threads asked of this one: run before the
             // packet pump, so what it sends leaves with this tick.
@@ -1857,31 +1847,9 @@ namespace Framework::Integrations::Server {
                 _voiceServer.Update();
             }
 
-            // Voice events, the runtimes, admission and console commands all end in script: they run here
-            // only when scripts share this thread, and on the script thread's own round otherwise.
-            if (!_scriptThread) {
-                FW_PROFILE_SCOPE_N("Server::VoiceChanges");
-                DispatchVoiceChanges();
-            }
+            // Voice events, the runtimes, admission and console commands all end in script: they run on the
+            // script thread's own round.
             lap(tick.packetsMs);
-
-            if (!_scriptThread) {
-                if (_scriptingModule) {
-                    FW_PROFILE_SCOPE_N("Server::Scripting");
-                    _scriptingModule->Update();
-                }
-                lap(tick.scriptsMs);
-
-                if (_networkingEngine) {
-                    FW_PROFILE_SCOPE_N("Server::Admission");
-                    ApplyAdmissionDecisions();
-                }
-
-                if (_commandListener) {
-                    FW_PROFILE_SCOPE_N("Server::Commands");
-                    _commandListener->Update();
-                }
-            }
 
             if (_masterlist->IsInitialized()) {
                 FW_PROFILE_SCOPE_N("Server::MasterlistPing");
@@ -1924,29 +1892,8 @@ namespace Framework::Integrations::Server {
             _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
 
             // The world is the scripts' again until the next tick.
-            if (_scriptThread) {
-                _worldHeld = false;
-                _scriptThread->UnlockWorld();
-            }
-        }
-        else if (_scriptThread) {
-            std::this_thread::sleep_until(_nextTick);
-        }
-        else if (_scriptingModule) {
-            _scriptingModule->WaitUntil(_nextTick);
-
-            // A callback that ran between ticks and overran the deadline holds the next tick up as much as a slow
-            // tick does, and the tick's own timing above cannot see it.
-            const auto now      = std::chrono::steady_clock::now();
-            const double lateMs = std::chrono::duration<double, std::milli>(now - _nextTick).count();
-            if (lateMs >= kTickHitchWarnMs) {
-                ++_suppressedLateTicks;
-                if (std::chrono::duration<double, std::milli>(now - _lastLateTickWarnAt).count() >= kTickHitchWarnIntervalMs) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Script run between ticks held the next tick up by {:.0f} ms ({} late tick(s) since the last warning)", lateMs, _suppressedLateTicks);
-                    _lastLateTickWarnAt  = now;
-                    _suppressedLateTicks = 0;
-                }
-            }
+            _worldHeld = false;
+            _scriptThread->UnlockWorld();
         }
         else {
             std::this_thread::sleep_until(_nextTick);

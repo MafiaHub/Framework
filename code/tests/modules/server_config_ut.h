@@ -213,10 +213,4 @@ MODULE(server_config, {
         EQUALS(fromLine.replicationThreads, 2);
         EQUALS(fromLine.backgroundThreads, 3);
     });
-
-    IT("runs scripts on their own thread unless the operator says otherwise", {
-        EQUALS(resolve(nlohmann::json::object(), {}).scriptThread, true);
-        EQUALS(resolve({{"script-thread", false}}, {}).scriptThread, false);
-        EQUALS(resolve({{"script-thread", false}}, {"--script-thread=true"}).scriptThread, true);
-    });
 });
