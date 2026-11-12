@@ -669,19 +669,33 @@ MODULE(world, {
         World &world     = fixture.world;
         const uint64_t a = fixture.Make<Walker>();
 
-        const auto read = world.Read<Walker>(a);
-        EQUALS(read.Id(), a);
-        const auto missing = world.Read<Walker>(a + 1000);
-        EQUALS(missing.Id(), uint64_t {0});
+        // One handle at a time: asking for a second while the first is held is what the world refuses.
+        uint64_t held = 0;
+        {
+            const auto read = world.Read<Walker>(a);
+            held            = read.Id();
+        }
+        EQUALS(held, a);
+        {
+            const auto write = world.Write<Walker>(a);
+            held             = write.Id();
+        }
+        EQUALS(held, a);
+        uint64_t missing = 1;
+        {
+            const auto none = world.Read<Walker>(a + 1000);
+            missing         = none.Id();
+        }
+        EQUALS(missing, uint64_t {0});
         const Framework::Networking::Replication::Ref<Walker> empty;
         EQUALS(empty.Id(), uint64_t {0});
         // And through the base, as a walk over every entity is given them.
-        uint64_t seen = 0;
+        uint64_t any = 0;
         {
-            const auto any = world.Read<NetworkEntity>(a + 1000);
-            seen           = any.Id();
+            const auto entity = world.Read<NetworkEntity>(a);
+            any               = entity.Id();
         }
-        EQUALS(seen, uint64_t {0});
+        EQUALS(any, a);
     });
 
     IT("lets a handle go before the end of its scope", {
