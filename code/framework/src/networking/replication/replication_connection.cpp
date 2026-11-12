@@ -120,6 +120,8 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
+        // What other threads queued since the pass began concerns this connection as much.
+        _manager->ApplyPending();
 
         NetworkEntity *viewer = Viewer();
         if (!viewer) {
@@ -271,15 +273,16 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager || !entity || !_relevantValid || !_relevantViewer || !_manager->HasSerializeRateBands()) {
             return 0;
         }
+        // Asked on the pass's workers: of what the pass took of both entities under their locks.
         const NetworkEntity *viewer = _relevantViewer;
-        if (entity == viewer || entity->ownerGUID == _viewerGUID || entity->streaming.alwaysVisible || entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+        if (entity == viewer || entity->_pass.owner == _viewerGUID || entity->_pass.unthrottled) {
             return 0;
         }
         const SerializeRateBands &bands = _manager->GetSerializeRateBands(entity->GetTypeId());
         if (bands.nearIntervalMs == 0 && bands.midIntervalMs == 0 && bands.farIntervalMs == 0) {
             return 0;
         }
-        const glm::vec3 delta = entity->position - viewer->position;
+        const glm::vec3 delta = entity->_pass.position - viewer->_pass.position;
         return ReplicationManager::TransformSendIntervalMs(bands, glm::dot(delta, delta));
     }
 

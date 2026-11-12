@@ -30,6 +30,11 @@ namespace Framework::Networking::Replication {
     class InterestGrid;
     struct NametagState;
     struct DelegationPolicy;
+    class World;
+    namespace Detail {
+        struct WorldLockable;
+        class EntityGuard;
+    } // namespace Detail
 
     // `serverAuthored` says whose bytes these are: true when the server writes the stream (the per-tick
     // channels it relays, construction, forced state), false when an owning client writes it upstream.
@@ -226,6 +231,11 @@ namespace Framework::Networking::Replication {
     //
     // Authority is keyed on ownerGUID: the server serializes to everyone except the owner, the owning
     // client serializes upstream, and Deserialize accepts state only from the current owner.
+    //
+    // On the server an entity is reached through a handle of the World, which holds its lock. The
+    // Framework holds that lock too around every extension point below that it calls on the entity
+    // (serializing it, applying inbound state, an election asking it): an override works on its own
+    // entity freely, and must not ask the world for a handle.
     class NetworkEntity: public MafiaNet::VirtualWorldReplica3 {
       public:
         NetworkEntity() {
@@ -407,7 +417,8 @@ namespace Framework::Networking::Replication {
         }
 
         // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)
-        // entities, which replicate to everyone normally.
+        // entities, which replicate to everyone normally. Like SetOwner below, for the holder of
+        // the entity's handle; ReplicationManager has both by network id.
         void ForceState();
 
         // Server: change this entity's owner. The new owner is told directly (the server withholds
@@ -441,6 +452,7 @@ namespace Framework::Networking::Replication {
         void Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) final;
 
         bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) final;
+        MafiaNet::RM3QuerySerializationResult QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) final;
 
         // Serialize writes the same bytes for every connection (per-connection choices are made in
         // QuerySerializationWithinWorld and ReplicationConnection::SendSerialize), so ReplicaManager3
@@ -500,6 +512,26 @@ namespace Framework::Networking::Replication {
         // Server: this entity's slot in the interest index (InterestGrid::SlotOf); none on a client.
         uint32_t _interestSlot = UINT32_MAX;
         friend class InterestGrid;
+
+        // Server: being torn down, and so never filed in the interest index again.
+        bool _leaving = false;
+
+        // Server: the entity's lock, which lives in the world beside it; null on a client.
+        Detail::WorldLockable *_worldLock = nullptr;
+        friend class World;
+        friend class Detail::EntityGuard;
+
+        // Server: what the serialize pass asks of this entity once per connection, as it stood when
+        // the pass began. Taken under the entity's lock, then read by every connection's worker
+        // without it.
+        struct PassView {
+            MafiaNet::PeerGuid owner       = MafiaNet::UNASSIGNED_PEER_GUID;
+            MafiaNet::VirtualWorldId world = MafiaNet::VIRTUAL_WORLD_DEFAULT;
+            glm::vec3 position             = glm::vec3(0.0f);
+            bool unthrottled               = false; // always visible, or streamed to one connection
+        };
+        PassView _pass;
+        friend class ReplicationConnection;
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).

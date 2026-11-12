@@ -24,8 +24,10 @@
 #include <function2/function2.hpp>
 #include <glm/glm.hpp>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -77,6 +79,16 @@ namespace Framework::Networking::Replication {
     // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
     // entity, and drives an InterestGrid that ReplicationConnection::QueryReplicaList reads for
     // interest management.
+    //
+    // Server threading. Entities are reached through GetWorld(), whose handles hold their locks.
+    // What this class does on an entity's behalf is safe from any thread, in one of two ways:
+    //  - what takes an entity by handle (or is called on one, like NetworkEntity::SetOwner) works on
+    //    that entity and otherwise only queues or sends, so it is safe inside the handle's scope;
+    //  - what takes a network id takes the handle itself, and what walks connections takes
+    //    ReplicaManager3's world: neither may be called from inside a handle's scope, and both
+    //    abort if they are.
+    // Locks are taken in this order: ReplicaManager3's world, a connection, registered states in
+    // registration order, entities by ascending id, then this class's own mutex.
     // Identifies one state-change subscription. Zero is never handed out.
     using StateChangeHandle                                      = uint32_t;
     inline constexpr StateChangeHandle kInvalidStateChangeHandle = 0;
@@ -119,12 +131,33 @@ namespace Framework::Networking::Replication {
         // of an owned entity (see NetworkEntity::ForceState / OnStateForced). Bumps the entity's
         // state epoch so owner updates sent before the override arrives cannot revert it. No-op on
         // clients and for unowned entities (which already replicate to everyone).
-        void ForceState(NetworkEntity *entity);
+        void ForceState(uint64_t networkId);
+        template <typename T>
+        void ForceState(const Ref<T> &entity) {
+            if (entity) {
+                ForceState(*entity);
+            }
+        }
 
         // Server: change an entity's owner and notify the new owner directly (see
         // NetworkEntity::SetOwner). Needed because serialize to an owner is withheld, so the grant
         // can't ride normal replication.
-        void SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid);
+        void SetOwner(uint64_t networkId, MafiaNet::PeerGuid guid);
+        template <typename T>
+        void SetOwner(const Ref<T> &entity, MafiaNet::PeerGuid guid) {
+            if (entity) {
+                SetOwner(*entity, guid);
+            }
+        }
+
+        // Server: move an entity to another virtual world (dimension).
+        void SetVirtualWorld(uint64_t networkId, MafiaNet::VirtualWorldId virtualWorld);
+        template <typename T>
+        void SetVirtualWorld(const Ref<T> &entity, MafiaNet::VirtualWorldId virtualWorld) {
+            if (entity) {
+                entity->SetVirtualWorld(virtualWorld);
+            }
+        }
 
         // --- State bags ---
         // Server: send this tick's accumulated bag changes. Driven from NetworkPeer::Update, next to
@@ -134,7 +167,7 @@ namespace Framework::Networking::Replication {
         void FlushStateBags();
 
         // Called by a bag when it first dirties in a tick, so the flush walks what changed.
-        void MarkStateBagDirty(NetworkEntity *entity);
+        void MarkStateBagDirty(uint64_t networkId);
 
         // Subscribe to bag changes on this peer: the server on write, a client on apply, including
         // the keys a construction seed delivered. Returns a handle for RemoveStateChangeHandler, or
@@ -196,6 +229,19 @@ namespace Framework::Networking::Replication {
         }
 
         // --- Viewers (a connection's controlled entity, e.g. a player's avatar) ---
+        // The map is kept by network id and is safe to ask from any thread. By id, the entity that
+        // stops being this connection's viewer loses its flag at once; by handle, at the next tick.
+        void SetViewer(MafiaNet::PeerGuid guid, uint64_t networkId);
+        template <typename T>
+        void SetViewer(MafiaNet::PeerGuid guid, const Ref<T> &entity) {
+            if (entity) {
+                SetViewer(guid, *entity);
+            }
+        }
+        // Network id of the connection's viewer, 0 when it has none.
+        uint64_t GetViewerId(MafiaNet::PeerGuid guid) const;
+        // Every connection that has a viewer, with its network id.
+        std::vector<std::pair<MafiaNet::PeerGuid, uint64_t>> GetViewerIds() const;
         void SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity);
         NetworkEntity *GetViewer(MafiaNet::PeerGuid guid) const;
         void ClearViewer(MafiaNet::PeerGuid guid);
@@ -209,8 +255,9 @@ namespace Framework::Networking::Replication {
         // Server: every peer that has `entity` constructed -- the audience interest, virtual worlds
         // and budgets have already chosen, and so the one an event about the entity belongs to. The
         // same question FlushStateBags asks, answered from the connections rather than re-derived
-        // from positions and ranges. O(connections); visits nothing on a client.
-        void ForEachStreamingPeer(NetworkEntity *entity, const fu2::function<void(MafiaNet::PeerGuid) const> &fn) const;
+        // from positions and ranges. O(connections); visits nothing on a client. Walks the
+        // connections, so not from inside a handle's scope.
+        void ForEachStreamingPeer(uint64_t networkId, const fu2::function<void(MafiaNet::PeerGuid) const> &fn);
 
         // --- Delegated simulation ---
         // Election of which client simulates which server-owned entity. Server-side; on a client the
@@ -224,6 +271,10 @@ namespace Framework::Networking::Replication {
         // Client: tell the server this client cannot run `entity` right now, or can again. The
         // server passes it over for that entity alone (DelegationManager::SetDeclined).
         void DeclineSimulation(NetworkEntity *entity, bool declined);
+        // Client: an entity the server constructed here, made known to the world.
+        void AdoptRemote(NetworkEntity *entity) {
+            _world.Adopt(entity, nullptr);
+        }
 
         // --- Interest management ---
         // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
@@ -390,6 +441,28 @@ namespace Framework::Networking::Replication {
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
+        // The effects above on an entity the caller holds.
+        void ForceState(NetworkEntity &entity);
+        void SetOwner(NetworkEntity &entity, MafiaNet::PeerGuid guid);
+        void SetViewer(MafiaNet::PeerGuid guid, NetworkEntity &entity);
+
+        // What an effect on a held entity owes the interest index and the connections, which
+        // ReplicaManager3's world protects and a handle's scope cannot take: queued here and applied
+        // by the tick before it next looks at either.
+        struct Pending {
+            enum class Kind : uint8_t {
+                Reown,      // the entity's owner changed
+                Reevaluate, // every viewer decides on the entity again
+                Invalidate, // the connection of `guid` recomputes its interest
+                Unview      // the entity may have stopped being a viewer
+            };
+            Kind kind;
+            uint64_t id             = 0;
+            MafiaNet::PeerGuid guid = MafiaNet::UNASSIGNED_PEER_GUID;
+        };
+        void Queue(Pending pending);
+        void ApplyPending();
+
         // Makes the connection of this peer, if any, refresh its interest on its next query.
         void InvalidateInterestOf(MafiaNet::PeerGuid guid);
         // Queues the entity for every viewer to decide on again (see ReevaluationBase).
@@ -428,6 +501,8 @@ namespace Framework::Networking::Replication {
         SerializeExecutor _serializeExecutor;
         friend class NetworkEntity;
         friend class World;
+        friend class DelegationManager;
+        friend class ReplicationConnection;
 
         bool _isServer                 = false;
         bool _batchTransforms          = false;
@@ -437,11 +512,9 @@ namespace Framework::Networking::Replication {
         MafiaNet::PeerGuid _myGUID     = MafiaNet::UNASSIGNED_PEER_GUID;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
-        // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
-        uint64_t _nextNetworkId    = 0;
+        std::atomic<uint64_t> _nextNetworkId {0};
         NetworkPeer *_owner        = nullptr;
         bool _clientRPCsRegistered = false;
-        bool _serverRPCsRegistered = false;
         InterestGrid _interest;
         World _world {*this};
         DelegationManager _delegation;
@@ -463,7 +536,12 @@ namespace Framework::Networking::Replication {
         bool _workersSet        = false;
         double _lastInterestMs  = 0.0;
         double _lastPassMs      = 0.0;
-        std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
+        // Guards the viewer map, the dirty bags, the queue and the state-change subscriptions. Taken
+        // last and never held across a call out of this class.
+        mutable std::mutex _mutex;
+        std::unordered_map<MafiaNet::PeerGuid, uint64_t> _viewers;
+        std::vector<Pending> _pending;
+        std::atomic<bool> _anyPending {false};
         // By NetworkID, not pointer: an entity can be destroyed between dirtying and the flush.
         std::unordered_set<uint64_t> _dirtyStateBags;
         // FlushStateBags scratch, kept between flushes to reuse their capacity: the changes built once
@@ -476,8 +554,10 @@ namespace Framework::Networking::Replication {
 
         struct StateChangeSubscription {
             StateChangeFilter filter;
-            fu2::function<void(const StateChange &) const> callback;
+            // Shared, so a dispatch calls it outside the mutex while another thread unsubscribes.
+            std::shared_ptr<const fu2::function<void(const StateChange &) const>> callback;
         };
+        void DispatchStateChange(const StateChange &change);
         // Handles rather than iterators or pointers, so a handler that unsubscribes during dispatch
         // (itself or another) cannot invalidate what the dispatch is walking.
         std::unordered_map<StateChangeHandle, StateChangeSubscription> _stateChangeHandlers;
@@ -486,6 +566,7 @@ namespace Framework::Networking::Replication {
         std::unordered_map<std::string, std::vector<StateChangeHandle>> _stateChangeByKey;
         std::vector<StateChangeHandle> _stateChangeAnyKey;
         StateChangeHandle _nextStateChangeHandle = kInvalidStateChangeHandle;
+        bool _anyStateChangeHandlers             = false;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;

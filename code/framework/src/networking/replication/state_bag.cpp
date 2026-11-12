@@ -254,6 +254,7 @@ namespace Framework::Networking::Replication {
         }
         StateChange change;
         change.entity      = _owner;
+        change.networkId   = _owner->GetNetworkID();
         change.key         = key;
         change.value       = value;
         change.previous    = previous;

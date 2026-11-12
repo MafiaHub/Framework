@@ -505,6 +505,82 @@ MODULE(world, {
         EQUALS(static_cast<bool>(world.Create(0x12345678u)), false);
     });
 
+    IT("tells a state-change handler once the writer has let go of the entity", {
+        using Framework::Networking::Replication::StateChange;
+        using Framework::Networking::Replication::StateValue;
+        Fixture fixture;
+        World &world            = fixture.world;
+        const uint64_t walker   = fixture.Make<Walker>();
+        int calls               = 0;
+        size_t heldInHandler    = 99;
+        uint64_t namedEntity    = 0;
+        bool handedThePointer   = true;
+        bool reachedTheEntity   = false;
+        const auto subscription = fixture.manager->AddStateChangeHandler({}, [&](const StateChange &change) {
+            ++calls;
+            heldInHandler    = World::HeldByThisThread();
+            namedEntity      = change.networkId;
+            handedThePointer = change.entity != nullptr;
+            // What a script's handler does: read the entity it was told about.
+            reachedTheEntity = static_cast<bool>(world.Read<Walker>(change.networkId));
+        });
+        {
+            const Ref<Walker> held = world.Write<Walker>(walker);
+            StateValue value;
+            value.type   = StateValue::Type::Number;
+            value.number = 4.0;
+            held->state.Set("fuel", value);
+            EQUALS(calls, 0);
+        }
+        fixture.manager->RemoveStateChangeHandler(subscription);
+        EQUALS(calls, 1);
+        EQUALS(heldInHandler, size_t {0});
+        EQUALS(namedEntity, walker);
+        EQUALS(handedThePointer, false);
+        EQUALS(reachedTheEntity, true);
+    });
+
+    IT("keeps the viewer map by id, and takes the flag off a replaced viewer", {
+        Fixture fixture;
+        World &world                  = fixture.world;
+        ReplicationManager *manager   = fixture.manager;
+        const uint64_t first          = fixture.Make<Walker>();
+        const uint64_t second         = fixture.Make<Walker>();
+        const uint64_t third          = fixture.Make<Walker>();
+        const MafiaNet::PeerGuid guid = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(81));
+        EQUALS(manager->GetViewerId(guid), uint64_t {0});
+
+        manager->SetViewer(guid, first);
+        EQUALS(manager->GetViewerId(guid), first);
+        EQUALS(world.Read<Walker>(first)->streaming.isViewer, true);
+
+        // By id, both entities are taken: the replaced one loses the flag at once.
+        manager->SetViewer(guid, second);
+        EQUALS(manager->GetViewerId(guid), second);
+        EQUALS(world.Read<Walker>(first)->streaming.isViewer, false);
+        EQUALS(world.Read<Walker>(second)->streaming.isViewer, true);
+
+        // By handle, only the new one is held: the map answers at once, the old flag goes with the tick.
+        {
+            const Ref<Walker> held = world.Write<Walker>(third);
+            manager->SetViewer(guid, held);
+            EQUALS(manager->GetViewerId(guid), third);
+            EQUALS(held->streaming.isViewer, true);
+        }
+        manager->RebuildInterest();
+        EQUALS(world.Read<Walker>(second)->streaming.isViewer, false);
+        EQUALS(manager->GetViewerIds().size(), size_t {1});
+
+        manager->ClearViewer(guid);
+        EQUALS(manager->GetViewerId(guid), uint64_t {0});
+        EQUALS(world.Read<Walker>(third)->streaming.isViewer, false);
+
+        // A viewer that is destroyed leaves the map.
+        manager->SetViewer(guid, first);
+        EQUALS(world.Destroy(first), true);
+        EQUALS(manager->GetViewerId(guid), uint64_t {0});
+    });
+
     IT("counts handles held by the thread", {
         Fixture fixture;
         World &world     = fixture.world;

@@ -71,6 +71,8 @@ namespace Framework::Networking {
         // Identities from the session request, kept for the connection's lifetime.
         std::unordered_map<uint64_t, RPC::ClientIdentity> _peerIdentities;
 
+        bool _replicationRPCsRegistered = false;
+
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
       public:
@@ -186,4 +188,9 @@ namespace Framework::Networking {
             _onConnectionReadyCallback = std::move(callback);
         }
     };
+
+    template <RPC::Payload T>
+    void Sender::Reply(T payload, MafiaNet::Priority priority, MafiaNet::Reliability reliability) const {
+        _server->SendRPC(payload, MafiaNet::ToGuid(_guid), priority, reliability);
+    }
 } // namespace Framework::Networking

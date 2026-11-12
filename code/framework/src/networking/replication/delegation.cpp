@@ -9,6 +9,7 @@
 #include "delegation.h"
 
 #include "replication_manager.h"
+#include "world.h"
 
 #include <logging/logger.h>
 #include <utils/profiler.h>
@@ -28,10 +29,12 @@ namespace Framework::Networking::Replication {
         if (guid == MafiaNet::UNASSIGNED_PEER_GUID) {
             return;
         }
+        const std::lock_guard guard(_mutex);
         _capacityOverrides[guid] = maxWeight;
     }
 
     void DelegationManager::ClearClientCapacity(MafiaNet::PeerGuid guid) {
+        const std::lock_guard guard(_mutex);
         _capacityOverrides.erase(guid);
     }
 
@@ -39,34 +42,38 @@ namespace Framework::Networking::Replication {
         if (guid == MafiaNet::UNASSIGNED_PEER_GUID) {
             return;
         }
+        const std::lock_guard guard(_mutex);
         _suspended.insert(guid);
     }
 
     void DelegationManager::Resume(MafiaNet::PeerGuid guid) {
+        const std::lock_guard guard(_mutex);
         _suspended.erase(guid);
     }
 
     bool DelegationManager::IsSuspended(MafiaNet::PeerGuid guid) const {
+        const std::lock_guard guard(_mutex);
         return _suspended.contains(guid);
     }
 
-    void DelegationManager::Pin(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
-        if (!entity || !_isServer) {
+    void DelegationManager::Pin(uint64_t networkId, MafiaNet::PeerGuid guid) {
+        if (networkId == 0 || !_isServer) {
             return;
         }
-        Entry &entry   = EntryFor(entity);
-        entry.pinned   = true;
-        entry.pinnedTo = guid;
+        {
+            const std::lock_guard guard(_mutex);
+            Entry &entry   = _entries[networkId];
+            entry.pinned   = true;
+            entry.pinnedTo = guid;
+        }
         // Immediately, rather than at the next pass: a pin is an instruction, and a script that
         // pins an entity and then talks to it expects the simulator to already be the one it named.
         UpdateNow();
     }
 
-    void DelegationManager::Unpin(NetworkEntity *entity) {
-        if (!entity) {
-            return;
-        }
-        const auto it = _entries.find(entity->GetNetworkID());
+    void DelegationManager::Unpin(uint64_t networkId) {
+        const std::lock_guard guard(_mutex);
+        const auto it = _entries.find(networkId);
         if (it == _entries.end()) {
             return;
         }
@@ -74,21 +81,30 @@ namespace Framework::Networking::Replication {
         it->second.pinnedTo = MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
-    bool DelegationManager::IsPinned(const NetworkEntity *entity) const {
-        const Entry *entry = FindEntry(entity);
-        return entry != nullptr && entry->pinned;
+    bool DelegationManager::IsPinned(uint64_t networkId) const {
+        const std::lock_guard guard(_mutex);
+        const auto it = _entries.find(networkId);
+        return it != _entries.end() && it->second.pinned;
     }
 
-    MafiaNet::PeerGuid DelegationManager::PinnedTo(const NetworkEntity *entity) const {
-        const Entry *entry = FindEntry(entity);
-        return entry != nullptr && entry->pinned ? entry->pinnedTo : MafiaNet::UNASSIGNED_PEER_GUID;
+    MafiaNet::PeerGuid DelegationManager::PinnedTo(uint64_t networkId) const {
+        const std::lock_guard guard(_mutex);
+        const auto it = _entries.find(networkId);
+        return it != _entries.end() && it->second.pinned ? it->second.pinnedTo : MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
-    void DelegationManager::SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined) {
-        if (!entity || !_isServer || guid == MafiaNet::UNASSIGNED_PEER_GUID || entity->GetDelegationPolicy() == nullptr) {
+    void DelegationManager::SetDeclined(uint64_t networkId, MafiaNet::PeerGuid guid, bool declined) {
+        if (!_isServer || !_manager || guid == MafiaNet::UNASSIGNED_PEER_GUID) {
             return;
         }
-        Entry &entry     = EntryFor(entity);
+        {
+            const ConstRef<NetworkEntity> entity = _manager->GetWorld().Read<NetworkEntity>(networkId);
+            if (!entity || entity->GetDelegationPolicy() == nullptr) {
+                return;
+            }
+        }
+        const std::lock_guard guard(_mutex);
+        Entry &entry     = _entries[networkId];
         auto &list       = entry.declined;
         const bool known = std::ranges::contains(list, guid);
         if (known == declined) {
@@ -105,12 +121,14 @@ namespace Framework::Networking::Replication {
         _passPending = _passPending || !entry.pinned;
     }
 
-    bool DelegationManager::IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const {
-        const Entry *entry = FindEntry(entity);
-        return entry != nullptr && std::ranges::contains(entry->declined, guid);
+    bool DelegationManager::IsDeclined(uint64_t networkId, MafiaNet::PeerGuid guid) const {
+        const std::lock_guard guard(_mutex);
+        const auto it = _entries.find(networkId);
+        return it != _entries.end() && std::ranges::contains(it->second.declined, guid);
     }
 
     void DelegationManager::OnEntityDestroyed(uint64_t networkId) {
+        const std::lock_guard guard(_mutex);
         _entries.erase(networkId);
     }
 
@@ -118,25 +136,31 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
-        _suspended.erase(guid);
-        for (auto &[id, entry] : _entries) {
-            std::erase(entry.declined, guid);
+        {
+            const std::lock_guard guard(_mutex);
+            _suspended.erase(guid);
+            for (auto &[id, entry] : _entries) {
+                std::erase(entry.declined, guid);
+            }
         }
         // The dropped peer is still the owner of everything it was simulating, and an owner that is
         // gone can never report again. Hand those entities back to the server here, so they are
         // dormant rather than owned-by-nobody until the next pass, and drop any pin naming that
         // client -- a pin is to a player, and that player has left.
-        _manager->ForEachEntity([&](NetworkEntity *entity) {
-            if (entity == nullptr || entity->GetDelegationPolicy() == nullptr) {
+        _manager->GetWorld().ForEach<NetworkEntity>([&](Ref<NetworkEntity> &entity) {
+            if (entity->GetDelegationPolicy() == nullptr) {
                 return;
             }
-            const auto it = _entries.find(entity->GetNetworkID());
-            if (it != _entries.end() && it->second.pinned && it->second.pinnedTo == guid) {
-                it->second.pinned   = false;
-                it->second.pinnedTo = MafiaNet::UNASSIGNED_PEER_GUID;
+            {
+                const std::lock_guard guard(_mutex);
+                const auto it = _entries.find(entity->GetNetworkID());
+                if (it != _entries.end() && it->second.pinned && it->second.pinnedTo == guid) {
+                    it->second.pinned   = false;
+                    it->second.pinnedTo = MafiaNet::UNASSIGNED_PEER_GUID;
+                }
             }
             if (entity->ownerGUID == guid) {
-                Assign(entity, MafiaNet::UNASSIGNED_PEER_GUID, DelegationChange::Dormant);
+                Assign(*entity, MafiaNet::UNASSIGNED_PEER_GUID, DelegationChange::Dormant);
             }
         });
         // Deliberately no re-election here: this runs while the dropped peer's viewer may still be
@@ -148,34 +172,17 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
-        const MafiaNet::Time now   = MafiaNet::GetTime();
-        const MafiaNet::Time since = now - _lastPass;
-        const bool due             = _intervalMs == 0 || _lastPass == 0 || since >= static_cast<MafiaNet::Time>(_intervalMs);
-        const bool hurried         = _passPending && since >= static_cast<MafiaNet::Time>(kDeclinedPassGapMs);
-        if (!due && !hurried) {
-            return;
+        const MafiaNet::Time now = MafiaNet::GetTime();
+        {
+            const std::lock_guard guard(_mutex);
+            const MafiaNet::Time since = now - _lastPass;
+            const bool due             = _intervalMs == 0 || _lastPass == 0 || since >= static_cast<MafiaNet::Time>(_intervalMs);
+            const bool hurried         = _passPending && since >= static_cast<MafiaNet::Time>(kDeclinedPassGapMs);
+            if (!due && !hurried) {
+                return;
+            }
         }
         UpdateNow();
-    }
-
-    namespace {
-        // NetworkIDObject::GetNetworkID is logically const and not marked so by
-        // the vendored header, and every read here is from a const entity.
-        uint64_t IdOf(const NetworkEntity *entity) {
-            return const_cast<NetworkEntity *>(entity)->GetNetworkID();
-        }
-    } // namespace
-
-    DelegationManager::Entry &DelegationManager::EntryFor(const NetworkEntity *entity) {
-        return _entries[IdOf(entity)];
-    }
-
-    const DelegationManager::Entry *DelegationManager::FindEntry(const NetworkEntity *entity) const {
-        if (entity == nullptr) {
-            return nullptr;
-        }
-        const auto it = _entries.find(IdOf(entity));
-        return it != _entries.end() ? &it->second : nullptr;
     }
 
     DelegationCandidate *DelegationManager::FindCandidate(MafiaNet::PeerGuid guid) {
@@ -257,24 +264,34 @@ namespace Framework::Networking::Replication {
         return desired;
     }
 
+    uint32_t DelegationManager::CapacityOf(MafiaNet::PeerGuid guid) const {
+        const std::lock_guard guard(_mutex);
+        const auto override = _capacityOverrides.find(guid);
+        return override != _capacityOverrides.end() ? override->second : _defaultCapacity;
+    }
+
     void DelegationManager::CollectCandidates() {
         _candidates.clear();
-        _manager->ForEachViewer([&](MafiaNet::PeerGuid guid, NetworkEntity *viewer) {
-            if (guid == MafiaNet::UNASSIGNED_PEER_GUID || viewer == nullptr || _suspended.contains(guid)) {
-                return;
+        World &world = _manager->GetWorld();
+        for (const auto &[guid, id] : _manager->GetViewerIds()) {
+            if (guid == MafiaNet::UNASSIGNED_PEER_GUID || IsSuspended(guid)) {
+                continue;
+            }
+            const ConstRef<NetworkEntity> viewer = world.Read<NetworkEntity>(id);
+            if (!viewer) {
+                continue;
             }
             DelegationCandidate candidate;
             candidate.guid         = guid;
             candidate.position     = viewer->position;
             candidate.virtualWorld = viewer->GetVirtualWorld();
-            const auto override    = _capacityOverrides.find(guid);
-            candidate.capacity     = override != _capacityOverrides.end() ? override->second : _defaultCapacity;
+            candidate.capacity     = CapacityOf(guid);
             _candidates.push_back(candidate);
-        });
+        }
     }
 
-    void DelegationManager::Assign(NetworkEntity *entity, MafiaNet::PeerGuid next, DelegationChange change) {
-        const MafiaNet::PeerGuid previous = entity->ownerGUID;
+    void DelegationManager::Assign(NetworkEntity &entity, MafiaNet::PeerGuid next, DelegationChange change) {
+        const MafiaNet::PeerGuid previous = entity.ownerGUID;
         if (previous == next) {
             return;
         }
@@ -289,34 +306,38 @@ namespace Framework::Networking::Replication {
             _manager->ForceState(entity);
         }
 
-        entity->OnSimulatorChanged(previous, next);
-        // A copy of the handle list, so a handler that subscribes or unsubscribes from inside the
-        // dispatch does not rehash the map being walked.
-        _dispatch.clear();
-        _dispatch.reserve(_simulatorChanged.size());
-        for (const auto &[handle, callback] : _simulatorChanged) {
-            (void)callback;
-            _dispatch.push_back(handle);
+        entity.OnSimulatorChanged(previous, next);
+        // A copy of the handlers, so one that subscribes or unsubscribes from inside the dispatch
+        // does not rehash the map being walked, and none is called under the mutex.
+        std::vector<std::pair<SimulatorChangedHandle, std::shared_ptr<const SimulatorChanged>>> dispatch;
+        {
+            const std::lock_guard guard(_mutex);
+            dispatch.assign(_simulatorChanged.begin(), _simulatorChanged.end());
+            ++_stats.handovers;
         }
-        for (const SimulatorChangedHandle handle : _dispatch) {
-            const auto it = _simulatorChanged.find(handle);
-            if (it != _simulatorChanged.end() && it->second) {
-                it->second(entity, previous, next, change);
+        for (const auto &[handle, callback] : dispatch) {
+            {
+                const std::lock_guard guard(_mutex);
+                if (!_simulatorChanged.contains(handle)) {
+                    continue;
+                }
             }
+            (*callback)(&entity, previous, next, change);
         }
-        ++_stats.handovers;
     }
 
     DelegationManager::SimulatorChangedHandle DelegationManager::AddSimulatorChangedHandler(fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const> callback) {
         if (!callback) {
             return kInvalidSimulatorHandle;
         }
+        const std::lock_guard guard(_mutex);
         const SimulatorChangedHandle handle = ++_nextSimulatorHandle;
-        _simulatorChanged[handle]           = std::move(callback);
+        _simulatorChanged[handle]           = std::make_shared<const SimulatorChanged>(std::move(callback));
         return handle;
     }
 
     void DelegationManager::RemoveSimulatorChangedHandler(SimulatorChangedHandle handle) {
+        const std::lock_guard guard(_mutex);
         _simulatorChanged.erase(handle);
     }
 
@@ -325,9 +346,20 @@ namespace Framework::Networking::Replication {
             return;
         }
         FW_PROFILE_SCOPE_N("Replication::DelegationPass");
-        _passPending = false;
-
-        _lastPass = MafiaNet::GetTime();
+        World::RequireNoneHeld("a delegation pass was run");
+        // One pass at a time, and the connections stay as they are for it: the world comes before
+        // the entities the pass then takes one by one.
+        const MafiaNet::ReplicaManager3::WorldGuard pass(*_manager);
+        World &world       = _manager->GetWorld();
+        MafiaNet::Time now = 0;
+        bool groundXY      = false;
+        {
+            const std::lock_guard guard(_mutex);
+            _passPending = false;
+            _lastPass    = MafiaNet::GetTime();
+            now          = _lastPass;
+            groundXY     = _groundXY;
+        }
         CollectCandidates();
 
         // Two passes over the delegated entities: the first collects them and charges every
@@ -335,38 +367,63 @@ namespace Framework::Networking::Replication {
         // before the first election decision, or the entity that happens to be walked first sees an
         // empty budget and a client can be handed its whole capacity in one pass.
         _scan.clear();
-        _manager->ForEachEntity([&](NetworkEntity *entity) {
-            if (entity == nullptr || entity->GetDelegationPolicy() == nullptr) {
-                return;
+        for (const uint64_t id : world.IdsOfType(0, true)) {
+            const ConstRef<NetworkEntity> entity = world.Read<NetworkEntity>(id);
+            if (!entity || entity->GetDelegationPolicy() == nullptr) {
+                continue;
             }
-            _scan.push_back(entity);
+            _scan.push_back(id);
             if (entity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
-                return;
+                continue;
             }
             if (DelegationCandidate *candidate = FindCandidate(entity->ownerGUID)) {
                 candidate->load += entity->GetDelegationPolicy()->weight;
             }
-        });
+        }
 
-        const MafiaNet::Time now = _lastPass;
-        uint32_t simulated       = 0;
-        uint32_t dormant         = 0;
+        uint32_t simulated = 0;
+        uint32_t dormant   = 0;
+        uint64_t refusals  = 0;
+        uint64_t forced    = 0;
+        std::vector<MafiaNet::PeerGuid> streaming;
 
-        for (NetworkEntity *entity : _scan) {
+        for (const uint64_t id : _scan) {
+            Entry entry;
+            {
+                const std::lock_guard guard(_mutex);
+                entry = _entries[id];
+            }
+            // A client that streamed the entity out can no longer withdraw its decline, so the decline goes with the entity.
+            // Asked of the connections before the entity is taken: their lock comes first.
+            if (!entry.declined.empty()) {
+                streaming.clear();
+                _manager->ForEachStreamingPeer(id, [&](MafiaNet::PeerGuid peer) {
+                    streaming.push_back(peer);
+                });
+                const std::lock_guard guard(_mutex);
+                Entry &stored = _entries[id];
+                std::erase_if(stored.declined, [&](MafiaNet::PeerGuid guid) {
+                    return !std::ranges::contains(streaming, guid);
+                });
+                entry = stored;
+            }
+
+            const Ref<NetworkEntity> entity = world.Write<NetworkEntity>(id);
+            if (!entity || entity->GetDelegationPolicy() == nullptr) {
+                continue;
+            }
             const DelegationPolicy policy    = entity->GetDelegationPolicy()->Normalized();
             const MafiaNet::PeerGuid current = entity->ownerGUID;
-            Entry &entry                     = EntryFor(entity);
             MafiaNet::PeerGuid desired       = MafiaNet::UNASSIGNED_PEER_GUID;
             DelegationChange change          = DelegationChange::Dormant;
-
-            // A client that streamed the entity out can no longer withdraw its decline, so the decline goes with the entity.
-            std::erase_if(entry.declined, [&](MafiaNet::PeerGuid guid) {
-                bool streaming = false;
-                _manager->ForEachStreamingPeer(entity, [&](MafiaNet::PeerGuid peer) {
-                    streaming = streaming || peer == guid;
-                });
-                return !streaming;
-            });
+            const auto setRefusingSince      = [&](MafiaNet::Time since) {
+                if (entry.refusingSince == since) {
+                    return;
+                }
+                entry.refusingSince = since;
+                const std::lock_guard guard(_mutex);
+                _entries[id].refusingSince = since;
+            };
 
             if (entry.pinned) {
                 // A pin overrides distance entirely, but not existence: a pin naming a client that
@@ -374,11 +431,11 @@ namespace Framework::Networking::Replication {
                 desired = FindCandidate(entry.pinnedTo) != nullptr ? entry.pinnedTo : MafiaNet::UNASSIGNED_PEER_GUID;
             }
             else {
-                desired = Elect(policy, entity->position, entity->GetVirtualWorld(), current, _candidates, _groundXY, entry.declined);
+                desired = Elect(policy, entity->position, entity->GetVirtualWorld(), current, _candidates, groundXY, entry.declined);
             }
 
             if (desired == current) {
-                entry.refusingSince = 0;
+                setRefusingSince(0);
                 (current != MafiaNet::UNASSIGNED_PEER_GUID ? simulated : dormant)++;
                 continue;
             }
@@ -389,18 +446,18 @@ namespace Framework::Networking::Replication {
             const bool declinedByCurrent = std::ranges::contains(entry.declined, current);
             if (current != MafiaNet::UNASSIGNED_PEER_GUID && !declinedByCurrent && !entity->CanReleaseSimulation()) {
                 if (entry.refusingSince == 0) {
-                    entry.refusingSince = now;
+                    setRefusingSince(now);
                 }
                 if (now - entry.refusingSince < static_cast<MafiaNet::Time>(policy.graceMs)) {
-                    ++_stats.refusals;
+                    ++refusals;
                     ++simulated;
                     continue;
                 }
                 // The grace is what stops a permanently busy entity pinning itself to a client that
                 // has walked away. Past it the handover happens whatever the entity says.
-                ++_stats.forced;
+                ++forced;
             }
-            entry.refusingSince = 0;
+            setRefusingSince(0);
 
             if (current == MafiaNet::UNASSIGNED_PEER_GUID) {
                 change = DelegationChange::Acquired;
@@ -418,12 +475,15 @@ namespace Framework::Networking::Replication {
                 winner->load += policy.weight;
             }
 
-            Assign(entity, desired, change);
+            Assign(*entity, desired, change);
             (desired != MafiaNet::UNASSIGNED_PEER_GUID ? simulated : dormant)++;
         }
 
+        const std::lock_guard guard(_mutex);
         _stats.simulated = simulated;
         _stats.dormant   = dormant;
+        _stats.refusals += refusals;
+        _stats.forced += forced;
     }
 
     uint32_t DelegationManager::LoadOf(MafiaNet::PeerGuid guid) const {
@@ -431,18 +491,19 @@ namespace Framework::Networking::Replication {
         if (!_manager || guid == MafiaNet::UNASSIGNED_PEER_GUID) {
             return 0;
         }
-        _manager->ForEachEntity([&](NetworkEntity *entity) {
-            const DelegationPolicy *policy = entity != nullptr ? entity->GetDelegationPolicy() : nullptr;
+        World &world = _manager->GetWorld();
+        for (const uint64_t id : world.IdsOfType(0, true)) {
+            const ConstRef<NetworkEntity> entity = world.Read<NetworkEntity>(id);
+            const DelegationPolicy *policy       = entity ? entity->GetDelegationPolicy() : nullptr;
             if (policy != nullptr && entity->ownerGUID == guid) {
                 load += policy->weight;
             }
-        });
+        }
         return load;
     }
 
     uint32_t DelegationManager::HeadroomOf(MafiaNet::PeerGuid guid) const {
-        const auto override     = _capacityOverrides.find(guid);
-        const uint32_t capacity = override != _capacityOverrides.end() ? override->second : _defaultCapacity;
+        const uint32_t capacity = CapacityOf(guid);
         if (capacity == 0) {
             return std::numeric_limits<uint32_t>::max();
         }

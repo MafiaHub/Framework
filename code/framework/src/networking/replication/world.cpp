@@ -18,35 +18,76 @@
 
 namespace Framework::Networking::Replication {
     namespace {
-        thread_local size_t t_held = 0;
+        // The locks this thread holds, handles and guards alike; a handful at most.
+        thread_local std::vector<const Detail::WorldLockable *> t_locks;
 
         struct Doomed {
             World *world;
             std::shared_ptr<Detail::WorldEntitySlot> slot;
         };
         thread_local std::vector<Doomed> t_doomed;
-        // Set while this thread tears one down: a handle the teardown takes and releases must not
-        // start the next teardown inside it.
+        // What this thread put off until it holds nothing (World::WhenNoneHeld), oldest first.
+        thread_local std::vector<fu2::unique_function<void()>> t_deferred;
+        // Set while this thread tears one down or runs one of those: a handle taken and released
+        // inside must not start the next.
         thread_local bool t_draining = false;
 
-        // Locks are ordered within one call only, so a second call could wait on a thread that waits
-        // on this one. Fatal in every build type: a deadlock on a live server is worse.
-        void RequireNoneHeld(const char *what) {
-            if (t_held == 0) {
-                return;
+        void Unhold(const Detail::WorldLockable *lock) {
+            const auto it = std::find(t_locks.begin(), t_locks.end(), lock);
+            if (it != t_locks.end()) {
+                *it = t_locks.back();
+                t_locks.pop_back();
             }
-            const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
-            logger->critical("World: {} while this thread holds {} handle(s); take everything a scope needs in one call", what, t_held);
-            logger->flush();
-            std::abort();
         }
     } // namespace
+
+    // Locks are ordered within one call only, so a second call could wait on a thread that waits on
+    // this one. Fatal in every build type: a deadlock on a live server is worse.
+    void World::RequireNoneHeld(const char *what) {
+        if (t_locks.empty()) {
+            return;
+        }
+        const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+        logger->critical("World: {} while this thread holds {} handle(s); take everything a scope needs in one call", what, t_locks.size());
+        logger->flush();
+        std::abort();
+    }
+
+    namespace Detail {
+        EntityGuard::EntityGuard(const NetworkEntity &entity, bool exclusive): _exclusive(exclusive) {
+            WorldLockable *lock = entity._worldLock;
+            if (lock == nullptr || std::find(t_locks.begin(), t_locks.end(), lock) != t_locks.end()) {
+                return;
+            }
+            if (exclusive) {
+                lock->mutex.lock();
+            }
+            else {
+                lock->mutex.lock_shared();
+            }
+            t_locks.push_back(lock);
+            _lock = lock;
+        }
+
+        EntityGuard::~EntityGuard() {
+            if (_lock == nullptr) {
+                return;
+            }
+            Unhold(_lock);
+            if (_exclusive) {
+                _lock->mutex.unlock();
+            }
+            else {
+                _lock->mutex.unlock_shared();
+            }
+        }
+    } // namespace Detail
 
     World::World(ReplicationManager &manager): _manager(manager) {}
     World::~World() = default;
 
     size_t World::HeldByThisThread() {
-        return t_held;
+        return t_locks.size();
     }
 
     void World::Acquire(Detail::WorldRequest *requests, size_t count, bool exclusive) {
@@ -119,7 +160,7 @@ namespace Framework::Networking::Replication {
             else {
                 request.lock->mutex.lock_shared();
             }
-            ++t_held;
+            t_locks.push_back(request.lock);
             if (request.slot && request.slot->destroyed) {
                 // Destroyed while this thread waited for it.
                 Release(request.lock, request.slot, exclusive);
@@ -138,7 +179,7 @@ namespace Framework::Networking::Replication {
         else {
             lock->mutex.unlock_shared();
         }
-        --t_held;
+        Unhold(lock);
         if (slot) {
             bool last = false;
             {
@@ -159,12 +200,27 @@ namespace Framework::Networking::Replication {
             return;
         }
         t_draining = true;
-        while (t_held == 0 && !t_doomed.empty()) {
+        while (t_locks.empty() && (!t_deferred.empty() || !t_doomed.empty())) {
+            if (!t_deferred.empty()) {
+                fu2::unique_function<void()> next = std::move(t_deferred.front());
+                t_deferred.erase(t_deferred.begin());
+                next();
+                continue;
+            }
             const Doomed next = std::move(t_doomed.front());
             t_doomed.erase(t_doomed.begin());
             next.world->Teardown(next.slot);
         }
         t_draining = false;
+    }
+
+    void World::WhenNoneHeld(fu2::unique_function<void()> fn) {
+        t_deferred.push_back(std::move(fn));
+        FinishDoomed();
+    }
+
+    void World::Settle() {
+        FinishDoomed();
     }
 
     void World::Teardown(const std::shared_ptr<Detail::WorldEntitySlot> &slot) {
@@ -253,10 +309,13 @@ namespace Framework::Networking::Replication {
         auto slot    = std::make_shared<Detail::WorldEntitySlot>();
         slot->entity = entity;
         slot->id     = entity->GetNetworkID();
+        if (_manager.IsServer()) {
+            entity->_worldLock = slot.get();
+        }
         if (hold) {
             slot->mutex.lock();
             slot->holders = 1;
-            ++t_held;
+            t_locks.push_back(slot.get());
             *hold = Detail::WorldHold(this, slot.get(), slot, true);
         }
         const std::lock_guard guard(_slotsMutex);
@@ -268,6 +327,7 @@ namespace Framework::Networking::Replication {
         const auto it = _slots.find(entity->GetNetworkID());
         if (it != _slots.end() && it->second->entity == entity) {
             _slots.erase(it);
+            entity->_worldLock = nullptr;
         }
     }
 } // namespace Framework::Networking::Replication

@@ -10,6 +10,7 @@
 
 #include "../channels.h"
 #include "replication_manager.h"
+#include "world.h"
 
 #include <mafianet/get_time.h>
 #include <utils/time.h>
@@ -45,7 +46,7 @@ namespace Framework::Networking::Replication {
     } // namespace
 
     NetworkEntity::~NetworkEntity() {
-        if (_interestSlot != UINT32_MAX) {
+        if (_interestSlot != UINT32_MAX || !IsServerPeer()) {
             if (ReplicationManager *manager = Manager()) {
                 manager->ForgetEntity(this);
             }
@@ -142,6 +143,7 @@ namespace Framework::Networking::Replication {
         if (IsServerPeer()) {
             Manager()->SerializeThisPass();
         }
+        const Detail::EntityGuard guard(*this, true);
         constructionBitstream->Write(stateEpoch);
         FieldSerializer seed(constructionBitstream, true);
         SerializeBaseFields(seed);
@@ -158,6 +160,10 @@ namespace Framework::Networking::Replication {
     }
 
     bool NetworkEntity::DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
+        // A client's world learns of the entity here: the id is set, and nothing has looked for it.
+        if (ReplicationManager *manager = Manager(); manager && !manager->IsServer()) {
+            manager->AdoptRemote(this);
+        }
         uint8_t incomingEpoch = stateEpoch;
         constructionBitstream->Read(incomingEpoch);
         ApplyIncomingEpoch(incomingEpoch);
@@ -183,8 +189,11 @@ namespace Framework::Networking::Replication {
         // destruction from the entity's current owner; fail closed on a missing connection. Returning
         // false keeps the entity alive. Clients still accept the server's authoritative destructions.
         if (IsServerPeer()) {
-            if (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID || !CanOwnerDestroy()) {
-                return false;
+            {
+                const Detail::EntityGuard guard(*this, false);
+                if (!sourceConnection || MafiaNet::ToPeerGuid(sourceConnection->GetRakNetGUID()) != ownerGUID || !CanOwnerDestroy()) {
+                    return false;
+                }
             }
             // Destroyed here, not by the base: its delete skips DestroyEntity's bookkeeping and leaves
             // the viewer map and interest sets on freed memory. The base re-resolves the id after
@@ -264,7 +273,7 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::MarkStateDirty() {
         // No manager before Reference(); a bag written that early is carried by the seed anyway.
         if (auto *manager = Manager()) {
-            manager->MarkStateBagDirty(this);
+            manager->MarkStateBagDirty(GetNetworkID());
         }
     }
 
@@ -285,8 +294,9 @@ namespace Framework::Networking::Replication {
                 continue;
             }
             StateChange change;
-            change.entity = this;
-            change.key    = key;
+            change.entity    = this;
+            change.networkId = GetNetworkID();
+            change.key       = key;
             change.value  = *value;
             manager->NotifyStateChanged(change);
         }
@@ -294,13 +304,13 @@ namespace Framework::Networking::Replication {
 
     void NetworkEntity::ForceState() {
         if (auto *manager = Manager()) {
-            manager->ForceState(this);
+            manager->ForceState(*this);
         }
     }
 
     void NetworkEntity::SetOwner(MafiaNet::PeerGuid guid) {
         if (auto *manager = Manager()) {
-            manager->SetOwner(this, guid);
+            manager->SetOwner(*this, guid);
         }
         else {
             ownerGUID = guid;
@@ -318,12 +328,18 @@ namespace Framework::Networking::Replication {
     // --- Per-tick delta serialization (VariableDeltaSerializer) ---
 
     void NetworkEntity::OnUserReplicaPreSerializeTick() {
+        const Detail::EntityGuard guard(*this, true);
         // Reset the per-tick "already compared" flag so identical-broadcast caching works (see
         // VariableDeltaSerializer::OnPreSerializeTick). Called once per replica per serialize tick.
         _vds.OnPreSerializeTick();
+        _pass.owner       = ownerGUID;
+        _pass.world       = GetVirtualWorld();
+        _pass.position    = position;
+        _pass.unthrottled = streaming.alwaysVisible || streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
     MafiaNet::RM3SerializationResult NetworkEntity::Serialize(MafiaNet::SerializeParameters *serializeParameters) {
+        const Detail::EntityGuard guard(*this, true);
         serializeParameters->messageTimestamp = MafiaNet::GetTime();
 
         // The epoch rides raw at the head of each channel: it must be present in every update (a VDS
@@ -391,6 +407,9 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) {
+        // Under the sender's connection lock: nothing from here on, OnDeserialized included, may
+        // reference, dereference or destroy a replica (see ReplicaManager3::Update).
+        const Detail::EntityGuard guard(*this, true);
         // Server authority gate (applies to both channels): only accept updates from the entity's
         // current owner, rejecting a stale owner whose in-flight packets land after a handover.
         if (IsServerPeer() && deserializeParameters->sourceConnection && MafiaNet::ToPeerGuid(deserializeParameters->sourceConnection->GetRakNetGUID()) != ownerGUID) {
@@ -464,6 +483,19 @@ namespace Framework::Networking::Replication {
 
     bool NetworkEntity::QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) {
         return QueryRemoteConstruction_ServerConstruction(sourceConnection, IsServerPeer());
+    }
+
+    MafiaNet::RM3QuerySerializationResult NetworkEntity::QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) {
+        if (!IsServerPeer()) {
+            return VirtualWorldReplica3::QuerySerialization(destinationConnection);
+        }
+        // The base's rule for an authority, which the server always is, against what the pass took
+        // of this entity under its lock: this is asked once per connection, on their workers.
+        if (!MafiaNet::VirtualWorldsCanSee(_pass.world, destinationConnection->GetVirtualWorld())) {
+            return MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE;
+        }
+        // Relay to everyone except the authoritative owner (no echo back to it).
+        return MafiaNet::ToPeerGuid(destinationConnection->GetRakNetGUID()) == _pass.owner ? MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE : MafiaNet::RM3QSR_CALL_SERIALIZE;
     }
 
     MafiaNet::RM3QuerySerializationResult NetworkEntity::QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) {

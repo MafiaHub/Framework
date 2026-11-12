@@ -10,6 +10,7 @@
 
 #include "errors.h"
 #include "replication/replication_manager.h"
+#include "replication/world.h"
 
 #include <logging/logger.h>
 #include <utils/profiler.h>
@@ -138,6 +139,9 @@ namespace Framework::Networking {
                 Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
             }
         }
+        // What the pass and the inbound state put off while they held an entity: a destruction or a
+        // state change made from inside one of their callbacks.
+        Replication::World::Settle();
         FW_PROFILE_VALUE(packets);
         _replicationManager->EndNetworkUpdate();
     }

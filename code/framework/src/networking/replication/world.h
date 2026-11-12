@@ -27,6 +27,7 @@
 
 namespace Framework::Networking::Replication {
     class ReplicationManager;
+    class DelegationManager;
     class World;
 
     namespace Detail {
@@ -74,6 +75,22 @@ namespace Framework::Networking::Replication {
             WorldLockable *_lock = nullptr;
             std::shared_ptr<WorldEntitySlot> _slot;
             bool _exclusive = false;
+        };
+
+        // An entity's lock taken by the Framework around what it does on the entity itself: the
+        // pass serializing it, inbound state applied to it. Counted like a handle, so asking the
+        // world for one inside aborts, but releasing it never tears anything down. Takes nothing
+        // for an entity the world does not hold, or one this thread already holds.
+        class EntityGuard final {
+          public:
+            EntityGuard(const NetworkEntity &entity, bool exclusive);
+            ~EntityGuard();
+            EntityGuard(const EntityGuard &)            = delete;
+            EntityGuard &operator=(const EntityGuard &) = delete;
+
+          private:
+            WorldLockable *_lock = nullptr;
+            bool _exclusive      = false;
         };
 
         // One entity or registered state asked of World::Acquire, and what it got.
@@ -263,9 +280,19 @@ namespace Framework::Networking::Replication {
 
         // Handles the calling thread holds, on any world.
         static size_t HeldByThisThread();
+        // Logs and aborts if the calling thread holds one: for what takes locks that come before an
+        // entity's, and so cannot be done from inside a handle's scope.
+        static void RequireNoneHeld(const char *what);
+        // Runs fn once the calling thread holds nothing: at once if it holds nothing now, otherwise
+        // when it releases its last handle, or at its next Settle if what it holds is a guard.
+        static void WhenNoneHeld(fu2::unique_function<void()> fn);
+        // Runs what the calling thread put off while it held something, teardowns included. For the
+        // loops that call into entities under a guard, between two of those calls.
+        static void Settle();
 
       private:
         friend class ReplicationManager;
+        friend class DelegationManager;
         friend class Detail::WorldHold;
 
         template <typename... Ts>

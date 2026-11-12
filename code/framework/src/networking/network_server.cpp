@@ -12,6 +12,7 @@
 #include "replication/network_entity.h"
 #include "replication/replication_manager.h"
 #include "replication/world.h"
+#include "rpc/decline_simulation.h"
 
 #include <logging/logger.h>
 #include <mafianet/bit_stream.h>
@@ -32,8 +33,7 @@ namespace Framework::Networking {
     } // namespace
 
     uint64_t Sender::Avatar() const {
-        Replication::NetworkEntity *avatar = _server->GetReplicationManager()->GetViewer(_guid);
-        return avatar ? avatar->GetNetworkID() : 0;
+        return _server->GetReplicationManager()->GetViewerId(_guid);
     }
 
     void Sender::Drop(std::string_view reason) const {
@@ -77,6 +77,11 @@ namespace Framework::Networking {
 
         // Run replication as the authoritative server.
         _replicationManager->Init(this, true);
+        if (!std::exchange(_replicationRPCsRegistered, true)) {
+            RegisterRPC<RPC::DeclineSimulation>([this](const RPC::DeclineSimulation &payload, Sender sender, Replication::World &) {
+                _replicationManager->Delegation().SetDeclined(payload.networkId, sender.Guid(), payload.declined);
+            });
+        }
 
         // Gate replication behind the handshake: don't auto-create the connection on connect (see
         // PushReplicationConnection). autoDestroy stays on so dropped peers are torn down.

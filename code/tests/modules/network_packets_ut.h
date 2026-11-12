@@ -193,7 +193,7 @@ MODULE(network_packets, {
         {
             auto avatar = world.Create<NetworkPacketsTest::Avatar>();
             avatarId    = avatar->GetNetworkID();
-            net.server.GetReplicationManager()->SetViewer(net.ClientGuid(), &*avatar);
+            net.server.GetReplicationManager()->SetViewer(net.ClientGuid(), avatar);
         }
 
         int calls = 0;

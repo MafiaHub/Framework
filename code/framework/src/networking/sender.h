@@ -17,30 +17,34 @@
 #include <string_view>
 
 namespace Framework::Networking {
+    class NetworkServer;
+
     // Server: the connection a packet came from, as its RPC handler is given it. Valid for the
-    // duration of the handler; what is kept beyond it is the guid.
+    // duration of the handler; what is kept beyond it is the guid. Only a NetworkServer makes one.
     class Sender final {
       public:
-        Sender(NetworkPeer &server, MafiaNet::PeerGuid guid): _server(&server), _guid(guid) {}
-
         MafiaNet::PeerGuid Guid() const {
             return _guid;
         }
 
-        // Network id of the entity this connection controls (its viewer), 0 when it has none.
+        // Network id of the entity this connection controls (its viewer), 0 when it has none. Looked
+        // up on every call, so a handler that sets the viewer sees it.
         uint64_t Avatar() const;
 
         // Sends to this connection only.
         template <RPC::Payload T>
-        void Reply(T payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) const {
-            _server->SendRPC(payload, MafiaNet::ToGuid(_guid), priority, reliability);
-        }
+        void Reply(T payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) const;
 
-        // Closes this connection; the client reads the reason as written.
+        // Closes this connection. The reason is sent to the client verbatim, so it says nothing the
+        // client should not read. Packets the connection had already sent are still in the queue:
+        // their handlers may run after this returns.
         void Drop(std::string_view reason) const;
 
       private:
-        NetworkPeer *_server;
+        friend class NetworkServer;
+        Sender(NetworkServer &server, MafiaNet::PeerGuid guid): _server(&server), _guid(guid) {}
+
+        NetworkServer *_server;
         MafiaNet::PeerGuid _guid;
     };
 } // namespace Framework::Networking

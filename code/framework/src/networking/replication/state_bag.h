@@ -65,7 +65,10 @@ namespace Framework::Networking::Replication {
     };
 
     struct StateChange {
+        // Null on a server when the change is delivered once its writer has let go of the entity,
+        // which is whenever the writer held a handle: ask the world for networkId instead.
         NetworkEntity *entity = nullptr;
+        uint64_t networkId    = 0;
         std::string key;
         StateValue value;
         StateValue previous;

@@ -253,7 +253,7 @@ MODULE(network_work, {
         EQUALS(sees(bystanderConnection, nearby), true);
 
         // The new owner refreshes at once; a viewer the handover does not concern keeps its phase.
-        manager->SetOwner(distant, MafiaNet::ToPeerGuid(viewerGuid));
+        distant->SetOwner(MafiaNet::ToPeerGuid(viewerGuid));
         EQUALS(sees(viewerConnection, distant), true);
         EQUALS(sees(viewerConnection, nearby), false);
         EQUALS(sees(bystanderConnection, nearby), true);
@@ -264,7 +264,7 @@ MODULE(network_work, {
 
         // Owned entities bypass world culling, so hand it back before testing a dimension change.
         distant->position.x = 10;
-        manager->SetOwner(distant, MafiaNet::UNASSIGNED_PEER_GUID);
+        distant->SetOwner(MafiaNet::UNASSIGNED_PEER_GUID);
         rebuildQuietly();
         EQUALS(sees(viewerConnection, distant), true);
         viewer->SetVirtualWorld(5);
