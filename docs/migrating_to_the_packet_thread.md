@@ -40,7 +40,8 @@ Three things break at compile time and one does not.
 
 Two failures show up only when the code runs, as a critical log line
 followed by an abort: asking the world for a handle while holding one, and
-`EmitReservedSync` with a handle held. Both name what was attempted. Run
+`EmitReservedSync` or `RunOnScriptThread` with a handle held. Each names
+what was attempted. Run
 every handler once after porting it.
 
 ## 1. A server RPC handler
@@ -79,24 +80,22 @@ one call:
 
 ```cpp
 netServer->RegisterRPC<VehicleAction>([netServer](const VehicleAction &msg, Sender sender, World &world) {
-    uint64_t playerId = 0;
-    {
-        auto [player, vehicle] = world.Write<Human, Vehicle>(sender.Avatar(), msg.vehicleId);
-        if (!player || !vehicle) {
-            return;
-        }
-        playerId = player->GetNetworkID();
-        if (msg.seat < Vehicle::kMaxSeats) {
-            vehicle->seats[msg.seat] = playerId;
-            if (msg.seat == 0) {
-                vehicle->SetOwner(sender.Guid());
-                UIVehicleWantedLevel level;
-                level.level = vehicle->wantedLevel;
-                sender.Reply(level);
-            }
+    // The player's id is the sender's avatar: no need to take the player to read it.
+    const uint64_t playerId = sender.Avatar();
+    auto [player, vehicle]  = world.Write<Human, Vehicle>(playerId, msg.vehicleId);
+    if (!player || !vehicle) {
+        return;
+    }
+    if (msg.seat < Vehicle::kMaxSeats) {
+        vehicle->seats[msg.seat] = playerId;
+        if (msg.seat == 0) {
+            vehicle->SetOwner(sender.Guid());
+            UIVehicleWantedLevel level;
+            level.level = vehicle->wantedLevel;
+            sender.Reply(level);
         }
     }
-    // Wraps both ids for scripts, which asks the world for them: after the handles are gone.
+    // Wraps both ids for scripts and queues the event: fine with the handles held.
     EventVehiclePlayerEntering(msg.vehicleId, playerId, msg.seat);
 
     VehicleAction relayed = msg;
@@ -143,21 +142,32 @@ Things to check in every handler:
   }
   ```
 
-- **Events that wrap entities are raised after the handles are released.**
-  An asynchronous emit is allowed with a handle held, but the scripting
-  wrapper of an entity (`Builtins::Entity` and what derives from it) asks
-  the world for its id when it is constructed. Close the scope first, as
-  above. An event whose arguments are plain values may be raised inside it.
-- **`EmitReservedSync` is called with no handle held.** A handler that
-  needs a veto lets go, asks, and takes its handles again.
+- **Events may be raised with the handles held, entity wrappers included.**
+  An asynchronous emit copies and queues, and the scripting wrapper of an
+  entity (`Builtins::Entity` and what derives from it) only keeps the id:
+  it asks the world for nothing when it is constructed, and does not throw
+  for an entity that has gone. A mod's own handle class must keep to that:
+  its native constructor takes the id and nothing else, and its script
+  constructor is `Entity::ConstructFromScript<T>`, which is what refuses an
+  unknown id written in a script.
+- **`EmitReservedSync` and `RunOnScriptThread` are called with no handle
+  held.** Both wait for scripts, which may need the entity; both abort
+  otherwise. A handler that needs a veto lets go (`Reset()`, or the end of
+  the scope), asks, and takes its handles again.
+- **Script arguments are converted before a handle is taken.** Converting a
+  script value can run script (a getter, a `toString`), which may ask the
+  world for an entity: with a handle held, that aborts. Read the arguments
+  into C++ values, then take the handle.
 - **The type match is exact.** `world.Write<T>(id)` is empty unless the
   entity was registered as `T` itself. Code that used `dynamic_cast` to
   reach a base class asks for the concrete type, or for `NetworkEntity`.
-- **A truncated payload never reaches a typed handler.** The server decodes
-  the payload, writes it back, and drops the packet if the two differ. A
-  payload whose `Serialize` does not write exactly what it reads (it clamps
-  on read, or reads a field it does not write) is dropped every time. The
-  log line says "payload did not read whole" with the RPC's digest.
+- **A truncated payload never reaches a typed handler.** The server drops
+  a packet whose `Serialize` read past the end of what was sent, and only
+  that: quantized fields and unread trailing bits are fine, and `Serialize`
+  runs once. A payload that reads optional trailing fields when "there is
+  more" is dropped when they are absent; send them always, or register a
+  raw handler. The log line says "payload was cut short" with the RPC's
+  digest, and `NetworkServer::ShortPayloadsDropped()` counts them.
 - **Handlers are registered in `PostInit` or `PostScriptInit`.** The packet
   thread starts at the end of `Init`; registering after that is a data race
   on the handler table.
@@ -217,9 +227,10 @@ that need thought:
   auto human = repl->GetWorld().Read<HumanEntity>(occupant);
   ```
 
-- A binding that calls a JS function, constructs a script wrapper of an
-  entity, or raises a synchronous event while it holds a handle. Let go
-  first.
+- A binding that calls a JS function, converts a script value, or raises a
+  synchronous event while it holds a handle. Convert first, and let go
+  before the call. Constructing a script wrapper of an entity is fine with a
+  handle held.
 - A binding that returned or stored the pointer. A handle is kept in the
   scope that took it; store the id.
 - `Entity::GetHandle()` returns a handle too. `Entity::SetVisibleTo` takes
@@ -339,8 +350,13 @@ void MyServer::OnPlayerConnect(const PlayerConnectionData &data, World &world) {
 }
 ```
 
-`world.Create` cannot be called with a handle held, so the directory is
-taken after the new entity is released, or before it is created.
+`world.Create` cannot be called with a handle held, a registered state's
+included, so the directory is taken after the new entity is released, or
+before it is created. That makes "look it up, or create it" two steps, and
+two handlers can both miss. Where that matters, keep the index outside the
+world behind a mutex of the mod's own, taken with nothing held and kept
+across the lookup and the `Create` (see "The rules" in
+`docs/server_threading.md` for the example).
 `World::Archetypes::PlayerArchetype::SetupServer` and
 `StreamingArchetype::SetupServer` take the handle (`SetupServer(player,
 data.guid)`).
@@ -513,9 +529,14 @@ world.Destroy(vehicleId);
   resource does not destroy it. Entities created by a script binding belong
   to the calling resource as before.
 - Iteration: `replication->ForEach<Vehicle>([](Vehicle *v) {...})` becomes
-  `world.ForEach<Vehicle>([](Ref<Vehicle> &v) {...})`. The callback holds
-  `v` and cannot ask the world for anything else; collect ids and work on
-  them after the loop when it needs to.
+  `world.ForEach<Vehicle>([](Ref<Vehicle> &v) {...})`, or
+  `world.ForEachRead<Vehicle>([](ConstRef<Vehicle> &v) {...})` for a walk
+  that only reads. The callback holds `v` and cannot ask the world for
+  anything else; collect ids (`v.Id()`) and work on them after the loop
+  when it needs to. A search returns `Walk::Stop` from the callback once it
+  has what it came for.
+- `handle.Id()` gives the network id through a read handle too, and
+  `handle.Reset()` lets go before the end of the scope.
 
 ## 8. Per-connection identity is returned by value
 
@@ -632,7 +653,8 @@ the warning off.
 
 **Thread assumptions inside handlers.** Anything a handler used that was
 "tick thread only" by convention needs another look: a non-atomic counter,
-a cache, a `static` buffer, a library handle. Work that belongs on the tick
+a cache, a `static` buffer, a library handle. A cache of the mod's own that
+a handler fills and anything else reads needs a lock of its own. Work that belongs on the tick
 thread is posted there with
 `Framework::CoreModules::GetTaskScheduler()->PostToOwner(task)`, and work
 that ends in script with `Instance::PostToScripts(task)`. Both run later;

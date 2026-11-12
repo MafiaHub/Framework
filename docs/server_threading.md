@@ -301,11 +301,17 @@ that takes at least `slow-packet-handler-ms` (`server.json`, default 10, 0
 turns it off) is logged, at most once a second, with the digest of its RPC
 identifier; the name is not in the binary.
 
-A typed handler is not called for a payload that does not read completely
-(a truncated packet, or bytes `T::Serialize` would not have written). The
-packet is dropped, counted and logged, at most once a second. A raw handler
-(`RegisterRawRPC`) decodes the stream itself and answers for what a short
-one decodes to.
+A typed handler is not called for a payload that was cut short: one whose
+`T::Serialize` read past the end of what the client sent. The packet is
+dropped, counted (`NetworkServer::ShortPayloadsDropped()`) and logged, at
+most once a second. Only the read decides: `Serialize` runs once, reading;
+quantized fields and bits left unread after the payload are fine. A
+`Serialize` that reads optional fields "if there are any left" is cut short
+by this rule when they are absent; send them always, or use a raw handler. A
+raw handler (`RegisterRawRPC`) decodes the stream itself and answers for
+what a short one decodes to. One limit: a single read of a megabyte or more
+past the end (a length taken off the wire and believed) is not noticed, so a
+payload that reads such a length checks it itself.
 
 Handlers are registered before the packet thread starts, in `PostInit` or
 `PostScriptInit`. The table they go in is read on the packet thread without
@@ -340,9 +346,12 @@ net->RegisterRPC<VehicleHorn>([](const VehicleHorn &msg, Sender sender, World &w
   `Ref<T>`. A handle is empty (`false`) when the id does not resolve or the
   entity is not a `T`; the match is on the exact registered type.
   `Read<NetworkEntity>(id)` gives the entity whatever its type.
-- A handle holds the entity's lock until it goes out of scope. Readers
-  share it; a writer has it alone. Handles move and do not copy. Keep one in
-  the scope that took it; what is kept across calls is the id.
+- A handle holds the entity's lock until it goes out of scope, or until
+  `Reset()` lets go of it early. Readers share it; a writer has it alone.
+  Handles move and do not copy. Keep one in the scope that took it; what is
+  kept across calls is the id.
+- `handle.Id()` is the entity's network id, on a `Ref` and a `ConstRef`
+  alike, and 0 for an empty handle.
 - `world.Write<A, B>(a, b)` and `world.Read<A, B>(a, b)` take several at
   once, up to `World::kMaxAtOnce` (8), and return a tuple of handles. Each
   is empty or not on its own. An id asked for twice fills the first handle
@@ -350,6 +359,12 @@ net->RegisterRPC<VehicleHorn>([](const VehicleHorn &msg, Sender sender, World &w
 - `world.ForEach<T>(fn)` visits every `T` that exists when the call starts,
   by ascending id, one lock at a time. `fn` is given a `Ref<T> &` and holds
   that entity, so it cannot ask the world for another.
+  `world.ForEachRead<T>(fn)` is the same walk with a `ConstRef<T> &`, which
+  shares each entity with other readers. In both, `fn` returns nothing, or a
+  `Replication::Walk`: `Walk::Stop` ends the walk there.
+- `world.Exists(id)` says whether an id names an entity, from the table of
+  ids alone. It takes no entity lock, so it is allowed with a handle held,
+  and the answer may be old by the time it is read.
 - `world.Create<T>()` creates an entity and returns it held: no other
   thread reaches it, and the pass does not serialize it, before the creator
   lets go. Set it up inside that scope. `world.Create(typeId)` does the same
@@ -461,29 +476,67 @@ handle themselves or take a lock that comes before an entity's:
   for entities, and the one the caller holds would never be theirs. A
   handler that needs a veto lets go of its handles, asks, and takes them
   again.
-
-`RunOnScriptThread` waits for scripts in the same way and is not checked:
-called with a handle held it does not abort, it can deadlock. Do not.
+- `Instance::RunOnScriptThread`, for the same reason: the task it waits
+  for runs where scripts run and may need the entity held. Let go first
+  (`handle.Reset()`), or use `PostToScripts`, which does not wait.
 
 An asynchronous emit (`EmitReserved`, `EmitReservedTo`, `EmitClient`),
 `PostToScripts` and `TaskScheduler::PostToOwner` are fine with a handle
-held: they copy and queue. Building the arguments is another matter. The
-scripting wrapper of an entity (`Builtins::Entity` and what derives from it,
-so `WrapScriptPlayer` and a mod's own handles) checks that its id resolves
-when it is constructed, which asks the world for a handle. Build such
-arguments, and so raise such an event, after the handles are released:
+held: they copy and queue. So is building the arguments: the scripting
+wrapper of an entity (`Builtins::Entity` and what derives from it, so
+`WrapScriptPlayer`, `WrapScriptEntity` and a mod's own handles) keeps the
+id and asks the world for nothing when it is constructed. A handler may
+raise an event about the entities it holds, as mods always have:
 
 ```cpp
-uint64_t playerId = 0;
-{
-    auto [player, vehicle] = world.Write<Human, Vehicle>(sender.Avatar(), msg.vehicleId);
-    if (!player || !vehicle) {
-        return;
-    }
-    vehicle->seats[msg.seat] = playerId = player->GetNetworkID();
+auto [player, vehicle] = world.Write<Human, Vehicle>(sender.Avatar(), msg.vehicleId);
+if (!player || !vehicle) {
+    return;
 }
-EventVehiclePlayerEntering(msg.vehicleId, playerId, msg.seat); // wraps both ids for scripts
+vehicle->seats[msg.seat] = sender.Avatar();
+EventVehiclePlayerEntering(msg.vehicleId, sender.Avatar(), msg.seat); // wraps both ids for scripts
 ```
+
+A wrapper made for an id whose entity is gone is not an error either: its
+methods resolve when they are called and answer with nothing. Only a script
+writing `new Entity(id)` itself is refused an id that names no entity
+(`Entity::ConstructFromScript`, for a mod's own handle classes too).
+
+**Convert what a script passed in before taking a handle.** A binding that
+receives script values (`v8pp::from_v8`, reading a property of an options
+object) runs script when it converts them: a getter, a `toString`, a proxy.
+That script may ask the world for an entity, and with a handle held that is
+a nested acquire, which aborts. Read every argument into plain C++ values
+first, then take the handle.
+
+**`world.Create` is refused with anything held**, a registered state
+included. So "find it in my index, or create it" cannot be done under the
+index's handle, and done in two steps it is not atomic: two handlers can
+both miss and both create. When that matters, give the index a mutex of its
+own instead of registering it as state, and hold that across the pair:
+
+```cpp
+uint64_t Garage::FindOrCreate(World &world, uint64_t ownerId) {
+    const std::lock_guard guard(_mutex); // the mod's own; taken first, never under a handle
+    if (const auto it = _vehicleOf.find(ownerId); it != _vehicleOf.end()) {
+        return it->second;
+    }
+    auto vehicle = world.Create<Vehicle>();
+    if (!vehicle) {
+        return 0;
+    }
+    _vehicleOf[ownerId] = vehicle.Id();
+    return vehicle.Id();
+}
+```
+
+Such a mutex comes before every handle: take it with nothing held, and do
+not take it inside a handle's scope elsewhere.
+
+**A cache of your own needs a lock of its own.** A map a handler fills and
+the tick or a script binding reads (a per-isolate class table, a lookup by
+name) is reached from several threads now. Guard it with a mutex, held for
+the lookup only and never while script runs, or register it with the world.
 
 **Hooks on an entity run with that entity locked.** The Framework holds the
 entity's lock around every extension point it calls on it: the serialize
