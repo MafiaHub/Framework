@@ -131,6 +131,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         // Reads what is there, and zeroes for what is not.
         void ReadBytes(const std::vector<uint8_t> &bytes, size_t &at, void *into, size_t size) {
             std::memset(into, 0, size);
+            if (at >= bytes.size()) {
+                return;
+            }
             const size_t taken = std::min(size, bytes.size() - at);
             std::memcpy(into, bytes.data() + at, taken);
             at += taken;
@@ -161,8 +164,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             ReadBytes(bytes, at, &length, sizeof(length));
             // Bytes that are cut short read as empty text.
             const size_t taken = std::min<size_t>(length, bytes.size() - at);
-            text->assign(reinterpret_cast<const char *>(bytes.data()) + at, taken);
-            at += taken;
+            if (taken > 0) {
+                text->assign(reinterpret_cast<const char *>(bytes.data()) + at, taken);
+                at += taken;
+            }
         }
         return PendingConnection(guid, identity, std::move(address));
     }
