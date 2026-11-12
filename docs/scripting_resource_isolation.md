@@ -172,6 +172,22 @@ followed by what each handler failed with. A handler whose resource stops
 while an emit waits on it fails that emit with
 `<resource> stopped before the call finished`.
 
+Exports cross languages the same way. What a Lua script registers with
+`Exports.register` is copied when it is registered, its functions as
+functions that call home, and every importer of either language gets a
+rebuild of that copy: a table changed after it was registered is not seen,
+so share state through exported functions. A Lua importer gets a copy of a
+JavaScript export, made when it asks. A function that crossed to or from Lua
+is called on nothing: a JavaScript method called from Lua has no `this`, and
+`api:method()` passes nothing more than `api.method()`. Only an export that
+goes from JavaScript to JavaScript keeps the owner's object as `this`. A call
+returns the value itself when the function finished at once; otherwise a
+JavaScript caller gets a Promise and a Lua caller waits, and a rejection or
+an error raised late is thrown to it. A name is registered once per start of
+a resource where Lua is involved: a second `Exports.register` of it throws
+`Exports.register: export '<name>' is already registered`. JavaScript
+registering over its own export replaces it, as before.
+
 Shared memory cannot be shared between resources. Each environment frees its
 array buffers through its own allocator, which dies with the resource, so a
 `SharedArrayBuffer` that outlived the resource that made it would crash the

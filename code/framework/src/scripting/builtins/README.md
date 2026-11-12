@@ -191,6 +191,15 @@ what it needs, and nothing else diverges:
   - What only one language's script can observe is done in that language's
     registration, after the definition is materialised: `console.info` is the
     function under `console.log` in JavaScript, as it was before the port.
+  - `Exports` and `Imports` are declared this way too, and speak V8 where
+    `Events` does: a JavaScript export stays a `v8::Global` of its resource
+    (`Resource::RegisterExport`) and reaches a JavaScript importer by
+    reference or through `FunctionReferences`, as before. An export
+    registered from Lua is kept as a `TransferredValue`
+    (`Resource::GetExportCopy`), and a Lua importer of a JavaScript export
+    is given a copy made inside the owner's isolate
+    (`Exports::CopyJavaScriptExport`); the functions in either are
+    `ScriptCallable`s.
 
 `RegisterValueTypes` registers **only** the pure value types — its name says so.
 It is the counterpart to `UnregisterAll`, which additionally drops the handle
