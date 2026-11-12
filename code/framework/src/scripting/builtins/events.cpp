@@ -19,6 +19,7 @@
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <logging/logger.h>
 #include <networking/network_peer.h>
+#include <networking/replication/world.h>
 #include <utils/profiler.h>
 
 #include <algorithm>
@@ -857,6 +858,10 @@ namespace Framework::Scripting::Builtins {
     }
 
     bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
+        // The handlers answer before this returns, and they ask the world for entities: the one a
+        // caller still held would never be theirs. A caller that needs a veto lets go of its handles,
+        // asks, and takes them again.
+        Networking::Replication::World::RequireNoneHeld("an event was raised that waits for its handlers");
         v8::HandleScope handleScope(isolate);
 
         // From a thread scripts do not run on: the handlers run on the script thread and this waits for their
