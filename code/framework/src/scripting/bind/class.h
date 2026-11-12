@@ -417,6 +417,7 @@ namespace Framework::Scripting::Bind {
             // Never deleted: this handle is what keeps the definition alive.
             _registered = new Class(*this);
             ApiCatalog::Get().Record(&_record->desc);
+            Detail::LuaRecordClass(*_record);
         }
 
         // Gives the class the methods, properties and operators of `Base`, and lets an instance pass where a
@@ -577,6 +578,14 @@ namespace Framework::Scripting::Bind {
         Class &LuaMeta(LuaMetaEvent event, F function) {
             static_assert(Detail::FreeCallable<F>, "Bind::Class::LuaMeta: F is a function or a lambda that takes every operand");
             Detail::LuaAddMeta(*_record, event, Detail::LuaFunctionThunkOf(typename Detail::SignatureOf<F>::Type {}, std::move(function)));
+            _record->desc.luaOperators.push_back(DescribeOperator(event, typename Detail::SignatureOf<F>::Type {}));
+            return *this;
+        }
+
+        // Says that no script reaches the class as a global: it only ever gets the objects, as it gets the bag of
+        // an entity. The definitions written for script authors then describe a type and no global table.
+        Class &ValueOnly() {
+            _record->desc.global = false;
             return *this;
         }
 
@@ -739,6 +748,11 @@ namespace Framework::Scripting::Bind {
             FunctionDesc desc = Detail::DescribeContextFunction(_record->desc.name + "." + name, doc, isStatic, side);
             desc.name         = name;
             return desc;
+        }
+
+        template <typename R, typename... Args>
+        static LuaOperatorDesc DescribeOperator(LuaMetaEvent event, Detail::Signature<void, R, Args...>) {
+            return {std::string(Detail::LuaMetaEventName(event)), {TypeOf<Args>()...}, TypeOf<R>()};
         }
 
         template <typename G>

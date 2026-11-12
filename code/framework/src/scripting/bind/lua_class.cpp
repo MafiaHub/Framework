@@ -660,6 +660,61 @@ namespace Framework::Scripting::Bind::Detail {
         return luaL_error(L, "'%s' cannot return a %s by reference: the class cannot be copied", function.label.c_str(), name);
     }
 
+    const char *LuaMetaEventName(LuaMetaEvent event) {
+        return kMetaEventNames[static_cast<size_t>(event)] + 2;
+    }
+
+    namespace {
+        std::vector<const LuaClass *> &RecordedClasses() {
+            static std::vector<const LuaClass *> classes;
+            return classes;
+        }
+    } // namespace
+
+    void LuaRecordClass(const LuaClass &definition) {
+        RecordedClasses().push_back(&definition);
+    }
+
+    const LuaClass *LuaClassDescribedBy(const ClassDesc &desc) {
+        for (const LuaClass *definition : RecordedClasses()) {
+            if (&definition->desc == &desc) {
+                return definition;
+            }
+        }
+        return nullptr;
+    }
+
+    // The members are upvalue 1 of the __index of the instances and the setters upvalue 1 of their __newindex: a
+    // getter and a setter are light userdata there, a method is a function.
+    LuaInstanceMember LuaFindInstanceMember(lua_State *L, const LuaClass &definition, std::string_view name) {
+        luaL_checkstack(L, 5, "cannot read the members of a class");
+        const int top            = lua_gettop(L);
+        LuaInstanceMember member = LuaInstanceMember::None;
+        if (lua_rawgetp(L, LUA_REGISTRYINDEX, &definition) == LUA_TTABLE && lua_getfield(L, -1, "__index") == LUA_TFUNCTION && lua_getupvalue(L, -1, 1) != nullptr && lua_istable(L, -1)) {
+            lua_pushlstring(L, name.data(), name.size());
+            const int type = lua_rawget(L, -2);
+            if (type == LUA_TFUNCTION) {
+                member = LuaInstanceMember::Method;
+            }
+            else if (type == LUA_TLIGHTUSERDATA) {
+                member = LuaInstanceMember::ReadOnlyProperty;
+                if (lua_getfield(L, top + 1, "__newindex") == LUA_TFUNCTION && lua_getupvalue(L, -1, 1) != nullptr && lua_istable(L, -1)) {
+                    lua_pushlstring(L, name.data(), name.size());
+                    if (lua_rawget(L, -2) == LUA_TLIGHTUSERDATA) {
+                        member = LuaInstanceMember::Property;
+                    }
+                }
+            }
+        }
+        lua_settop(L, top);
+        return member;
+    }
+
+    bool LuaPushClassTable(lua_State *L, const LuaClass &definition) {
+        luaL_checkstack(L, 1, "cannot read a class");
+        return lua_rawgetp(L, LUA_REGISTRYINDEX, &definition.classTableKey) == LUA_TTABLE;
+    }
+
     LuaThunk LuaNativeThunk(std::shared_ptr<NativeFunction> function) {
         LuaThunk thunk;
         thunk.native = std::move(function);

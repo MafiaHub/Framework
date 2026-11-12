@@ -531,6 +531,8 @@ namespace Framework::Scripting::Builtins {
 
         static const auto definition =
             Bind::Class<StateBag>("StateBag", "Arbitrary key/value state attached to one replicated entity, reached as `entity.state`. Keys set on the server replicate to every client that can currently see the entity.")
+                // Reached as `entity.state` and never by name.
+                .ValueOnly()
                 .Method("get", &StateBag::Get, Doc("Reads one key from this entity's state.").Param("key", TypeOf<std::string>(), "Key to read.").ReturnType(Type::Any()).Returns("The stored value, or undefined when the key is not set."))
                 .Method("has", &StateBag::Has, Doc("Checks whether this entity's state holds a key.").Param("key", TypeOf<std::string>(), "Key to test.").ReturnType(TypeOf<bool>()).Returns("True when the key is set."))
                 .Method("keys", &StateBag::Keys, Doc("Lists the keys this entity's state holds, sorted.").ReturnType(TypeOf<std::vector<std::string>>()).Returns("Every key currently set, in ascending order."))

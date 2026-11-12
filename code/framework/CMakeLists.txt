@@ -54,6 +54,7 @@ set(FRAMEWORK_SRC
     src/scripting/bind/lua_call.cpp
     src/scripting/bind/lua_callable.cpp
     src/scripting/bind/lua_class.cpp
+    src/scripting/bind/lua_definitions.cpp
     src/scripting/bind/lua_glm.cpp
     src/scripting/bind/namespace.cpp
     src/scripting/bind/v8_call.cpp

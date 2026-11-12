@@ -179,6 +179,8 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
 
         static const auto definition =
             Bind::Class<PendingConnection>("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.", Side::Server)
+                // Handed to the handlers of `playerConnecting` and never reached by name.
+                .ValueOnly()
                 .Property("nickname", &PendingConnection::GetNickname, "The name the player asked to join under.", Side::Server)
                 .Property("steamId", &PendingConnection::GetSteamId, "Steam identifier the client reported, or an empty string when it had none.", Side::Server)
                 .Property("epicId", &PendingConnection::GetEpicId, "Epic Games account identifier the client reported, or an empty string when it had none.", Side::Server)

@@ -47,6 +47,14 @@ namespace Framework::Scripting::Bind {
         Side side     = Side::Shared;
     };
 
+    // A Lua operator of a class (Class::LuaMeta): the event without its underscores ("add"), what each operand is
+    // and what it gives. One event may be declared several times, for operands of different types.
+    struct LuaOperatorDesc {
+        std::string event;
+        std::vector<TypeRef> operands;
+        TypeRef returns;
+    };
+
     // A bound class, or a namespace of functions (isNamespace) such as a service object.
     struct ClassDesc {
         std::string name;
@@ -59,6 +67,11 @@ namespace Framework::Scripting::Bind {
         std::optional<FunctionDesc> constructor;
         std::vector<FunctionDesc> functions;
         std::vector<PropertyDesc> properties;
+        // Lua only: JavaScript has no operators to declare.
+        std::vector<LuaOperatorDesc> luaOperators;
+        // Whether a script reaches the class as a global of its name. Not for a class a script only ever gets the
+        // objects of, as the bag `entity.state` answers (Class::ValueOnly).
+        bool global = true;
     };
 
     namespace Detail {

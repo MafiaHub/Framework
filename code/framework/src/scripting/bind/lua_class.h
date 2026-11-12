@@ -22,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Framework::Scripting::Bind {
@@ -181,6 +182,33 @@ namespace Framework::Scripting::Bind {
         // Raises the error of `function` returning, by reference or pointer, an object of the class `name` that
         // is not its receiver: a script would get a copy, and the class cannot be copied.
         int LuaRaiseNotCopyable(lua_State *L, const LuaFunction &function, const char *name);
+
+        // --- For tooling that starts from the catalog ---
+
+        // The name of an operator without its underscores, as an annotation spells it: "add".
+        const char *LuaMetaEventName(LuaMetaEvent event);
+
+        // Lets LuaClassDescribedBy find `definition`, which is never destroyed. Class<T> calls it once.
+        void LuaRecordClass(const LuaClass &definition);
+
+        // The class `desc` is the description of, or nullptr for a namespace and for what no Class described.
+        const LuaClass *LuaClassDescribedBy(const ClassDesc &desc);
+
+        // What the objects of a class have under a name in one state.
+        enum class LuaInstanceMember : uint8_t {
+            None,
+            Method,
+            ReadOnlyProperty,
+            Property
+        };
+
+        // What the state of `L` gave the objects of `definition` under `name`, of the class or of a base, with the
+        // side it was materialised for. None in a state the class is not materialised in.
+        LuaInstanceMember LuaFindInstanceMember(lua_State *L, const LuaClass &definition, std::string_view name);
+
+        // Pushes the class table of `definition`, the one a script reads the statics and `new` from, or nil in a
+        // state the class is not materialised in. Returns whether it pushed the table.
+        bool LuaPushClassTable(lua_State *L, const LuaClass &definition);
 
         // --- Context functions and namespaces ---
 
