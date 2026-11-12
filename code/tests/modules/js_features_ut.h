@@ -1144,12 +1144,14 @@ MODULE(js_features, {
         STREQUALS(RunJSErrorName(engine, "const t = TextLabel.create(0, 0, 0, 't'); TextLabel.create(0, 0, 0, 'x', { attachTo: t, minSize: 4, maxSize: 10 })").c_str(), "");
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20 }); l.update({ minDrawDistance: 20 })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 10 }); l.update({ drawDistance: 10 })").c_str(), "TypeError");
-        // The setters may leave the near edge past the far one: an update that sets neither still
-        // applies, and a value that is not finite changes nothing.
+        // The setters may leave the near edge past the far one: an update that leaves both as they are,
+        // the label's own getOptions() included, still applies, one that changes either is checked,
+        // and a value that is not finite changes nothing.
         STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20 }); l.setMinDrawDistance(25); l.update({ text: 'hi' }); "
-                                      "l.setMinDrawDistance(NaN); l.setMinFadeDistance(Infinity); return [l.text, l.minDrawDistance, l.minFadeDistance].join(); })()")
+                                      "l.update({ ...l.getOptions(), fontSize: 20 }); let threw = ''; try { l.update({ drawDistance: 24 }); } catch (e) { threw = e.name; } "
+                                      "l.setMinDrawDistance(NaN); l.setMinFadeDistance(Infinity); return [l.text, l.fontSize, threw, l.minDrawDistance, l.minFadeDistance].join(); })()")
                       .c_str(),
-            "hi,25,0");
+            "hi,20,TypeError,25,0");
 
         // The near edge and the font read back through getOptions(), the properties and the setters.
         STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 5, minFadeDistance: 7, font: 'Inter' }); const o = l.getOptions(); "

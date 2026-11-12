@@ -509,14 +509,18 @@ namespace Framework::Scripting::Builtins {
             return maxSize <= 0.0f || minSize <= maxSize || Fail(isolate, "minSize must not exceed maxSize");
         }
 
-        // A near edge at or past the far one would leave nothing to draw. Only a call that sets either
-        // is checked: the setters allow it, and an unrelated update must not fail on what they left.
+        // A near edge at or past the far one would leave nothing to draw. Only a call that changes either
+        // is checked: the setters allow it, and an unrelated update, or the label's own getOptions()
+        // applied back, must not fail on what they left.
         bool CheckDistances(v8::Isolate *isolate, const Options &options, const Networking::Replication::Entities::TextLabelEntity *label, float unitsPerMetre) {
             if (!options.minDrawDistance && !options.drawDistance) {
                 return true;
             }
             const float minDraw = options.minDrawDistance.value_or(label ? label->minDrawDistance : 0.0f);
             const float draw    = options.drawDistance.value_or(label ? label->drawDistance : TextLabel::kDefaultMetres * unitsPerMetre);
+            if (label && minDraw == label->minDrawDistance && draw == label->drawDistance) {
+                return true;
+            }
             return minDraw < draw || Fail(isolate, "minDrawDistance must be less than drawDistance");
         }
 
