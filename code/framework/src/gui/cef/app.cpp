@@ -61,6 +61,9 @@ namespace Framework::GUI::CEF {
             // takes the whole browser down ("GPU process isn't usable")
             commandLine->AppendSwitch("disable-gpu");
             commandLine->AppendSwitch("disable-gpu-compositing");
+            // This is already Chromium's last GPU mode, so its crash limit has nothing to fall
+            // back to and aborts the host instead. Keep restarting the process.
+            commandLine->AppendSwitch("disable-gpu-process-crash-limit");
         }
         else {
             // The GPU process is its own process, so the launcher's forcing does not
@@ -68,9 +71,6 @@ namespace Framework::GUI::CEF {
             // the shared texture belongs to the other adapter and never opens.
             commandLine->AppendSwitch("force-high-performance-gpu");
         }
-        // After repeated GPU process crashes Chromium drops to the next GPU mode, and with none left
-        // it aborts the host ("GPU process isn't usable. Goodbye."). Restart the process instead.
-        commandLine->AppendSwitch("disable-gpu-process-crash-limit");
         commandLine->AppendSwitch("disable-extensions");
         commandLine->AppendSwitch("disable-pdf-extension");
         commandLine->AppendSwitch("disable-spell-checking");
