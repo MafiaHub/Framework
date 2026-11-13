@@ -68,6 +68,9 @@ namespace Framework::GUI::CEF {
             // the shared texture belongs to the other adapter and never opens.
             commandLine->AppendSwitch("force-high-performance-gpu");
         }
+        // After repeated GPU process crashes Chromium drops to the next GPU mode, and with none left
+        // it aborts the host ("GPU process isn't usable. Goodbye."). Restart the process instead.
+        commandLine->AppendSwitch("disable-gpu-process-crash-limit");
         commandLine->AppendSwitch("disable-extensions");
         commandLine->AppendSwitch("disable-pdf-extension");
         commandLine->AppendSwitch("disable-spell-checking");
