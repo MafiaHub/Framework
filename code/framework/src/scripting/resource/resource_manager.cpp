@@ -1390,6 +1390,13 @@ namespace Framework::Scripting {
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}", resourceName, error);
 
+        // A stop under way finishes the job (on a client this can run inside that stop's own tick, and a second error
+        // can arrive while its error stop waits on its dependents), and a stopped resource has nothing left to stop.
+        const ResourceState state = resource->GetState();
+        if (state == ResourceState::Stopping || state == ResourceState::Stopped || state == ResourceState::Unloaded || _errorStops.contains(resourceName)) {
+            return;
+        }
+
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
         if (errorBehavior != "stop" && errorBehavior != "restart") {
             // "continue": logged like an event handler's error. The resource stays running, to other resources and
@@ -1398,15 +1405,17 @@ namespace Framework::Scripting {
             return;
         }
 
-        // A stop under way finishes the job (on a client this can run inside that stop's own tick), and a stopped
-        // resource, a dependent the cascade took down, say, has nothing left to stop.
-        const ResourceState state = resource->GetState();
-        if (state == ResourceState::Stopping || state == ResourceState::Stopped || state == ResourceState::Unloaded) {
-            return;
-        }
-
         v8::Isolate *failedIsolate = resource->GetIsolate();
         if (state == ResourceState::Running) {
+            _errorStops.insert(resourceName);
+            struct ErrorStopGuard {
+                std::set<std::string, std::less<>> &stops;
+                const std::string &name;
+                ~ErrorStopGuard() {
+                    stops.erase(name);
+                }
+            } errorStopGuard {_errorStops, resourceName};
+
             // Stopped the way StopResource stops, so nothing goes on calling into it: its dependents first, while it
             // still runs for their resourceStop handlers, then every resource hears resourceStop for it, its own too.
             std::vector<std::string> dependents = StopDependents(resourceName);
@@ -1421,9 +1430,14 @@ namespace Framework::Scripting {
             FireOnResourceStopped(resourceName);
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped JS resource: {} (runtime error, errorBehavior \"{}\")", resourceName, errorBehavior);
 
-            // Error listeners can recover the resource synchronously; a recovered one is not restarted again.
+            // Error listeners can recover the resource synchronously: then its dependents come back as after a restart,
+            // and it is not restarted again.
             FireOnResourceError(resourceName, error);
             current = GetResourceMutable(resourceName);
+            if (current != nullptr && current->IsRunning()) {
+                StartDependentsAfter(resourceName, dependents);
+                return;
+            }
             if (errorBehavior != "restart" || current != resource || current->GetState() != ResourceState::Error) {
                 return;
             }
@@ -1490,16 +1504,35 @@ namespace Framework::Scripting {
         for (const auto &sr : dueRestarts) {
             RestartResource(sr.resourceName);
             // The dependents its error stopped come back with it; while it is down they would only fail to start.
-            if (!IsResourceRunning(sr.resourceName)) {
-                if (!sr.dependents.empty()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("'{}' did not restart; {} resource(s) depending on it stay stopped", sr.resourceName, sr.dependents.size());
-                }
+            if (IsResourceRunning(sr.resourceName)) {
+                StartDependentsAfter(sr.resourceName, sr.dependents);
                 continue;
             }
-            for (const auto &dependent : sr.dependents) {
-                if (auto result = StartResource(dependent); !result) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to restart '{}' after '{}': {}", dependent, sr.resourceName, result.GetError());
+            if (sr.dependents.empty()) {
+                continue;
+            }
+            // An error while it was starting may have scheduled the next attempt: they wait for that one.
+            bool handedOn = false;
+            {
+                std::scoped_lock lock(_scheduledRestartsMutex);
+                for (auto &next : _scheduledRestarts) {
+                    if (next.resourceName == sr.resourceName) {
+                        next.dependents.insert(next.dependents.end(), sr.dependents.begin(), sr.dependents.end());
+                        handedOn = true;
+                        break;
+                    }
                 }
+            }
+            if (!handedOn) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("'{}' did not restart; {} resource(s) depending on it stay stopped", sr.resourceName, sr.dependents.size());
+            }
+        }
+    }
+
+    void ResourceManager::StartDependentsAfter(const std::string &resourceName, const std::vector<std::string> &dependents) {
+        for (const auto &dependent : dependents) {
+            if (auto result = StartResource(dependent); !result) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to restart '{}' after '{}': {}", dependent, resourceName, result.GetError());
             }
         }
     }

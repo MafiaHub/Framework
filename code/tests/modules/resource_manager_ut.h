@@ -1483,6 +1483,38 @@ MODULE(resource_manager_callbacks, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("only logs an error that arrives after its resource stopped, whatever its errorBehavior", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("late-continue", R"({"name":"late-continue","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"continue"}})");
+        TestManagerHelper::CreateTestScript("late-continue", "main.js", "// empty script");
+        TestManagerHelper::CreateTestResource("late-stop", R"({"name":"late-stop","version":"1.0.0","mafiahub":{"server":"main.js"}})");
+        TestManagerHelper::CreateTestScript("late-stop", "main.js", "// empty script");
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+
+        std::vector<std::string> reported;
+        manager.AddOnResourceError([&reported](const std::string &name, const std::string &) {
+            reported.push_back(name);
+        });
+        EQUALS(manager.DiscoverResources(), 2u);
+        for (const char *name : {"late-continue", "late-stop"}) {
+            EQUALS(static_cast<bool>(manager.StartResource(name)), true);
+            EQUALS(static_cast<bool>(manager.StopResource(name)), true);
+            // Queued before the stop, drained after it.
+            manager.HandleResourceRuntimeError(name, "late error");
+            EQUALS(manager.GetResourceState(name) == ResourceState::Stopped, true);
+        }
+        EQUALS(reported.empty(), true);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     IT("notifies once for a restart error and then reports the start", {
         TestManagerHelper::Cleanup();
         TestManagerHelper::CreateTestResource("stop-then-restart", R"({"name":"stop-then-restart","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");

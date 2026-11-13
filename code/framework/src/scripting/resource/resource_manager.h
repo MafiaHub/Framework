@@ -403,6 +403,9 @@ namespace Framework::Scripting {
         // Emits resourceStop for `name`, waits for its handlers to settle or time out, then cleans up its runtime.
         void ShutDownRuntime(Resource &resource, std::string_view name);
 
+        // Starts again the dependents an error stop of `resourceName` took down, once it runs again.
+        void StartDependentsAfter(const std::string &resourceName, const std::vector<std::string> &dependents);
+
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
 
@@ -436,6 +439,10 @@ namespace Framework::Scripting {
         // them is a cycle: a resource only becomes Loading after its dependencies have started, so
         // its state cannot stop the recursion.
         std::vector<std::string> _startChain;
+
+        // Resources whose error stop is waiting on their dependents. They still run, so a second error from one must
+        // not start a stop of its own: it is only logged.
+        std::set<std::string, std::less<>> _errorStops;
 
         // Configuration
         ResourceManagerConfig _config;

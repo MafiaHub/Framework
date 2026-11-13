@@ -678,6 +678,72 @@ MODULE(resource_isolation, {
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
+    IT("only logs a second error that arrives while the first one's stop waits on the dependents", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("twice", R"({"name":"twice","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");
+        TestManagerHelper::CreateTestScript("twice", "main.js", "__record('twiceLoads', __recorded('twiceLoads') + 1);");
+        TestManagerHelper::CreateTestResource("follower", R"({"name":"follower","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"twice"}]}})");
+        TestManagerHelper::CreateTestScript("follower", "main.js", "__record('followerLoads', __recorded('followerLoads') + 1);");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        // A client dispatches errors from inside the tick a stop pumps; this delivers one at that point.
+        int twiceStops = 0;
+        manager.AddOnResourceStopped([&](const std::string &name) {
+            if (name == "follower" && manager.IsResourceRunning("twice")) {
+                manager.HandleResourceRuntimeError("twice", "second error");
+            }
+            twiceStops += name == "twice" ? 1 : 0;
+        });
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("follower"), true);
+
+        manager.HandleResourceRuntimeError("twice", "first error");
+        EQUALS(twiceStops, 1);
+        EQUALS(manager.GetResourceState("twice") == ResourceState::Error, true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!manager.IsResourceRunning("follower") && std::chrono::steady_clock::now() < deadline) {
+            manager.ProcessScheduledRestarts();
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(manager.IsResourceRunning("follower"), true);
+        EQUALS(TestManagerHelper::RecordedValue("followerLoads"), 1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+    IT("starts a resource's dependents again when an error listener recovers it", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("revived", "__record('revivedLoads', __recorded('revivedLoads') + 1);");
+        TestManagerHelper::CreateTestResource("leaner", R"({"name":"leaner","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"revived"}]}})");
+        TestManagerHelper::CreateTestScript("leaner", "main.js", "__record('leanerLoads', __recorded('leanerLoads') + 1);");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        manager.AddOnResourceError([&](const std::string &name, const std::string &) {
+            manager.StartResource(name);
+        });
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("leaner"), true);
+
+        manager.HandleResourceRuntimeError("revived", "recovered fixture");
+        EQUALS(manager.IsResourceRunning("revived"), true);
+        EQUALS(manager.IsResourceRunning("leaner"), true);
+        EQUALS(TestManagerHelper::RecordedValue("revivedLoads"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("leanerLoads"), 1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
     IT("stops only the resource that calls process.exit(), not the server", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("quitter", "setTimeout(() => { process.exit(3); __record('afterExit', 1); }, 1);");
