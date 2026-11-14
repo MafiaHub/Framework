@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "networking/replication/client_entities.h"
+#include "../replication_test_world.h"
 #include "core_modules.h"
 #include "networking/network_server.h"
 #include "networking/replication/entities/text_label_entity.h"
@@ -233,8 +235,8 @@ MODULE(text_label, {
     IT("attaching needs another live entity; the label follows it and returns when detached", {
         using Framework::Scripting::Builtins::TextLabel;
         TextLabelWorld world;
-        auto *target     = world.Manager()->CreateEntity(world.targetType);
-        auto *label      = world.Manager()->CreateEntity<TextLabelEntity>();
+        auto *target     = TestWorld::Make(world.Manager(), world.targetType);
+        auto *label      = TestWorld::Make<TextLabelEntity>(world.Manager());
         target->position = glm::vec3(50.0f, 0.0f, 0.0f);
         target->SetVirtualWorld(3);
         label->position = glm::vec3(1.0f, 2.0f, 3.0f);
@@ -264,26 +266,26 @@ MODULE(text_label, {
     IT("an attached label is destroyed with its target", {
         using Framework::Scripting::Builtins::TextLabel;
         TextLabelWorld world;
-        auto *target       = world.Manager()->CreateEntity(world.targetType);
-        auto *label        = world.Manager()->CreateEntity<TextLabelEntity>();
+        auto *target       = TestWorld::Make(world.Manager(), world.targetType);
+        auto *label        = TestWorld::Make<TextLabelEntity>(world.Manager());
         const auto labelId = label->GetNetworkID();
         TextLabel handle(labelId);
         EQUALS(handle.AttachTo(target->GetNetworkID(), glm::vec3(0.0f)), true);
 
-        world.Manager()->DestroyEntity(target);
+        TestWorld::Destroy(world.Manager(), target);
         TextLabel::FollowTargets(*world.Manager());
-        EQUALS((world.Manager()->GetEntityByNetworkID(labelId) == nullptr), true);
-        EQUALS((handle.ResolveLabel() == nullptr), true);
+        EQUALS((TestWorld::Find(world.Manager(), labelId) == nullptr), true);
+        EQUALS(static_cast<bool>(handle.ResolveLabel()), false);
     });
 
     IT("an attached label streams only to players near its target", {
         using Framework::Scripting::Builtins::TextLabel;
         TextLabelWorld world;
         auto *manager     = world.Manager();
-        auto *nearby      = manager->CreateEntity(world.targetType);
-        auto *distant     = manager->CreateEntity(world.targetType);
-        auto *target      = manager->CreateEntity(world.targetType);
-        auto *label       = manager->CreateEntity<TextLabelEntity>();
+        auto *nearby      = TestWorld::Make(manager, world.targetType);
+        auto *distant     = TestWorld::Make(manager, world.targetType);
+        auto *target      = TestWorld::Make(manager, world.targetType);
+        auto *label       = TestWorld::Make<TextLabelEntity>(manager);
         distant->position = glm::vec3(2000.0f, 0.0f, 0.0f);
         target->position  = glm::vec3(20.0f, 0.0f, 0.0f);
         label->position   = glm::vec3(-3000.0f, 0.0f, 0.0f);
@@ -292,13 +294,13 @@ MODULE(text_label, {
         EQUALS(handle.AttachTo(target->GetNetworkID(), glm::vec3(0.0f)), true);
 
         const MafiaNet::RakNetGUID nearbyGuid(91), distantGuid(92);
-        manager->SetViewer(MafiaNet::ToPeerGuid(nearbyGuid), nearby);
-        manager->SetViewer(MafiaNet::ToPeerGuid(distantGuid), distant);
+        manager->SetViewer(MafiaNet::ToPeerGuid(nearbyGuid), nearby->GetNetworkID());
+        manager->SetViewer(MafiaNet::ToPeerGuid(distantGuid), distant->GetNetworkID());
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, nearbyGuid));
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, distantGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, nearbyGuid));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, distantGuid));
         const auto sees = [&](MafiaNet::RakNetGUID guid) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guid));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guid));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(label);
@@ -320,23 +322,23 @@ MODULE(text_label, {
         const MafiaNet::RakNetGUID guids[] {MafiaNet::RakNetGUID(81), MafiaNet::RakNetGUID(82)};
         NetworkEntity *players[2];
         for (int i = 0; i < 2; ++i) {
-            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]            = TestWorld::Make(manager, world.targetType);
             players[i]->ownerGUID = MafiaNet::ToPeerGuid(guids[i]);
-            manager->SetViewer(players[i]->ownerGUID, players[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]->GetNetworkID());
         }
-        auto *label = manager->CreateEntity<TextLabelEntity>();
-        auto *prop  = manager->CreateEntity(world.targetType);
+        auto *label = TestWorld::Make<TextLabelEntity>(manager);
+        auto *prop  = TestWorld::Make(manager, world.targetType);
         TextLabel handle(label->GetNetworkID());
         manager->RebuildInterest();
         for (const auto &guid : guids) {
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
         }
         // Routine refreshes are far off and nothing is rebuilt between changes: a filter change alone
         // has to reach the players it concerns, and only them.
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto sees = [&](int player, NetworkEntity *entity) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(entity);
@@ -374,7 +376,7 @@ MODULE(text_label, {
 
         // A player who leaves is dropped from the filter: whoever holds that guid next starts clean.
         handle.SetVisibleFor(players[1]->ownerGUID, false);
-        manager->OnClosedConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guids[1], MafiaNet::LCR_CONNECTION_LOST);
+        TestWorld::OnClosedConnection(manager, MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guids[1], MafiaNet::LCR_CONNECTION_LOST);
         EQUALS((label->streaming.viewers == nullptr), true);
     });
 
@@ -385,20 +387,20 @@ MODULE(text_label, {
         const MafiaNet::RakNetGUID guids[] {MafiaNet::RakNetGUID(91), MafiaNet::RakNetGUID(92)};
         NetworkEntity *players[2];
         for (int i = 0; i < 2; ++i) {
-            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]            = TestWorld::Make(manager, world.targetType);
             players[i]->ownerGUID = MafiaNet::ToPeerGuid(guids[i]);
-            manager->SetViewer(players[i]->ownerGUID, players[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]->GetNetworkID());
         }
-        auto *label = manager->CreateEntity<TextLabelEntity>();
-        auto *prop  = manager->CreateEntity(world.targetType);
+        auto *label = TestWorld::Make<TextLabelEntity>(manager);
+        auto *prop  = TestWorld::Make(manager, world.targetType);
         manager->RebuildInterest();
         for (const auto &guid : guids) {
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
         }
         constexpr uint32_t kFarInterval = 1000000;
         manager->SetInterestRebuildInterval(kFarInterval);
         const auto sees = [&](int player, NetworkEntity *entity) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(entity);
@@ -451,19 +453,19 @@ MODULE(text_label, {
         const MafiaNet::RakNetGUID guids[] {MafiaNet::RakNetGUID(95), MafiaNet::RakNetGUID(96)};
         NetworkEntity *players[2];
         for (int i = 0; i < 2; ++i) {
-            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]            = TestWorld::Make(manager, world.targetType);
             players[i]->ownerGUID = MafiaNet::ToPeerGuid(guids[i]);
-            manager->SetViewer(players[i]->ownerGUID, players[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]->GetNetworkID());
         }
-        auto *label = manager->CreateEntity<TextLabelEntity>();
+        auto *label = TestWorld::Make<TextLabelEntity>(manager);
         TextLabel handle(label->GetNetworkID());
         manager->RebuildInterest();
         for (const auto &guid : guids) {
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
         }
         manager->SetInterestRebuildInterval(1000000);
         const auto sees = [&](int player) {
-            auto *connection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(guids[player]));
+            auto *connection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(guids[player]));
             DataStructures::List<MafiaNet::Replica3 *> create, destroy;
             connection->QueryReplicaList(create, destroy);
             return connection->IsRelevant(label);
@@ -471,13 +473,13 @@ MODULE(text_label, {
         EQUALS(sees(0), true);
         EQUALS(sees(1), true);
 
-        handle.SetVisibleTo(players[1]);
+        handle.SetVisibleTo(players[1]->ownerGUID);
         EQUALS(sees(0), false);
         EQUALS(sees(1), true);
-        handle.SetVisibleTo(players[0]);
+        handle.SetVisibleTo(players[0]->ownerGUID);
         EQUALS(sees(0), true);
         EQUALS(sees(1), false);
-        handle.SetVisibleTo(nullptr);
+        handle.SetVisibleTo(MafiaNet::UNASSIGNED_PEER_GUID);
         EQUALS(sees(0), true);
         EQUALS(sees(1), true);
     });
@@ -496,15 +498,15 @@ MODULE(text_label, {
         server->SetAutoManageConnections(false, true);
         server->SetInterestRebuildInterval(1000000);
 
-        auto *label = server->CreateEntity<TextLabelEntity>();
+        auto *label = TestWorld::Make<TextLabelEntity>(server);
         TextLabel handle(label->GetNetworkID());
         handle.SetText("public");
 
         world.peer.SetOnPlayerConnectCallback([&](MafiaNet::Packet *packet) {
             world.peer.PushReplicationConnection(packet->guid);
-            auto *avatar      = server->CreateEntity(world.targetType);
+            auto *avatar      = TestWorld::Make(server, world.targetType);
             avatar->ownerGUID = MafiaNet::ToPeerGuid(packet->guid);
-            server->SetViewer(avatar->ownerGUID, avatar);
+            server->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
         });
 
         Framework::Networking::NetworkServer clients[2];
@@ -520,7 +522,7 @@ MODULE(text_label, {
 
         const auto labelOn = [&](int client) {
             TextLabelEntity *found = nullptr;
-            clients[client].GetReplicationManager()->ForEach<TextLabelEntity>([&](TextLabelEntity *entity) {
+            Framework::Networking::Replication::ClientEntities(*clients[client].GetReplicationManager()).ForEach<TextLabelEntity>([&](TextLabelEntity *entity) {
                 found = entity;
             });
             return found;
@@ -528,8 +530,10 @@ MODULE(text_label, {
         const auto pumpUntil = [&](const auto &done) {
             for (int i = 0; i < 2500; ++i) {
                 world.peer.Update();
-                clients[0].Update();
-                clients[1].Update();
+                world.peer.DrainPackets();
+                // Server peers standing in for clients: the client's update, which drains.
+                clients[0].NetworkPeer::Update();
+                clients[1].NetworkPeer::Update();
                 if (done()) {
                     return true;
                 }

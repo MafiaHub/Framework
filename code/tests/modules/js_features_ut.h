@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "scripting/node_engine.h"
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
@@ -1087,6 +1088,11 @@ MODULE(js_features, {
                                       "return [o.minDrawDistance, o.minFadeDistance, o.font, copy.minDrawDistance, copy.font, l.minDrawDistance, l.minFadeDistance, JSON.stringify(l.font)].join(); })()")
                       .c_str(),
             "5,7,Inter,5,Inter,3,4,\"\"");
+        // update() takes the label together with what it follows, before and after the options name it.
+        STREQUALS(RunJSErrorName(engine, "const t2 = TextLabel.create(0, 0, 0, 't'); const l2 = TextLabel.create(0, 0, 0, 'x'); l2.update({ attachTo: t2, offset: [0, 0, 2] }); if (l2.getOptions().attachTo !== t2.id) throw new RangeError('not attached'); "
+                                         "l2.update({ text: 'moved', hideForTarget: true }); if (l2.getOptions().attachTo !== t2.id || l2.getOptions().text !== 'moved') throw new RangeError('lost its target')")
+                      .c_str(),
+            "");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -1100,11 +1106,11 @@ MODULE(js_features, {
         auto *manager = world.Manager();
         Framework::Networking::Replication::NetworkEntity *players[2];
         for (int i = 0; i < 2; ++i) {
-            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]            = TestWorld::Make(manager, world.targetType);
             players[i]->ownerGUID = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(71 + i));
-            manager->SetViewer(players[i]->ownerGUID, players[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]->GetNetworkID());
         }
-        auto *npc           = manager->CreateEntity(world.targetType);
+        auto *npc           = TestWorld::Make(manager, world.targetType);
         const std::string a = std::to_string(players[0]->GetNetworkID());
         const std::string b = std::to_string(players[1]->GetNetworkID());
         const std::string n = std::to_string(npc->GetNetworkID());
@@ -1149,9 +1155,9 @@ MODULE(js_features, {
         // A player with no avatar stays hidden through a getOptions() round trip, old or new, and is
         // only left out of what getAudience() can show.
         RunJSString(engine, ("globalThis.kept = TextLabel.create(0, 0, 0, 'k', { hideFrom: [" + a + "] }); globalThis.snapshot = kept.getOptions(); 'x'").c_str());
-        const auto *kept = manager->GetEntityByNetworkID(std::stoull(RunJSString(engine, "String(kept.id)")));
+        const auto *kept = TestWorld::Find(manager, std::stoull(RunJSString(engine, "String(kept.id)")));
         const auto guidA = players[0]->ownerGUID;
-        manager->DestroyEntity(players[0]);
+        TestWorld::Destroy(manager, players[0]);
         STREQUALS(RunJSString(engine, "kept.update(snapshot); kept.update(kept.getOptions()); JSON.stringify(kept.getAudience().hideFrom)").c_str(), "[]");
         EQUALS(kept->streaming.Admits(guidA), false);
 

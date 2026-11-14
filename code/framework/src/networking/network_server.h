@@ -15,17 +15,26 @@
 #include "network_peer.h"
 #include "rpc/client_identity.h"
 #include "rpc/rpc.h"
+#include "sender.h"
 
 #include <utils/error.h>
 #include <utils/result.h>
 
+#include <atomic>
+#include <chrono>
 #include <mafianet/peer_interface.h>
 #include <mafianet/types.h>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
+
+namespace Framework::Networking::Replication {
+    class World;
+} // namespace Framework::Networking::Replication
 
 namespace Framework::Networking {
     using ClientGuidCallback      = fu2::function<void(MafiaNet::RakNetGUID) const>;
@@ -60,11 +69,43 @@ namespace Framework::Networking {
         SessionRequestCallback _onSessionRequestCallback;
         ClientGuidCallback _onSessionAbandonedCallback;
 
+        // What is kept per connection. Packets write it where they are handled, and any thread asks
+        // (a script reading a player's identity, a kick): all of it under this mutex, which is taken
+        // last and never held across a call out of this class.
+        mutable std::mutex _clientsMutex;
+
         // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
         std::unordered_set<uint64_t> _authenticatedClients;
 
         // Identities from the session request, kept for the connection's lifetime.
         std::unordered_map<uint64_t, RPC::ClientIdentity> _peerIdentities;
+
+        // Ready events of connections that were kicked, for the thread that handles packets to
+        // delete before its next one: ReadyEvent belongs to that thread.
+        std::vector<int> _staleReadyEvents;
+        std::atomic<bool> _anyStaleReadyEvents {false};
+        void DeleteStaleReadyEvents();
+        void BeforeReceive() override {
+            DeleteStaleReadyEvents();
+        }
+
+        bool _replicationRPCsRegistered = false;
+        // Set when a packet thread starts on this server: the handler table and the world's
+        // registered states are read there without a lock, so nothing is added to them afterwards.
+        std::atomic<bool> _registrationsClosed {false};
+        void OnPacketThreadStarting() override;
+
+        std::atomic<int32_t> _slowHandlerWarnMs {10};
+        // The draining thread's own: slow handlers since the last warning, and when the next may be written.
+        uint64_t _slowHandlers = 0;
+        std::chrono::steady_clock::time_point _nextSlowHandlerWarning {};
+        void NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed);
+        // RPCs dropped for a payload that was cut short, in all and since the last warning, which is written
+        // at most once a second: a peer can send them as fast as it likes. The draining thread's own.
+        std::atomic<uint64_t> _shortPayloadsDropped {0};
+        uint64_t _shortPayloads = 0;
+        std::chrono::steady_clock::time_point _nextShortPayloadWarning {};
+        void NoteShortPayload(RPC::Identifier identifier, MafiaNet::RakNetGUID guid);
 
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
@@ -74,7 +115,47 @@ namespace Framework::Networking {
         [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password = "", const AdmissionSettings &admission = {});
         void Shutdown() override;
 
+        // The tick's share of networking: interest, delegation, the state-bag flush and the
+        // replication pass. It receives nothing: packets are handled by whoever calls DrainPackets,
+        // a PacketThread on a running server.
+        void Update() override;
+
+        // Typed RPCs dropped since the server started because their payload was cut short.
+        uint64_t ShortPayloadsDropped() const {
+            return _shortPayloadsDropped.load(std::memory_order_relaxed);
+        }
+
+        // A handler that takes at least this long is logged, at most once a second, with the digest
+        // of its RPC identifier (the name is not in the binary). 0 turns the warning off.
+        void SetSlowHandlerWarnMs(int32_t ms) {
+            _slowHandlerWarnMs.store(ms, std::memory_order_relaxed);
+        }
+
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
+
+        // Register a handler for RPC payload type T. It receives the decoded payload, the connection
+        // that sent it and the world, through which it reaches entities by handle (see
+        // replication/world.h). A payload whose Serialize read past the end of what the client sent
+        // (see RPC::ReadChecked) is dropped before the handler, counted (ShortPayloadsDropped) and
+        // logged at most once a second. Handlers run where packets are drained, on a server its packet
+        // thread, one at a time; register them before it starts (an instance's PostInit or
+        // PostScriptInit), since the table they go in is read there without a lock: registering
+        // once a packet thread has started logs critical and aborts.
+        template <RPC::Payload T>
+        void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
+            RegisterRawRPC(T::kIdentifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
+                T payload {};
+                if (!RPC::ReadChecked(bs, payload)) {
+                    NoteShortPayload(T::kIdentifier, sender.Connection());
+                    return;
+                }
+                cb(payload, sender, world);
+            });
+        }
+
+        // Raw variant for handlers that decode the bitstream themselves, and so answer for what a short
+        // or hostile one decodes to: every BitStream read says whether it got its bits.
+        void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler);
 
         // Signal an RPC to every connected system except one (typically the originator) — the
         // server-authoritative relay primitive, since RPC4::Signal has no exclusion parameter. The
@@ -85,6 +166,7 @@ namespace Framework::Networking {
         std::string GetAddress(MafiaNet::RakNetGUID guid) const override;
 
         bool IsAuthenticated(MafiaNet::RakNetGUID guid) const {
+            const std::lock_guard guard(_clientsMutex);
             return _authenticatedClients.contains(guid.g);
         }
 
@@ -118,12 +200,14 @@ namespace Framework::Networking {
         void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "") override;
 
         void SetPeerIdentity(MafiaNet::RakNetGUID guid, const RPC::ClientIdentity &identity) {
+            const std::lock_guard guard(_clientsMutex);
             _peerIdentities[guid.g] = identity;
         }
 
-        const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID guid) const override {
+        std::optional<RPC::ClientIdentity> GetPeerIdentity(MafiaNet::RakNetGUID guid) const override {
+            const std::lock_guard guard(_clientsMutex);
             const auto it = _peerIdentities.find(guid.g);
-            return it != _peerIdentities.end() ? &it->second : nullptr;
+            return it != _peerIdentities.end() ? std::optional<RPC::ClientIdentity>(it->second) : std::nullopt;
         }
 
         // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.
@@ -159,4 +243,9 @@ namespace Framework::Networking {
             _onConnectionReadyCallback = std::move(callback);
         }
     };
+
+    template <RPC::Payload T>
+    void Sender::Reply(T payload, MafiaNet::Priority priority, MafiaNet::Reliability reliability) const {
+        _server->SendRPC(payload, _guid, priority, reliability);
+    }
 } // namespace Framework::Networking

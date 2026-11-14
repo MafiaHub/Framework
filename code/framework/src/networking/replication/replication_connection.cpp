@@ -8,6 +8,8 @@
 
 #include "replication_connection.h"
 
+#include "world.h"
+
 #include "entity_registry.h"
 #include "network_entity.h"
 #include "replication_manager.h"
@@ -41,6 +43,11 @@ namespace Framework::Networking::Replication {
         return _manager ? _manager->GetViewer(_viewerGUID) : nullptr;
     }
 
+    MafiaNet::VirtualWorldId ReplicationConnection::ViewerWorld(const NetworkEntity *viewer) const {
+        const InterestGrid &interest = _manager->Interest();
+        return interest.WorldOf(interest.SlotOf(viewer));
+    }
+
     bool ReplicationConnection::IsRelevant(const NetworkEntity *entity) const {
         if (!_manager || !entity) {
             return false;
@@ -56,7 +63,7 @@ namespace Framework::Networking::Replication {
         }
         // Dimension changes, ownership changes and lifecycle invalidation bypass the turn; so does
         // having missed re-evaluations the manager has since discarded.
-        return !_relevantValid || _interestStale || _relevantViewer != viewer || GetVirtualWorld() != viewer->GetVirtualWorld() || _reevaluationsSeen < _manager->ReevaluationBase();
+        return !_relevantValid || _interestStale || _relevantViewer != viewer || GetVirtualWorld() != ViewerWorld(viewer) || _reevaluationsSeen < _manager->ReevaluationBase();
     }
 
     void ReplicationConnection::ComputeInterest(InterestGrid::Scratch &scratch) {
@@ -67,13 +74,47 @@ namespace Framework::Networking::Replication {
         const InterestGrid &interest = _manager->Interest();
         _interestStale               = false;
         _computedViewer              = viewer;
-        _computedWorld               = viewer->GetVirtualWorld();
+        _computedWorld               = ViewerWorld(viewer);
         interest.CollectVisible(viewer, _viewerGUID, _relevant, scratch, _computedSlots);
         _computed.clear();
         for (const uint32_t slot : _computedSlots) {
             _computed.push_back({slot, interest.GenerationOf(slot)});
         }
         _computedReady = true;
+        PrepareDiff();
+    }
+
+    void ReplicationConnection::PrepareDiff() {
+        const InterestGrid &interest = _manager->Interest();
+        _computedSet.Clear();
+        _pendingCreate.clear();
+        _pendingDestroy.clear();
+        for (const uint32_t slot : _computedSlots) {
+            NetworkEntity *entity = interest.EntityAt(slot);
+            if (entity == nullptr) {
+                continue;
+            }
+            _computedSet.Set(slot);
+            if (!HasReplicaConstructed(entity)) {
+                _pendingCreate.push_back(entity);
+            }
+        }
+        for (unsigned i = 0; i < constructedReplicaList.Size(); ++i) {
+            auto *entity        = static_cast<NetworkEntity *>(constructedReplicaList[i]->replica);
+            const uint32_t slot = interest.SlotOf(entity);
+            if (slot == InterestGrid::kNoSlot || !_computedSet.Test(slot)) {
+                _pendingDestroy.push_back(entity);
+            }
+        }
+        _diffMembership  = _manager->GetMembershipGeneration();
+        _diffConstructed = constructedReplicaList.Size();
+        _diffReady       = true;
+    }
+
+    bool ReplicationConnection::DiffStillHolds() const {
+        // A replica dereferenced since may be one the lists point at, and its slot may have a new
+        // occupant; a constructed list of another size is not the one the lists were taken against.
+        return _diffReady && _diffMembership == _manager->GetMembershipGeneration() && _diffConstructed == constructedReplicaList.Size();
     }
 
     void ReplicationConnection::ForgetSlot(uint32_t slot) {
@@ -86,6 +127,8 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager) {
             return;
         }
+        // What other threads queued since the pass began concerns this connection as much.
+        _manager->ApplyPending();
 
         NetworkEntity *viewer = Viewer();
         if (!viewer) {
@@ -96,8 +139,14 @@ namespace Framework::Networking::Replication {
         }
 
         // A result computed earlier this tick is stale if what it was computed for changed since.
-        const bool recompute = _computedReady ? (_interestStale || _computedViewer != viewer || _computedWorld != viewer->GetVirtualWorld()) : InterestUrgent();
-        SetVirtualWorld(viewer->GetVirtualWorld());
+        // The viewer as it is now, not as the last sync left it: a change to a player's own avatar
+        // reaches that player before its turn. Read under the avatar's lock, on the pass's thread.
+        {
+            const Detail::EntityGuard held(*viewer, false);
+            _manager->SyncInterestOf(viewer);
+        }
+        const bool recompute = _computedReady ? (_interestStale || _computedViewer != viewer || _computedWorld != ViewerWorld(viewer)) : InterestUrgent();
+        SetVirtualWorld(ViewerWorld(viewer));
         if (recompute) {
             FW_PROFILE_SCOPE_N("Replication::CollectInterest");
             ComputeInterest(_manager->MainScratch());
@@ -131,6 +180,21 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationConnection::ApplyRefresh(DataStructures::List<MafiaNet::Replica3 *> &create, DataStructures::List<MafiaNet::Replica3 *> &destroy) {
+        if (DiffStillHolds()) {
+            _relevant.Swap(_computedSet);
+            for (NetworkEntity *entity : _pendingCreate) {
+                create.Push(entity, _FILE_AND_LINE_);
+            }
+            for (NetworkEntity *entity : _pendingDestroy) {
+                destroy.Push(entity, _FILE_AND_LINE_);
+            }
+            _computed.clear();
+            _computedReady = false;
+            _diffReady     = false;
+            _manager->NotePreparedDiff();
+            return;
+        }
+        _diffReady                   = false;
         const InterestGrid &interest = _manager->Interest();
         _relevant.Clear();
         for (const SlotRef &ref : _computed) {
@@ -194,9 +258,8 @@ namespace Framework::Networking::Replication {
                 // and has just come to depend on something.
                 const uint32_t dependency = interest.DependencyOf(slot);
                 if (dependency != InterestGrid::kNoSlot && !_relevant.Test(dependency)) {
-                    NetworkEntity *needed = interest.EntityAt(dependency);
-                    if (needed->streaming.visible && needed->streaming.Admits(_viewerGUID)) {
-                        Admit(needed, dependency, create);
+                    if (interest.Shows(dependency, _viewerGUID)) {
+                        Admit(interest.EntityAt(dependency), dependency, create);
                     }
                 }
                 break;
@@ -222,15 +285,16 @@ namespace Framework::Networking::Replication {
         if (!_isServer || !_manager || !entity || !_relevantValid || !_relevantViewer || !_manager->HasSerializeRateBands()) {
             return 0;
         }
+        // Asked on the pass's workers: of what the pass took of both entities under their locks.
         const NetworkEntity *viewer = _relevantViewer;
-        if (entity == viewer || entity->ownerGUID == _viewerGUID || entity->streaming.alwaysVisible || entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+        if (entity == viewer || entity->_pass.owner == _viewerGUID || entity->_pass.unthrottled) {
             return 0;
         }
         const SerializeRateBands &bands = _manager->GetSerializeRateBands(entity->GetTypeId());
         if (bands.nearIntervalMs == 0 && bands.midIntervalMs == 0 && bands.farIntervalMs == 0) {
             return 0;
         }
-        const glm::vec3 delta = entity->position - viewer->position;
+        const glm::vec3 delta = entity->_pass.position - viewer->_pass.position;
         return ReplicationManager::TransformSendIntervalMs(bands, glm::dot(delta, delta));
     }
 

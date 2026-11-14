@@ -21,9 +21,9 @@ namespace Framework::Integrations::Server {
         double replicationInterestMs = 0.0;
         // The ReplicaManager3 pass: construction, destruction and serialization for every connection.
         double replicationPassMs = 0.0;
-        // The rest of the packet pump: receiving, and the handlers of what arrived, client events'
-        // script handlers included.
-        double packetsMs = 0.0;
+        // The rest of the tick's networking: delegation, the state-bag flush and the voice relay's
+        // bookkeeping. No packet is handled in a tick; that is the packet thread's.
+        double networkMs = 0.0;
         // The game's own services (Instance::PostUpdate).
         double gameMs = 0.0;
         // Everything else the tick ran.

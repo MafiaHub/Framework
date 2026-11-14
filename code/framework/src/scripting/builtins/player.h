@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -82,10 +83,23 @@ namespace Framework::Scripting::Builtins {
         static void UnregisterIsolate(v8::Isolate *isolate);
 
       protected:
-        const Networking::RPC::ClientIdentity *ResolveIdentity() const;
+        // A copy: the connection it describes may close while the caller reads it.
+        std::optional<Networking::RPC::ClientIdentity> ResolveIdentity() const;
 
-        Networking::Replication::NametagState *ResolveNametag() const;
-        Networking::Replication::NametagState *WritableNametag() const;
+        // The entity's nametag with the entity held, for the scope that keeps it.
+        struct HeldNametag {
+            Held entity;
+            Networking::Replication::NametagState *state = nullptr;
+
+            explicit operator bool() const {
+                return state != nullptr;
+            }
+            Networking::Replication::NametagState *operator->() const {
+                return state;
+            }
+        };
+        HeldNametag ResolveNametag() const;
+        HeldNametag WritableNametag() const;
         void SetNametagComponent(Networking::Replication::NametagComponent component, bool enabled);
         bool HasNametagComponent(Networking::Replication::NametagComponent component) const;
 

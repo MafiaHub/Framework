@@ -131,8 +131,8 @@ namespace Framework::Scripting::Builtins {
             ThrowTypeError(isolate, "Chat.sendToPlayer: expected a Player");
             return;
         }
-        auto *handle = entity->GetHandle();
-        if (!handle) {
+        MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+        if (!entity->ResolveOwner(owner)) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: player has no owning connection")));
             return;
         }
@@ -141,7 +141,7 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() >= 3) {
             ReadOptions(isolate, info[2], author, color);
         }
-        if (!Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(handle->ownerGUID), false)) {
+        if (!Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(owner), false)) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: network peer unavailable")));
         }
     }

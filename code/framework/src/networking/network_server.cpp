@@ -9,7 +9,10 @@
 #include "network_server.h"
 
 #include "channels.h"
+#include "replication/network_entity.h"
 #include "replication/replication_manager.h"
+#include "replication/world.h"
+#include "rpc/decline_simulation.h"
 
 #include <logging/logger.h>
 #include <mafianet/bit_stream.h>
@@ -18,7 +21,12 @@
 #include <mafianet/message_identifiers.h>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <exception>
+#include <string>
 #include <string_view>
+#include <utility>
 
 namespace Framework::Networking {
     namespace {
@@ -26,6 +34,100 @@ namespace Framework::Networking {
         // ms. Larger than the client's because the server broadcasts to every connection.
         constexpr unsigned int kShutdownBlockDurationMs = 1000;
     } // namespace
+
+    uint64_t Sender::Avatar() const {
+        return _server->GetReplicationManager()->GetViewerId(Guid());
+    }
+
+    void Sender::Drop(std::string_view reason) const {
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropping {}: {}", MafiaNet::to_string(_guid), reason);
+        _server->KickPlayer(_guid, reason.empty() ? DisconnectionReason::KICKED : DisconnectionReason::KICKED_CUSTOM, std::string(reason));
+    }
+
+    void NetworkServer::OnPacketThreadStarting() {
+        _registrationsClosed.store(true, std::memory_order_release);
+        _replicationManager->GetWorld().CloseRegistration();
+    }
+
+    void NetworkServer::RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, Sender, Replication::World &)> handler) {
+        if (_registrationsClosed.load(std::memory_order_acquire)) {
+            // The packet thread is reading the table this would change. Fatal like other misuse: the
+            // alternative is a handler that is sometimes there.
+            const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+            logger->critical("An RPC handler ({:016x}) was registered after the packet thread started; register in PostInit or PostScriptInit", identifier.digest);
+            logger->flush();
+            std::abort();
+        }
+        NetworkPeer::RegisterRawRPC(identifier, [this, identifier, cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) mutable {
+            // Shutting down: no handler starts once the drain was told to stop.
+            if (DrainStopped()) {
+                return;
+            }
+            const auto start = std::chrono::steady_clock::now();
+            // A handler that throws loses its own packet and nothing else: left to unwind through
+            // RakPeer::Receive it would end the packet thread, and the process with it. Its handles
+            // are let go by the unwinding; the sender is not dropped.
+            try {
+                cb(bs, Sender(*this, packet->guid), _replicationManager->GetWorld());
+            }
+            catch (const std::exception &error) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Handler of RPC {:016x} threw on a packet from {}: {}", identifier.digest, packet->guid.g, error.what());
+            }
+            catch (...) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Handler of RPC {:016x} threw on a packet from {}", identifier.digest, packet->guid.g);
+            }
+            NoteHandlerTime(identifier, std::chrono::steady_clock::now() - start);
+        });
+    }
+
+    void NetworkServer::NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed) {
+        const int32_t warnMs = _slowHandlerWarnMs.load(std::memory_order_relaxed);
+        if (warnMs <= 0 || elapsed < std::chrono::milliseconds(warnMs)) {
+            return;
+        }
+        // A slow handler holds up the packets behind it and nothing else; one that is always slow
+        // would otherwise write a line per packet.
+        ++_slowHandlers;
+        const auto now = std::chrono::steady_clock::now();
+        if (now < _nextSlowHandlerWarning) {
+            return;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Packet handler for RPC {:016x} took {:.0f} ms against a {} ms budget ({} slow handler(s) since the last warning)", identifier.digest, std::chrono::duration<double, std::milli>(elapsed).count(), warnMs, _slowHandlers);
+        _slowHandlers           = 0;
+        _nextSlowHandlerWarning = now + std::chrono::seconds(1);
+    }
+
+    void NetworkServer::NoteShortPayload(RPC::Identifier identifier, MafiaNet::RakNetGUID guid) {
+        ++_shortPayloads;
+        _shortPayloadsDropped.fetch_add(1, std::memory_order_relaxed);
+        const auto now = std::chrono::steady_clock::now();
+        if (now < _nextShortPayloadWarning) {
+            return;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropped {} RPC(s) whose payload was cut short, last one RPC {:016x} from {}", _shortPayloads, identifier.digest, guid.g);
+        _shortPayloads           = 0;
+        _nextShortPayloadWarning = now + std::chrono::seconds(1);
+    }
+
+    void NetworkServer::Update() {
+        if (!_peer) {
+            return;
+        }
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
+        // send this tick's state-bag changes — the flush asks each connection what it has
+        // constructed, so it reads the relevance this rebuild just settled.
+        _replicationManager->RebuildInterest();
+        // After the rebuild and before the flush: the election reads the positions this tick
+        // settled, and a handover it decides is an ownership change the flush then sees, so an
+        // owner-scoped bag key travels to the peer that has just been given the entity rather
+        // than to the one that had it a moment ago.
+        _replicationManager->Delegation().Update();
+        _replicationManager->FlushStateBags();
+        _replicationManager->Update();
+        // What the pass put off while it held an entity: a destruction or a state change made from
+        // inside one of its callbacks.
+        Replication::World::Settle();
+    }
 
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password, const AdmissionSettings &admission) {
         if (port <= 0 || port > 65535) {
@@ -57,6 +159,11 @@ namespace Framework::Networking {
 
         // Run replication as the authoritative server.
         _replicationManager->Init(this, true);
+        if (!std::exchange(_replicationRPCsRegistered, true)) {
+            RegisterRPC<RPC::DeclineSimulation>([this](const RPC::DeclineSimulation &payload, Sender sender, Replication::World &) {
+                _replicationManager->Delegation().SetDeclined(payload.networkId, sender.Guid(), payload.declined);
+            });
+        }
 
         // Gate replication behind the handshake: don't auto-create the connection on connect (see
         // PushReplicationConnection). autoDestroy stays on so dropped peers are torn down.
@@ -99,7 +206,10 @@ namespace Framework::Networking {
         };
         case ID_SESSION_CONFIG_ABANDONED: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection request from {} abandoned", MafiaNet::to_string(packet->guid));
-            _peerIdentities.erase(packet->guid.g);
+            {
+                const std::lock_guard guard(_clientsMutex);
+                _peerIdentities.erase(packet->guid.g);
+            }
             if (_onSessionAbandonedCallback) {
                 _onSessionAbandonedCallback(packet->guid);
             }
@@ -135,7 +245,10 @@ namespace Framework::Networking {
         // -> drop (the version-incompatibility path).
         case ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_SUCCESS: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified for {}", MafiaNet::to_string(packet->guid));
-            _authenticatedClients.insert(packet->guid.g);
+            {
+                const std::lock_guard guard(_clientsMutex);
+                _authenticatedClients.insert(packet->guid.g);
+            }
             if (_onClientAuthenticatedCallback) {
                 _onClientAuthenticatedCallback(packet->guid);
             }
@@ -200,13 +313,7 @@ namespace Framework::Networking {
         if (!_replicationManager) {
             return;
         }
-        if (_replicationManager->GetConnectionByGUID(guid) != nullptr) {
-            return; // already pushed (a client could send ClientIdentity twice)
-        }
-        const auto address = _peer->GetSystemAddressFromGuid(guid);
-        if (MafiaNet::Connection_RM3 *connection = _replicationManager->AllocConnection(address, guid)) {
-            _replicationManager->PushConnection(connection);
-        }
+        _replicationManager->StartReplication(_peer->GetSystemAddressFromGuid(guid), guid);
     }
 
     void NetworkServer::AcceptSession(MafiaNet::RakNetGUID guid) {
@@ -214,7 +321,10 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::RejectSession(MafiaNet::RakNetGUID guid, const std::string &reason) {
-        _peerIdentities.erase(guid.g);
+        {
+            const std::lock_guard guard(_clientsMutex);
+            _peerIdentities.erase(guid.g);
+        }
         _peer->RejectSession(guid, reason.c_str());
     }
 
@@ -239,8 +349,27 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::ClearClientState(MafiaNet::RakNetGUID guid) {
+        const std::lock_guard guard(_clientsMutex);
         _authenticatedClients.erase(guid.g);
         _peerIdentities.erase(guid.g);
-        _readyEvent.DeleteEvent(ReadyEventId(guid)); // recycle the slot for reconnects
+        // Recycles the slot for reconnects, before the next packet is handled: so before any from a
+        // connection that takes the slot over.
+        _staleReadyEvents.push_back(ReadyEventId(guid));
+        _anyStaleReadyEvents.store(true, std::memory_order_release);
+    }
+
+    void NetworkServer::DeleteStaleReadyEvents() {
+        if (!_anyStaleReadyEvents.load(std::memory_order_acquire)) {
+            return;
+        }
+        std::vector<int> stale;
+        {
+            const std::lock_guard guard(_clientsMutex);
+            stale.swap(_staleReadyEvents);
+            _anyStaleReadyEvents.store(false, std::memory_order_release);
+        }
+        for (const int eventId : stale) {
+            _readyEvent.DeleteEvent(eventId);
+        }
     }
 } // namespace Framework::Networking

@@ -17,11 +17,14 @@
 #include "builtins/pending_connection.h"
 #include "builtins/voice.h"
 #include <scripting/builtins/console.h>
+#include <scripting/builtins/entity.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/builtins/player.h>
+#include <scripting/builtins/state_bag.h>
 #include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
 #include <scripting/scripting_catalog.h>
@@ -141,6 +144,15 @@ namespace Framework::Integrations::Server::Scripting {
         Builtins::Voice::Register(isolate, global);
         Builtins::PendingConnection::Register(isolate);
 
+        // The classes the Framework wraps entities with (WrapScriptPlayer, WrapScriptEntity, a bag
+        // reached through one) are otherwise built on first use. In the tick and packet threads'
+        // runtimes that would be in the middle of a tick or of a packet handler, entity held and all:
+        // built here, for every runtime as it is set up, wrapping is a lookup. Nothing is put on the
+        // global; that stays the mod's to decide.
+        Framework::Scripting::Builtins::Entity::GetClass(isolate);
+        Framework::Scripting::Builtins::Player::GetClass(isolate);
+        Framework::Scripting::Builtins::StateBag::GetClass(isolate);
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
     }
 
@@ -203,6 +215,18 @@ namespace Framework::Integrations::Server::Scripting {
             _nodeEngine->RunUntil(deadline);
             HandleRuntimeErrors();
         }
+    }
+
+    bool ServerScriptingModule::RunScriptsUntil(std::chrono::steady_clock::time_point deadline) {
+        if (!_nodeEngine || !_nodeEngine->IsInitialized()) {
+            return false;
+        }
+        _nodeEngine->RunUntil(deadline);
+        // Turned away by its gate, it no longer has the world the error handling stops resources in.
+        if (!_nodeEngine->LostRunGate()) {
+            HandleRuntimeErrors();
+        }
+        return true;
     }
 
     void ServerScriptingModule::HandleRuntimeErrors() {

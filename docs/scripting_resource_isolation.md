@@ -37,7 +37,11 @@ memory figures and limits possible, and lets permissions such as worker
 spawning be granted per resource.
 
 It does **not** stop one resource from blocking the others. All environments
-run on the server's scripting thread, as FiveM's do. Long work still belongs in
+run on the server's scripting thread, as FiveM's do. (That thread is no longer
+the tick thread: see `docs/server_threading.md`. A resource that computes in
+JavaScript holds up the other resources, not replication. One that blocks
+inside a long native call, such as `fs.readFileSync`, cannot be interrupted
+and still holds up both.) Long work still belongs in
 a worker thread; what changes is that the worker now dies with its resource.
 
 ## The model

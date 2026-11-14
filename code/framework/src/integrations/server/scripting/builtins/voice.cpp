@@ -37,13 +37,13 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                 return false;
             }
 
-            auto *handle = entity->GetHandle();
-            if (!handle || handle->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+            MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+            if (!entity->ResolveOwner(owner) || owner == MafiaNet::UNASSIGNED_PEER_GUID) {
                 isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string(fn) + ": player has no owning connection")));
                 return false;
             }
 
-            out = static_cast<uint64_t>(handle->ownerGUID);
+            out = static_cast<uint64_t>(owner);
             return true;
         }
 
@@ -113,7 +113,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         auto *voice = Resolve();
-        info.GetReturnValue().Set(voice != nullptr ? voice->GetRouter().GetEffectivePlayerRange(player) : Framework::Voice::kDefaultProximityRange);
+        info.GetReturnValue().Set(voice != nullptr ? voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.GetEffectivePlayerRange(player);
+        })
+                                                   : Framework::Voice::kDefaultProximityRange);
     }
 
     void Voice::JS_SetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -167,7 +170,10 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         auto *voice = Resolve();
-        info.GetReturnValue().Set(static_cast<uint32_t>(voice != nullptr ? voice->GetRouter().GetPlayerTier(player) : Framework::Voice::VoiceTier::Normal));
+        info.GetReturnValue().Set(static_cast<uint32_t>(voice != nullptr ? voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.GetPlayerTier(player);
+        })
+                                                                         : Framework::Voice::VoiceTier::Normal));
     }
 
     void Voice::JS_SetPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -179,7 +185,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             return;
         }
         if (auto *voice = Resolve()) {
-            voice->GetRouter().SetPlayerMuted(player, info.Length() > 1 && info[1]->BooleanValue(isolate));
+            voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+                return router.SetPlayerMuted(player, info.Length() > 1 && info[1]->BooleanValue(isolate));
+            });
         }
     }
 
@@ -193,7 +201,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         auto *voice = Resolve();
-        info.GetReturnValue().Set(voice != nullptr && voice->GetRouter().IsPlayerMuted(player));
+        info.GetReturnValue().Set(voice != nullptr && voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.IsPlayerMuted(player);
+        }));
     }
 
     void Voice::JS_SetPlayerDeaf(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -205,7 +215,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             return;
         }
         if (auto *voice = Resolve()) {
-            voice->GetRouter().SetPlayerDeaf(player, info.Length() > 1 && info[1]->BooleanValue(isolate));
+            voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+                return router.SetPlayerDeaf(player, info.Length() > 1 && info[1]->BooleanValue(isolate));
+            });
         }
     }
 
@@ -219,7 +231,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         auto *voice = Resolve();
-        info.GetReturnValue().Set(voice != nullptr && voice->GetRouter().IsPlayerDeaf(player));
+        info.GetReturnValue().Set(voice != nullptr && voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.IsPlayerDeaf(player);
+        }));
     }
 
     void Voice::JS_SetLocalMute(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -232,7 +246,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             return;
         }
         if (auto *voice = Resolve()) {
-            voice->GetRouter().SetLocalMute(listener, target, info.Length() > 2 && info[2]->BooleanValue(isolate));
+            voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+                return router.SetLocalMute(listener, target, info.Length() > 2 && info[2]->BooleanValue(isolate));
+            });
         }
     }
 
@@ -247,7 +263,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         auto *voice = Resolve();
-        info.GetReturnValue().Set(voice != nullptr && voice->GetRouter().IsLocallyMuted(listener, target));
+        info.GetReturnValue().Set(voice != nullptr && voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.IsLocallyMuted(listener, target);
+        }));
     }
 
     void Voice::JS_IsPlayerVoiceEnabled(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -260,7 +278,9 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         }
 
         auto *voice = Resolve();
-        info.GetReturnValue().Set(voice != nullptr && !voice->GetRouter().IsPlayerVoiceDisabled(player));
+        info.GetReturnValue().Set(voice != nullptr && !voice->WithRouter([&](Framework::Voice::VoiceRouter &router) {
+            return router.IsPlayerVoiceDisabled(player);
+        }));
     }
 
     void Voice::JS_IsPlayerTalking(const v8::FunctionCallbackInfo<v8::Value> &info) {

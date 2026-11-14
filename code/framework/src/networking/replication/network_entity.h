@@ -30,6 +30,11 @@ namespace Framework::Networking::Replication {
     class InterestGrid;
     struct NametagState;
     struct DelegationPolicy;
+    class World;
+    namespace Detail {
+        struct WorldLockable;
+        class EntityGuard;
+    } // namespace Detail
 
     // `serverAuthored` says whose bytes these are: true when the server writes the stream (the per-tick
     // channels it relays, construction, forced state), false when an owning client writes it upstream.
@@ -226,6 +231,12 @@ namespace Framework::Networking::Replication {
     //
     // Authority is keyed on ownerGUID: the server serializes to everyone except the owner, the owning
     // client serializes upstream, and Deserialize accepts state only from the current owner.
+    //
+    // On the server an entity is reached through a handle of the World, which holds its lock. The
+    // Framework holds that lock too around every extension point below that it calls on the entity
+    // (serializing it, applying inbound state, an election asking it): an override works on its own
+    // entity freely, and must not ask the world for a handle. What it has to do on another entity,
+    // or by id, it hands to World::WhenNoneHeld, which runs it once the Framework has let go.
     class NetworkEntity: public MafiaNet::VirtualWorldReplica3 {
       public:
         NetworkEntity() {
@@ -306,10 +317,11 @@ namespace Framework::Networking::Replication {
         }
 
         // --- Game extension points ---
-        // Server interest: an entity this one makes no sense without (a seated ped needs its car).
-        // Survivors of a per-type budget pull it in with them, uncounted. Followed one level.
-        virtual NetworkEntity *GetInterestDependency() {
-            return nullptr;
+        // Server interest: the network id of an entity this one makes no sense without (a seated ped
+        // needs its car), 0 for none. Survivors of a per-type budget pull it in with them, uncounted.
+        // Followed one level; an id that does not resolve counts as none.
+        virtual uint64_t GetInterestDependency() {
+            return 0;
         }
 
         virtual void OnSerializeConstruction(FieldSerializer &fields) {
@@ -327,7 +339,7 @@ namespace Framework::Networking::Replication {
 
         // Owning an entity -- simulating it for DelegationManager, say -- need
         // not mean owning its lifetime. Return false and the server refuses the
-        // owner's destruction; the server's own DestroyEntity is unaffected.
+        // owner's destruction; the server's own World::Destroy is unaffected.
         virtual bool CanOwnerDestroy() const {
             return true;
         }
@@ -406,7 +418,8 @@ namespace Framework::Networking::Replication {
         }
 
         // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)
-        // entities, which replicate to everyone normally.
+        // entities, which replicate to everyone normally. Like SetOwner below, for the holder of
+        // the entity's handle; ReplicationManager has both by network id.
         void ForceState();
 
         // Server: change this entity's owner. The new owner is told directly (the server withholds
@@ -428,11 +441,6 @@ namespace Framework::Networking::Replication {
             _lastTransformTime = 0;
         }
 
-        // Resolve another entity in the same replicated world by NetworkID; the owning manager is
-        // otherwise private. The seam for overrides that need a sibling, chiefly
-        // GetInterestDependency.
-        NetworkEntity *ResolveSibling(MafiaNet::NetworkID networkId) const;
-
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const final;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
         bool DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) final;
@@ -445,6 +453,12 @@ namespace Framework::Networking::Replication {
         void Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) final;
 
         bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) final;
+        MafiaNet::RM3QuerySerializationResult QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) final;
+        // The base's dimension rule for constructing and destroying, with the entity's virtual world read
+        // under its lock: the pass asks these before it has taken its view of the entity, and a handler
+        // may be moving the entity to another world meanwhile.
+        MafiaNet::RM3ConstructionState QueryConstruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) final;
+        MafiaNet::RM3DestructionState QueryDestruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) final;
 
         // Serialize writes the same bytes for every connection (per-connection choices are made in
         // QuerySerializationWithinWorld and ReplicationConnection::SendSerialize), so ReplicaManager3
@@ -504,6 +518,29 @@ namespace Framework::Networking::Replication {
         // Server: this entity's slot in the interest index (InterestGrid::SlotOf); none on a client.
         uint32_t _interestSlot = UINT32_MAX;
         friend class InterestGrid;
+
+        // Server: being torn down, and so never filed in the interest index again.
+        bool _leaving = false;
+        // Server: destroyed by its owner while something still held it, so PreDestruction, which
+        // must not run beside whoever holds the entity, is owed to its teardown.
+        bool _preDestructionOwed = false;
+
+        // Server: the entity's lock, which lives in the world beside it; null on a client.
+        Detail::WorldLockable *_worldLock = nullptr;
+        friend class World;
+        friend class Detail::EntityGuard;
+
+        // Server: what the serialize pass asks of this entity once per connection, as it stood when
+        // the pass began. Taken under the entity's lock, then read by every connection's worker
+        // without it.
+        struct PassView {
+            MafiaNet::PeerGuid owner       = MafiaNet::UNASSIGNED_PEER_GUID;
+            MafiaNet::VirtualWorldId world = MafiaNet::VIRTUAL_WORLD_DEFAULT;
+            glm::vec3 position             = glm::vec3(0.0f);
+            bool unthrottled               = false; // always visible, or streamed to one connection
+        };
+        PassView _pass;
+        friend class ReplicationConnection;
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).

@@ -10,8 +10,10 @@
 
 #include "channels.h"
 #include "connection.h"
+#include "rpc/client_identity.h"
 #include "rpc/rpc.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <logging/logger.h>
@@ -23,6 +25,8 @@
 #include <mafianet/rpc4_plugin.h>
 #include <mafianet/two_way_authentication.h>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -35,13 +39,16 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
 } // namespace Framework::Networking::Replication
 
-namespace Framework::Networking::RPC {
-    struct ClientIdentity;
-} // namespace Framework::Networking::RPC
-
 namespace Framework::Networking {
     class NetworkPeer: public Lifecycle {
       protected:
+        // The table replicated entities are found in by id: the replication manager's, and public
+        // only on a client. A server reaches entities through the world.
+        MafiaNet::NetworkIDManager *GetNetworkIDManager() noexcept {
+            return &_networkIDManager;
+        }
+        friend class Replication::ReplicationManager;
+
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset             = 0; // Offset to skip timestamp prefix if present
@@ -80,8 +87,10 @@ namespace Framework::Networking {
 
         // Deployment salt mixed into every RPC4 slot key (see rpc/rpc_identifier.h), and the tokens
         // derived from it so a send costs a lookup, not a hash. Keyed by digest; node-stable, so the
-        // C strings handed to RPC4 stay valid for the peer's lifetime.
+        // C strings handed to RPC4 stay valid for the peer's lifetime. Any thread that sends resolves
+        // one, hence the mutex around the map.
         std::uint64_t _identifierSalt = RPC::kDefaultIdentifierSalt;
+        std::mutex _identifierTokensMutex;
         std::unordered_map<std::uint64_t, RPC::Token> _identifierTokens;
 
         static void DispatchRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet, void *context) {
@@ -92,6 +101,21 @@ namespace Framework::Networking {
         }
 
         bool RegisterBuildToken();
+
+        // Called by DrainPackets before each Receive(), on the thread that drains.
+        virtual void BeforeReceive() {}
+
+        // Whether the drain in progress was told to stop. One Receive() hands every RPC it finds to
+        // its handler before it returns, so a dispatcher asks this to leave the rest unhandled.
+        bool DrainStopped() const {
+            return _drainStop != nullptr && _drainStop->load(std::memory_order_acquire);
+        }
+
+      private:
+        // Handles the packet DrainPackets has just received.
+        void Dispatch();
+        // The draining thread's own, for the length of a drain.
+        const std::atomic<bool> *_drainStop = nullptr;
 
       public:
         // TwoWayAuthentication identifier under which the build token is registered/challenged.
@@ -135,10 +159,16 @@ namespace Framework::Networking {
         // The RPC4 slot key for an identifier under the current salt, valid for the peer's lifetime.
         const char *ResolveIdentifier(RPC::Identifier identifier);
 
+      protected:
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
         // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
         // Signal() send below.
+        //
+        // The client's form: NetworkClient makes this and RegisterRawRPC public. A server registers on
+        // NetworkServer, whose handlers are given the sender and the world, and behind which sit the
+        // short-payload check, the shutdown check and the timing. Protected here so that a server
+        // mod holding a NetworkPeer * cannot register a handler that skips all three.
         template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
             RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
@@ -146,6 +176,7 @@ namespace Framework::Networking {
             });
         }
 
+      public:
         // Send an RPC payload to every connected system, optionally excluding one (in broadcast mode
         // RakNet treats the guid as the system to SKIP — e.g. don't echo a client's own update back).
         // `channel` is the ordering channel: Events, the construction channel, unless the message
@@ -165,10 +196,11 @@ namespace Framework::Networking {
             _rpc.Signal(ResolveIdentifier(T::kIdentifier), &bs, priority, reliability, ToOrderingChannel(channel), guid, false, false);
         }
 
+      protected:
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
         // polymorphic tail). Prefer the typed RegisterRPC<T> for fixed-shape payloads. The callable
         // is stored for the peer's lifetime and reached through RPC4's per-slot context, so no
-        // file-static handler pointers are needed.
+        // file-static handler pointers are needed. Public on NetworkClient; see RegisterRPC.
         void RegisterRawRPC(RPC::Identifier identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
             auto slot     = std::make_unique<RPCSlot>(std::move(handler));
             void *context = slot.get();
@@ -176,12 +208,21 @@ namespace Framework::Networking {
             _rpc.RegisterSlot(ResolveIdentifier(identifier), &NetworkPeer::DispatchRPC, context, 0);
         }
 
+      public:
         // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
         void SendRawRPC(RPC::Identifier identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             _rpc.Signal(ResolveIdentifier(identifier), &bs, priority, reliability, ToOrderingChannel(Channel::Events), guid, false, false);
         }
 
         void Update() override;
+        // Receives until nothing waits, handling each packet as it comes: plugins, RPC handlers,
+        // HandlePacket, in arrival order. One thread calls it. Once `stop`, when given, is raised, no
+        // further packet is handled: a server's RPCs still in the queue are dropped unhandled, and
+        // the rest is left in the peer.
+        void DrainPackets(const std::atomic<bool> *stop = nullptr);
+        // Told by a PacketThread as it starts on this peer: from here on another thread reads what
+        // was registered. A server closes its registrations (NetworkServer).
+        virtual void OnPacketThreadStarting() {}
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
         // Byte offset of the packet id in a datagram, skipping an optional ID_TIMESTAMP + 8-byte
@@ -205,9 +246,10 @@ namespace Framework::Networking {
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
 
-        // Server-only; the identity the peer announced via ClientIdentity (unverified), else nullptr.
-        virtual const RPC::ClientIdentity *GetPeerIdentity(MafiaNet::RakNetGUID) const {
-            return nullptr;
+        // Server-only; the identity the peer announced via ClientIdentity (unverified), if it is
+        // connected. A copy: the connection may go, on another thread, while the caller reads it.
+        virtual std::optional<RPC::ClientIdentity> GetPeerIdentity(MafiaNet::RakNetGUID) const {
+            return std::nullopt;
         }
 
         // Server-only; the connection's average round-trip time in ms, or -1 if unavailable.
@@ -247,10 +289,6 @@ namespace Framework::Networking {
 
         MafiaNet::RPC4 *GetRPC() noexcept {
             return &_rpc;
-        }
-
-        MafiaNet::NetworkIDManager *GetNetworkIDManager() noexcept {
-            return &_networkIDManager;
         }
 
         MafiaNet::TwoWayAuthentication *GetTwoWayAuth() noexcept {

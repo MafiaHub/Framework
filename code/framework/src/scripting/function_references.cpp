@@ -7,15 +7,19 @@
  */
 
 #include "function_references.h"
+
 #include "callback_scope.h"
 #include "engine_helpers.h"
 #include "resource_monitor.h"
+#include "script_gate.h"
 
 #include <utils/profiler.h>
 
 #include <v8pp/convert.hpp>
 
+#include <atomic>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -24,11 +28,26 @@
 namespace Framework::Scripting {
 
     struct FunctionReferences::State: std::enable_shared_from_this<FunctionReferences::State> {
+        // An export's handles, in its owner's isolate. Touched only by a thread that holds that isolate: a call that
+        // is on its way to the owner shares them instead of making handles of its own from outside, and whoever
+        // releases the export from outside leaves them to the owner's next visit.
+        struct Handles {
+            v8::Global<v8::Function> function;
+            v8::Global<v8::Object> receiver;
+
+            void Reset() {
+                function.Reset();
+                receiver.Reset();
+            }
+        };
+
         struct Runtime {
             v8::Isolate *isolate = nullptr;
             v8::Global<v8::Context> context;
             std::string name;
             std::shared_ptr<const TransferFunctions> hooks; // Built once: every call copies through them.
+            // Handles of exports released by a thread that did not hold this isolate, for one that does to drop.
+            std::vector<std::shared_ptr<Handles>> retired;
         };
 
         // A function kept alive for other runtimes to call. `holds` counts the copies and stand-ins that refer to it.
@@ -36,8 +55,7 @@ namespace Framework::Scripting {
         // keeps its `this`.
         struct Export {
             uint32_t runtime = 0;
-            v8::Global<v8::Function> function;
-            v8::Global<v8::Object> receiver;
+            std::shared_ptr<Handles> handles;
             std::string name; // the function's own: a function crosses as a value, and the monitor's slow reports need one
             uint32_t holds = 0;
         };
@@ -85,6 +103,8 @@ namespace Framework::Scripting {
         struct Entered {
             explicit Entered(Runtime &runtime): locker(runtime.isolate), isolateScope(runtime.isolate), handleScope(runtime.isolate), context(runtime.context.Get(runtime.isolate)), contextScope(context), callbackScope(OpenCallbackScope(runtime.isolate)) {}
 
+            // First in, last out: a call from a script into another runtime holds safe points off for its length.
+            RuntimeEntry entry;
             v8::Locker locker;
             v8::Isolate::Scope isolateScope;
             v8::HandleScope handleScope;
@@ -92,6 +112,15 @@ namespace Framework::Scripting {
             v8::Context::Scope contextScope;
             std::unique_ptr<CallbackScope> callbackScope;
         };
+
+        // Guards every table below, and what their entries hold, against the threads that copy arguments at the
+        // same time: the script thread and each thread with a runtime of its own. Never held while script runs
+        // (a copy runs getters, a call runs anything) nor while an isolate is waited for: what a step needs is
+        // read out under it, and the step is taken without it. Whoever enters a runtime found here relies on it
+        // staying: runtimes come and go only on the script thread or with the world, which is where calls are made.
+        mutable std::mutex mutex;
+        // Weak callbacks run inside a collection, which any V8 call under `mutex` could start: a lock of their own.
+        std::mutex collectedMutex;
 
         std::map<uint32_t, Runtime> runtimes;
         std::unordered_map<v8::Isolate *, uint32_t> runtimeByIsolate;
@@ -102,10 +131,10 @@ namespace Framework::Scripting {
         // Stand-ins whose functions were collected, waiting for ReleaseCollected().
         std::vector<uint64_t> collected;
         std::map<uint64_t, std::unique_ptr<Settlement>> settlements;
-        uint32_t nextRuntime    = 1;
-        uint64_t nextExport     = 1;
-        uint64_t nextStandIn    = 1;
-        uint64_t nextSettlement = 1;
+        uint32_t nextRuntime = 1;
+        uint64_t nextExport  = 1;
+        std::atomic<uint64_t> nextStandIn {1};
+        std::atomic<uint64_t> nextSettlement {1};
 
         // What a V8 callback (a stand-in, a promise reaction) is handed: this state and the key of its target. A key, not
         // a pointer: the target can go while the function still exists, such as when its runtime has left but a
@@ -129,20 +158,25 @@ namespace Framework::Scripting {
         }
 
         std::string NameOf(uint32_t runtime) const {
+            const std::lock_guard lock(mutex);
             const auto it = runtimes.find(runtime);
             return it != runtimes.end() ? it->second.name : std::string("a stopped resource");
         }
 
         uint32_t FindRuntime(v8::Isolate *isolate) const {
+            const std::lock_guard lock(mutex);
             const auto it = runtimeByIsolate.find(isolate);
             return it != runtimeByIsolate.end() ? it->second : 0;
         }
 
         // The runtime's hooks, shared: a caller keeps them even if the runtime leaves during the copy they serve.
         std::shared_ptr<const TransferFunctions> Hooks(uint32_t runtime) {
-            const auto it = runtimes.find(runtime);
-            if (it != runtimes.end() && it->second.hooks) {
-                return it->second.hooks;
+            {
+                const std::lock_guard lock(mutex);
+                const auto it = runtimes.find(runtime);
+                if (it != runtimes.end() && it->second.hooks) {
+                    return it->second.hooks;
+                }
             }
             return std::make_shared<const TransferFunctions>(MakeHooks(runtime));
         }
@@ -165,9 +199,38 @@ namespace Framework::Scripting {
             return functions;
         }
 
+        // Drops the handles other threads left for `runtime`, whose isolate the caller holds.
+        void DropRetired(uint32_t runtime) {
+            std::vector<std::shared_ptr<Handles>> retired;
+            {
+                const std::lock_guard lock(mutex);
+                const auto it = runtimes.find(runtime);
+                if (it == runtimes.end() || it->second.retired.empty()) {
+                    return;
+                }
+                retired.swap(it->second.retired);
+            }
+            for (const auto &handles : retired) {
+                handles->Reset();
+            }
+        }
+
+        // One more hold on a live export, or false. Looking an export up and holding it are one step: another
+        // thread may be releasing it.
+        bool HoldExport(uint64_t id) {
+            const std::lock_guard lock(mutex);
+            const auto exported = exports.find(id);
+            if (exported == exports.end()) {
+                return false;
+            }
+            ++exported->second.holds;
+            return true;
+        }
+
         void ExportFunction(uint32_t runtime, v8::Isolate *isolate, v8::Local<v8::Function> function, v8::Local<v8::Object> holder, TransferredValue &out) {
             v8::Local<v8::Context> context = isolate->GetCurrentContext();
             v8::Local<v8::Private> key     = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.functionReference"));
+            DropRetired(runtime);
 
             // A stand-in carries the id of the export it forwards to: sending it on refers to the original instead of
             // stacking a stand-in on a stand-in.
@@ -175,9 +238,11 @@ namespace Framework::Scripting {
             v8::Local<v8::Value> previous;
             if (function->GetPrivate(context, key).ToLocal(&previous) && previous->IsNumber()) {
                 const auto existing = static_cast<uint64_t>(previous.As<v8::Number>()->Value());
+                const std::lock_guard lock(mutex);
                 const auto exported = exports.find(existing);
                 if (exported != exports.end() && (exported->second.runtime != runtime || holder.IsEmpty())) {
                     id = existing;
+                    ++exported->second.holds;
                 }
             }
 
@@ -185,21 +250,34 @@ namespace Framework::Scripting {
             // again, the same pair reuses its entry, so a handler sent on every event costs one.
             v8::Local<v8::Map> methods;
             if (id == 0 && !holder.IsEmpty()) {
-                methods = MethodsOf(isolate, context, holder);
-                id      = MethodExport(context, methods, function);
+                methods               = MethodsOf(isolate, context, holder);
+                const uint64_t method = MethodExport(context, methods, function);
+                if (method != 0 && HoldExport(method)) {
+                    id = method;
+                }
             }
 
             if (id == 0) {
-                id            = nextExport++;
-                Export &entry = exports[id];
-                entry.runtime = runtime;
-                entry.function.Reset(isolate, function);
-                entry.name                   = DebugName(isolate, context, function);
-                v8::Local<v8::Value> idValue = v8::Number::New(isolate, static_cast<double>(id));
+                // Everything that asks V8 comes first; the table only takes the result.
+                std::string name = DebugName(isolate, context, function);
+                auto handles     = std::make_shared<Handles>();
+                handles->function.Reset(isolate, function);
                 if (!methods.IsEmpty()) {
                     // Weak: the method needs its object only while the owner keeps it.
-                    entry.receiver.Reset(isolate, holder);
-                    entry.receiver.SetWeak();
+                    handles->receiver.Reset(isolate, holder);
+                    handles->receiver.SetWeak();
+                }
+                {
+                    const std::lock_guard lock(mutex);
+                    id            = nextExport++;
+                    Export &entry = exports[id];
+                    entry.runtime = runtime;
+                    entry.handles = std::move(handles);
+                    entry.name    = std::move(name);
+                    entry.holds   = 1;
+                }
+                v8::Local<v8::Value> idValue = v8::Number::New(isolate, static_cast<double>(id));
+                if (!methods.IsEmpty()) {
                     (void)methods->Set(context, function, idValue);
                 }
                 else {
@@ -207,7 +285,6 @@ namespace Framework::Scripting {
                 }
             }
 
-            ++exports[id].holds;
             // Built in place: a temporary Hold would release the export as it went out of scope.
             auto hold     = std::make_shared<Hold>();
             hold->state   = weak_from_this();
@@ -246,45 +323,73 @@ namespace Framework::Scripting {
             return methods;
         }
 
-        // The live export for `function` as a method in `methods`, or 0.
-        uint64_t MethodExport(v8::Local<v8::Context> context, v8::Local<v8::Map> methods, v8::Local<v8::Function> function) const {
+        // The export `function` was given as a method in `methods`, which may have been released since, or 0.
+        static uint64_t MethodExport(v8::Local<v8::Context> context, v8::Local<v8::Map> methods, v8::Local<v8::Function> function) {
             v8::Local<v8::Value> existing;
             if (methods.IsEmpty() || !methods->Get(context, function).ToLocal(&existing) || !existing->IsNumber()) {
                 return 0;
             }
-            const auto id = static_cast<uint64_t>(existing.As<v8::Number>()->Value());
-            return exports.contains(id) ? id : 0;
+            return static_cast<uint64_t>(existing.As<v8::Number>()->Value());
         }
 
         void Release(uint64_t id) {
+            const std::lock_guard lock(mutex);
+            ReleaseLocked(id);
+        }
+
+        // With the mutex held. The last hold frees the export; its handles go now when this thread holds the owner's
+        // isolate, and wait for a thread that does otherwise.
+        void ReleaseLocked(uint64_t id) {
             const auto it = exports.find(id);
-            if (it == exports.end()) {
+            if (it == exports.end() || --it->second.holds != 0) {
                 return;
             }
-            if (--it->second.holds == 0) {
-                exports.erase(it);
+            std::shared_ptr<Handles> handles = std::move(it->second.handles);
+            const auto owner                 = runtimes.find(it->second.runtime);
+            exports.erase(it);
+            if (owner == runtimes.end()) {
+                return;
+            }
+            if (v8::Locker::IsLocked(owner->second.isolate)) {
+                handles->Reset();
+            }
+            else {
+                owner->second.retired.push_back(std::move(handles));
             }
         }
 
         v8::MaybeLocal<v8::Function> ImportFunction(uint32_t runtime, v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t id) {
-            const auto it = exports.find(id);
-            if (it == exports.end()) {
+            DropRetired(runtime);
+
+            v8::Local<v8::Function> known;
+            bool live = false;
+            {
+                const std::lock_guard lock(mutex);
+                const auto it = exports.find(id);
+                if (it != exports.end()) {
+                    live = true;
+                    // A function coming home is itself, not a stand-in for itself.
+                    if (it->second.runtime == runtime) {
+                        known = it->second.handles->function.Get(isolate);
+                    }
+                    else {
+                        // The runtime already holds a stand-in for it: the same function arrives as the same stand-in.
+                        const auto cached = standInByExport.find({runtime, id});
+                        if (cached != standInByExport.end()) {
+                            const auto existing = standIns.find(cached->second);
+                            if (existing != standIns.end() && !existing->second->handle.IsEmpty()) {
+                                known = existing->second->handle.Get(isolate);
+                            }
+                        }
+                    }
+                }
+            }
+            if (!live) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return {};
             }
-
-            // A function coming home is itself, not a stand-in for itself.
-            if (it->second.runtime == runtime) {
-                return it->second.function.Get(isolate);
-            }
-
-            // The runtime already holds a stand-in for it: the same function arrives as the same stand-in.
-            const auto cached = standInByExport.find({runtime, id});
-            if (cached != standInByExport.end()) {
-                const auto existing = standIns.find(cached->second);
-                if (existing != standIns.end() && !existing->second->handle.IsEmpty()) {
-                    return existing->second->handle.Get(isolate);
-                }
+            if (!known.IsEmpty()) {
+                return known;
             }
 
             auto standIn     = std::make_unique<StandIn>();
@@ -297,13 +402,26 @@ namespace Framework::Scripting {
             if (!v8::Function::New(context, CallStandIn, CallbackData(isolate, standIn->key)).ToLocal(&function)) {
                 return {};
             }
-            ++it->second.holds;
             v8::Local<v8::Private> key = v8::Private::ForApi(isolate, v8::String::NewFromUtf8Literal(isolate, "framework.functionReference"));
             function->SetPrivate(context, key, v8::Number::New(isolate, static_cast<double>(id))).Check();
             standIn->handle.Reset(isolate, function);
             standIn->handle.SetWeak(standIn.get(), OnStandInCollected, v8::WeakCallbackType::kParameter);
-            standInByExport[{runtime, id}] = standIn->key;
-            standIns.emplace(standIn->key, std::move(standIn));
+            {
+                const std::lock_guard lock(mutex);
+                const auto it = exports.find(id);
+                if (it != exports.end()) {
+                    ++it->second.holds;
+                    standInByExport[{runtime, id}] = standIn->key;
+                    const uint64_t standInKey      = standIn->key;
+                    standIns.emplace(standInKey, std::move(standIn));
+                }
+            }
+            if (standIn) {
+                // Released while the stand-in was being made.
+                standIn->handle.Reset();
+                Throw(isolate, "The function belongs to a resource that has stopped");
+                return {};
+            }
             return function;
         }
 
@@ -312,12 +430,17 @@ namespace Framework::Scripting {
         static void OnStandInCollected(const v8::WeakCallbackInfo<StandIn> &info) {
             StandIn *standIn = info.GetParameter();
             standIn->handle.Reset();
+            const std::lock_guard lock(standIn->state->collectedMutex);
             standIn->state->collected.push_back(standIn->key);
         }
 
         void ReleaseCollected() {
             std::vector<uint64_t> keys;
-            keys.swap(collected);
+            {
+                const std::lock_guard lock(collectedMutex);
+                keys.swap(collected);
+            }
+            const std::lock_guard lock(mutex);
             for (const uint64_t key : keys) {
                 const auto it = standIns.find(key);
                 if (it == standIns.end()) {
@@ -327,7 +450,7 @@ namespace Framework::Scripting {
                 if (cached != standInByExport.end() && cached->second == key) {
                     standInByExport.erase(cached);
                 }
-                Release(it->second->id);
+                ReleaseLocked(it->second->id);
                 standIns.erase(it);
             }
         }
@@ -338,16 +461,24 @@ namespace Framework::Scripting {
             State &state             = *statePointer;
             v8::Isolate *isolate     = info.GetIsolate();
 
+            uint64_t id     = 0;
+            uint32_t caller = 0;
+            uint32_t owner  = 0;
+            {
+                const std::lock_guard lock(state.mutex);
+                const auto standIn = state.standIns.find(key);
+                if (standIn != state.standIns.end()) {
+                    id     = standIn->second->id;
+                    caller = standIn->second->runtime;
+                    owner  = state.OwnerOf(id);
+                }
+            }
             // Gone when the runtime holding it has left; its isolate can still run code until it is disposed.
-            const auto standIn = state.standIns.find(key);
-            if (standIn == state.standIns.end()) {
+            if (caller == 0) {
                 Throw(isolate, "This resource can no longer call other resources");
                 return;
             }
-            const uint64_t id     = standIn->second->id;
-            const uint32_t caller = standIn->second->runtime;
-
-            if (state.OwnerOf(id) == 0) {
+            if (owner == 0) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return;
             }
@@ -363,23 +494,26 @@ namespace Framework::Scripting {
             }
 
             // Copying ran the arguments' getters, which may have stopped the owner: look it up again.
-            const uint32_t owner = state.OwnerOf(id);
+            // Shared, not referred to: the call may export or release entries, this one among them.
+            std::shared_ptr<Handles> handles;
+            {
+                const std::lock_guard lock(state.mutex);
+                owner = state.OwnerOf(id);
+                if (owner != 0) {
+                    handles = state.exports.at(id).handles;
+                }
+            }
             if (owner == 0) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return;
             }
-            // Held by value: the call may export or release entries, and the map may move under an iterator.
-            v8::Isolate *ownerIsolate = state.runtimes.at(owner).isolate;
-            const Export &exported    = state.exports.at(id);
-            v8::Global<v8::Function> function(ownerIsolate, exported.function);
-            v8::Global<v8::Object> receiver(ownerIsolate, exported.receiver);
             v8::Local<v8::Value> result;
-            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, function, copied, Returned::Value, receiver, id).ToLocal(&result)) {
+            if (state.Invoke(caller, isolate, isolate->GetCurrentContext(), owner, handles->function, copied, Returned::Value, handles->receiver, id).ToLocal(&result)) {
                 info.GetReturnValue().Set(result);
             }
         }
 
-        // The runtime that owns a live export, or 0 when the export or its runtime is gone.
+        // The runtime that owns a live export, or 0 when the export or its runtime is gone. With the mutex held.
         uint32_t OwnerOf(uint64_t id) const {
             const auto exported = exports.find(id);
             if (exported == exports.end() || !runtimes.contains(exported->second.runtime)) {
@@ -409,15 +543,24 @@ namespace Framework::Scripting {
         // monitor's slow reports.
         v8::MaybeLocal<v8::Value> Invoke(uint32_t callerId, v8::Isolate *isolate, v8::Local<v8::Context> context, uint32_t ownerId, const v8::Global<v8::Function> &function, const std::vector<TransferredValue> &arguments, Returned returned,
             const v8::Global<v8::Object> &receiver = {}, uint64_t exportId = 0) {
-            const auto ownerIt = runtimes.find(ownerId);
-            if (ownerIt == runtimes.end()) {
+            Runtime *owner            = nullptr;
+            v8::Isolate *ownerIsolate = nullptr;
+            std::string ownerName;
+            {
+                const std::lock_guard lock(mutex);
+                const auto ownerIt = runtimes.find(ownerId);
+                if (ownerIt != runtimes.end()) {
+                    owner        = &ownerIt->second;
+                    ownerIsolate = owner->isolate;
+                    ownerName    = owner->name;
+                }
+            }
+            if (owner == nullptr) {
                 Throw(isolate, "The function belongs to a resource that has stopped");
                 return {};
             }
-            Runtime &owner                  = ownerIt->second;
-            v8::Isolate *const ownerIsolate = owner.isolate;
             FW_PROFILE_SCOPE_N("Scripting::CrossCall");
-            FW_PROFILE_TEXT(owner.name.c_str(), owner.name.size());
+            FW_PROFILE_TEXT(ownerName.c_str(), ownerName.size());
 
             std::optional<TransferredValue> result;
             std::optional<TransferredValue> thrown;
@@ -426,26 +569,31 @@ namespace Framework::Scripting {
             const double charged = monitor ? monitor->ChargedMs(ownerIsolate, ResourceMonitor::Clock::now()) : 0.0;
             {
                 ResourceMonitor::Scope scope(ownerIsolate);
-                Entered entered(owner);
-                v8::TryCatch tryCatch(owner.isolate);
+                Entered entered(*owner);
+                v8::TryCatch tryCatch(ownerIsolate);
                 const auto ownerHooks = Hooks(ownerId);
 
                 std::vector<v8::Local<v8::Value>> argv;
                 argv.reserve(arguments.size());
                 for (const auto &argument : arguments) {
                     v8::Local<v8::Value> rebuilt;
-                    if (!ValueTransfer::Rebuild(owner.isolate, entered.context, argument, *ownerHooks).ToLocal(&rebuilt)) {
+                    if (!ValueTransfer::Rebuild(ownerIsolate, entered.context, argument, *ownerHooks).ToLocal(&rebuilt)) {
                         break;
                     }
                     argv.push_back(rebuilt);
                 }
 
-                v8::Local<v8::Value> self = receiver.IsEmpty() ? v8::Undefined(owner.isolate).As<v8::Value>() : receiver.Get(owner.isolate).As<v8::Value>();
+                v8::Local<v8::Value> self = receiver.IsEmpty() ? v8::Undefined(ownerIsolate).As<v8::Value>() : receiver.Get(ownerIsolate).As<v8::Value>();
                 v8::Local<v8::Value> value;
-                const bool called = argv.size() == arguments.size() && function.Get(owner.isolate)->Call(entered.context, self, static_cast<int>(argv.size()), argv.data()).ToLocal(&value);
-                if (!called) {
+                // An export's handles are read here, with its owner held; empty once the export was released on the way.
+                const bool released = function.IsEmpty();
+                const bool called   = !released && argv.size() == arguments.size() && function.Get(ownerIsolate)->Call(entered.context, self, static_cast<int>(argv.size()), argv.data()).ToLocal(&value);
+                if (released) {
+                    thrown = ErrorValue("The function belongs to a resource that has stopped");
+                }
+                else if (!called) {
                     // Terminated (the owner called process.exit(), say): there is no exception value to copy.
-                    thrown = tryCatch.HasTerminated() ? ErrorValue(owner.name + " stopped during the call") : CopyOut(owner.isolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), *ownerHooks, "The call failed");
+                    thrown = tryCatch.HasTerminated() ? ErrorValue(ownerName + " stopped during the call") : CopyOut(ownerIsolate, entered.context, tryCatch.HasCaught() ? tryCatch.Exception() : v8::Local<v8::Value>(), *ownerHooks, "The call failed");
                 }
                 else if (value->IsPromise()) {
                     settlement = Await(ownerId, callerId, entered.context, value.As<v8::Promise>(), returned == Returned::Value);
@@ -454,7 +602,7 @@ namespace Framework::Scripting {
                     result.emplace(); // Undefined: only a boolean (a veto) is an outcome, so nothing else is copied.
                 }
                 else {
-                    auto copied = ValueTransfer::Copy(owner.isolate, entered.context, value, *ownerHooks);
+                    auto copied = ValueTransfer::Copy(ownerIsolate, entered.context, value, *ownerHooks);
                     if (copied) {
                         result = std::move(copied).GetValue();
                     }
@@ -473,8 +621,15 @@ namespace Framework::Scripting {
                 if (monitor->IsSlow(ownMs)) {
                     std::string what = "export call from";
                     if (exportId != 0) {
-                        const auto exported = exports.find(exportId);
-                        what                = "export '" + (exported != exports.end() ? exported->second.name : std::string("(since released)")) + "' called from";
+                        std::string exportName = "(since released)";
+                        {
+                            const std::lock_guard lock(mutex);
+                            const auto exported = exports.find(exportId);
+                            if (exported != exports.end()) {
+                                exportName = exported->second.name;
+                            }
+                        }
+                        what = "export '" + exportName + "' called from";
                     }
                     monitor->ReportIfSlow(ownerIsolate, what, NameOf(callerId), ownMs, now);
                 }
@@ -489,22 +644,37 @@ namespace Framework::Scripting {
                 return {};
             }
             if (settlement != 0) {
-                const auto waiting = settlements.find(settlement);
-                if (waiting == settlements.end()) {
+                v8::Local<v8::Promise::Resolver> resolver;
+                const bool made = v8::Promise::Resolver::New(context).ToLocal(&resolver);
+                // Taken out of the table under the lock and dealt with after it: settling runs the hooks, and a
+                // settlement that goes takes its outcome's holds with it, both of which lock.
+                std::unique_ptr<Settlement> taken;
+                bool waited = false;
+                {
+                    const std::lock_guard lock(mutex);
+                    const auto waiting = settlements.find(settlement);
+                    if (waiting != settlements.end()) {
+                        waited = true;
+                        if (made) {
+                            waiting->second->resolver.Reset(isolate, resolver);
+                        }
+                        // Settled already, as the owner's queue drained on the way out of the call: nothing left to
+                        // wait for. Without a promise nothing could be settled; an exception is pending already.
+                        if (!made || waiting->second->settled) {
+                            taken = std::move(waiting->second);
+                            settlements.erase(waiting);
+                        }
+                    }
+                }
+                if (!made) {
+                    return {};
+                }
+                if (!waited) {
                     Throw(isolate, "The call failed");
                     return {};
                 }
-                v8::Local<v8::Promise::Resolver> resolver;
-                if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) {
-                    settlements.erase(waiting); // Nothing could be settled; an exception is pending already.
-                    return {};
-                }
-                waiting->second->resolver.Reset(isolate, resolver);
-                // Settled already, as the owner's queue drained on the way out of the call: nothing left to wait for.
-                if (waiting->second->settled) {
-                    std::unique_ptr<Settlement> owned = std::move(waiting->second);
-                    settlements.erase(waiting);
-                    SettleIn(isolate, context, *owned);
+                if (taken) {
+                    SettleIn(isolate, context, *taken);
                 }
                 return resolver->GetPromise();
             }
@@ -554,6 +724,7 @@ namespace Framework::Scripting {
                 return 0;
             }
             const uint64_t key = settlement->key;
+            const std::lock_guard lock(mutex);
             settlements.emplace(key, std::move(settlement));
             return key;
         }
@@ -570,19 +741,29 @@ namespace Framework::Scripting {
         static void Settle(const v8::FunctionCallbackInfo<v8::Value> &info, bool fulfilled) {
             auto [statePointer, key] = ReadCallbackData(info);
             State &state             = *statePointer;
-            const auto it            = state.settlements.find(key);
-            if (it == state.settlements.end()) {
-                return; // Already settled, or its owner has left.
+            // Held here, out of the table, while the value is copied: copying runs the owner's getters.
+            std::unique_ptr<Settlement> owned;
+            bool callerLeft = true;
+            std::string callerName;
+            {
+                const std::lock_guard lock(state.mutex);
+                const auto it = state.settlements.find(key);
+                if (it == state.settlements.end()) {
+                    return; // Already settled, or its owner has left.
+                }
+                owned = std::move(it->second);
+                state.settlements.erase(it);
+                const auto caller = state.runtimes.find(owned->caller);
+                if (caller != state.runtimes.end()) {
+                    callerLeft = false;
+                    callerName = caller->second.name;
+                }
             }
-            // Held while the value is copied: copying runs the owner's getters.
-            std::unique_ptr<Settlement> owned = std::move(it->second);
-            state.settlements.erase(it);
-            const auto caller = state.runtimes.find(owned->caller);
-            if (caller == state.runtimes.end()) {
-                return; // The caller has left: nobody to settle.
+            if (callerLeft) {
+                return; // Nobody to settle.
             }
             FW_PROFILE_SCOPE_N("Scripting::CrossSettle");
-            FW_PROFILE_TEXT(caller->second.name.c_str(), caller->second.name.size());
+            FW_PROFILE_TEXT(callerName.c_str(), callerName.size());
 
             v8::Isolate *isolate       = info.GetIsolate();
             v8::Local<v8::Value> value = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
@@ -605,7 +786,9 @@ namespace Framework::Scripting {
             // Settled as the call that awaits it leaves the owner: the caller's promise does not exist yet. Left here
             // with its outcome for Invoke, which settles the promise as soon as it has made it.
             if (owned->resolver.IsEmpty()) {
-                state.settlements.emplace(owned->key, std::move(owned));
+                const std::lock_guard lock(state.mutex);
+                const uint64_t ownedKey = owned->key;
+                state.settlements.emplace(ownedKey, std::move(owned));
                 return;
             }
             state.SettleCaller(*owned);
@@ -613,15 +796,23 @@ namespace Framework::Scripting {
 
         // Settles the caller's promise with the outcome the settlement carries, from outside the caller.
         void SettleCaller(Settlement &settlement) {
-            const auto caller = runtimes.find(settlement.caller);
-            if (settlement.resolver.IsEmpty() || caller == runtimes.end()) {
+            Runtime *caller = nullptr;
+            {
+                const std::lock_guard lock(mutex);
+                const auto it = runtimes.find(settlement.caller);
+                if (it != runtimes.end()) {
+                    caller = &it->second;
+                }
+            }
+            if (settlement.resolver.IsEmpty() || caller == nullptr) {
                 return;
             }
             // The copy ran in the owner; rebuilding, resolving and the continuations that run as the caller is left
             // are the caller's.
-            ResourceMonitor::Scope charged(caller->second.isolate);
-            Entered entered(caller->second);
-            SettleIn(caller->second.isolate, entered.context, settlement);
+            v8::Isolate *const callerIsolate = caller->isolate;
+            ResourceMonitor::Scope charged(callerIsolate);
+            Entered entered(*caller);
+            SettleIn(callerIsolate, entered.context, settlement);
         }
 
         // Settles the caller's promise with the outcome the settlement carries, rebuilt in the caller, which is entered.
@@ -660,6 +851,7 @@ namespace Framework::Scripting {
     }
 
     uint32_t FunctionReferences::AddRuntime(v8::Isolate *isolate, v8::Local<v8::Context> context, std::string name) {
+        const std::lock_guard lock(_state->mutex);
         const uint32_t id     = _state->nextRuntime++;
         State::Runtime &entry = _state->runtimes[id];
         entry.isolate         = isolate;
@@ -671,57 +863,81 @@ namespace Framework::Scripting {
     }
 
     void FunctionReferences::RemoveRuntime(uint32_t runtime) {
-        State &state  = *_state;
-        const auto it = state.runtimes.find(runtime);
-        if (it == state.runtimes.end()) {
-            return;
-        }
-        const std::string name = it->second.name;
-
-        // What it exported can no longer be called; stand-ins elsewhere now throw.
-        std::erase_if(state.exports, [&](const auto &entry) {
-            return entry.second.runtime == runtime;
-        });
-
-        // What its stand-ins held elsewhere is released: they die with the isolate and their weak callbacks never fire.
-        for (auto standIn = state.standIns.begin(); standIn != state.standIns.end();) {
-            if (standIn->second->runtime == runtime) {
-                standIn->second->handle.Reset();
-                state.Release(standIn->second->id);
-                standIn = state.standIns.erase(standIn);
-            }
-            else {
-                ++standIn;
-            }
-        }
-        std::erase_if(state.standInByExport, [&](const auto &entry) {
-            return entry.first.first == runtime;
-        });
-
-        // Promises it owed to callers will never settle: reject them. Promises owed to it have nobody to settle.
+        State &state = *_state;
+        std::string name;
+        // Promises it owed to callers will never settle: they are rejected below, once the tables are in order.
         std::vector<std::unique_ptr<State::Settlement>> owed;
-        for (auto settlement = state.settlements.begin(); settlement != state.settlements.end();) {
-            if (settlement->second->owner == runtime) {
-                owed.push_back(std::move(settlement->second));
-                settlement = state.settlements.erase(settlement);
-                continue;
+        {
+            const std::lock_guard lock(state.mutex);
+            const auto it = state.runtimes.find(runtime);
+            if (it == state.runtimes.end()) {
+                return;
             }
-            if (settlement->second->caller == runtime) {
-                settlement->second->resolver.Reset();
+            name = it->second.name;
+
+            // What it exported can no longer be called; stand-ins elsewhere now throw. Its handles go here, in its
+            // isolate, whoever still shares them.
+            for (auto exported = state.exports.begin(); exported != state.exports.end();) {
+                if (exported->second.runtime == runtime) {
+                    exported->second.handles->Reset();
+                    exported = state.exports.erase(exported);
+                }
+                else {
+                    ++exported;
+                }
             }
-            ++settlement;
+            for (const auto &handles : it->second.retired) {
+                handles->Reset();
+            }
+
+            // What its stand-ins held elsewhere is released: they die with the isolate and their weak callbacks never
+            // fire.
+            for (auto standIn = state.standIns.begin(); standIn != state.standIns.end();) {
+                if (standIn->second->runtime == runtime) {
+                    standIn->second->handle.Reset();
+                    state.ReleaseLocked(standIn->second->id);
+                    standIn = state.standIns.erase(standIn);
+                }
+                else {
+                    ++standIn;
+                }
+            }
+            std::erase_if(state.standInByExport, [&](const auto &entry) {
+                return entry.first.first == runtime;
+            });
+
+            // Promises owed to it have nobody to settle.
+            for (auto settlement = state.settlements.begin(); settlement != state.settlements.end();) {
+                if (settlement->second->owner == runtime) {
+                    owed.push_back(std::move(settlement->second));
+                    settlement = state.settlements.erase(settlement);
+                    continue;
+                }
+                if (settlement->second->caller == runtime) {
+                    settlement->second->resolver.Reset();
+                }
+                ++settlement;
+            }
+            state.runtimeByIsolate.erase(it->second.isolate);
+            state.runtimes.erase(it);
         }
-        state.runtimeByIsolate.erase(it->second.isolate);
-        state.runtimes.erase(it);
 
         for (auto &settlement : owed) {
-            const auto caller = state.runtimes.find(settlement->caller);
-            if (settlement->resolver.IsEmpty() || caller == state.runtimes.end()) {
+            State::Runtime *caller = nullptr;
+            {
+                const std::lock_guard lock(state.mutex);
+                const auto found = state.runtimes.find(settlement->caller);
+                if (found != state.runtimes.end()) {
+                    caller = &found->second;
+                }
+            }
+            if (settlement->resolver.IsEmpty() || caller == nullptr) {
                 continue;
             }
-            State::Entered entered(caller->second);
-            v8::Local<v8::Value> error = v8::Exception::Error(v8pp::to_v8(caller->second.isolate, name + " stopped before the call finished"));
-            settlement->resolver.Get(caller->second.isolate)->Reject(entered.context, error).Check();
+            v8::Isolate *const callerIsolate = caller->isolate;
+            State::Entered entered(*caller);
+            v8::Local<v8::Value> error = v8::Exception::Error(v8pp::to_v8(callerIsolate, name + " stopped before the call finished"));
+            settlement->resolver.Get(callerIsolate)->Reject(entered.context, error).Check();
         }
     }
 
@@ -731,6 +947,23 @@ namespace Framework::Scripting {
 
     uint32_t FunctionReferences::FindRuntime(v8::Isolate *isolate) const {
         return _state->FindRuntime(isolate);
+    }
+
+    std::optional<std::vector<v8::Local<v8::Value>>> FunctionReferences::RebuildArguments(v8::Isolate *target, const std::vector<TransferredValue> &arguments) {
+        const uint32_t targetId = _state->FindRuntime(target);
+        if (targetId == 0) {
+            State::Throw(target, "The resource is not reachable from here");
+            return std::nullopt;
+        }
+        const auto hooks                     = _state->Hooks(targetId);
+        const v8::Local<v8::Context> context = target->GetCurrentContext();
+        std::vector<v8::Local<v8::Value>> rebuilt(arguments.size());
+        for (size_t i = 0; i < arguments.size(); ++i) {
+            if (!ValueTransfer::Rebuild(target, context, arguments[i], *hooks).ToLocal(&rebuilt[i])) {
+                return std::nullopt;
+            }
+        }
+        return rebuilt;
     }
 
     std::optional<std::vector<TransferredValue>> FunctionReferences::CopyArguments(v8::Isolate *caller, const std::vector<v8::Local<v8::Value>> &arguments) {
@@ -773,20 +1006,33 @@ namespace Framework::Scripting {
             return {};
         }
         v8::Local<v8::Context> context = caller->GetCurrentContext();
-        State::Runtime &ownerRuntime   = state.runtimes.at(ownerId);
+        State::Runtime *ownerRuntime   = nullptr;
+        std::string ownerName;
+        {
+            const std::lock_guard lock(state.mutex);
+            const auto found = state.runtimes.find(ownerId);
+            if (found != state.runtimes.end()) {
+                ownerRuntime = &found->second;
+                ownerName    = found->second.name;
+            }
+        }
+        if (ownerRuntime == nullptr) {
+            State::Throw(caller, "The resource is not reachable from here");
+            return {};
+        }
         FW_PROFILE_SCOPE_N("Scripting::CrossFetch");
-        FW_PROFILE_TEXT(ownerRuntime.name.c_str(), ownerRuntime.name.size());
+        FW_PROFILE_TEXT(ownerName.c_str(), ownerName.size());
 
         TransferredValue copied;
         std::string error;
         {
             ResourceMonitor::Scope charged(owner);
-            State::Entered entered(ownerRuntime);
+            State::Entered entered(*ownerRuntime);
             v8::TryCatch tryCatch(owner);
             v8::Local<v8::Value> value;
             if (!produce(owner, entered.context).ToLocal(&value)) {
                 if (tryCatch.HasTerminated()) {
-                    error = ownerRuntime.name + " stopped while the value was read";
+                    error = ownerName + " stopped while the value was read";
                 }
                 else {
                     error = tryCatch.HasCaught() ? ToUtf8(owner, tryCatch.Exception()) : std::string("The value could not be read");
@@ -818,10 +1064,12 @@ namespace Framework::Scripting {
     }
 
     size_t FunctionReferences::GetExportCount() const {
+        const std::lock_guard lock(_state->mutex);
         return _state->exports.size();
     }
 
     size_t FunctionReferences::GetStandInCount() const {
+        const std::lock_guard lock(_state->mutex);
         return _state->standIns.size();
     }
 

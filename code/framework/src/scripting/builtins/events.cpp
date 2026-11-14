@@ -8,15 +8,18 @@
 
 #include "events.h"
 #include "../engine_helpers.h"
+#include "../engine_scope.h"
 #include "../function_references.h"
 #include "../resource/resource_manager.h"
 #include "../resource_monitor.h"
+#include "../script_gate.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <logging/logger.h>
 #include <networking/network_peer.h>
+#include <networking/replication/world.h>
 #include <utils/profiler.h>
 
 #include <algorithm>
@@ -741,12 +744,102 @@ namespace Framework::Scripting::Builtins {
         return handlersToCall;
     }
 
+    namespace {
+        // Whether this thread is not the one scripts run on, on a host that gives them one.
+        bool OffScriptThread() {
+            ScriptGate *gate = ScriptGate::Get();
+            return gate != nullptr && !gate->OnScriptThread();
+        }
+    } // namespace
+
+    bool Events::EmitFromOtherThread(v8::Isolate *isolate, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope, bool sync) {
+        ResourceManager *manager       = _callbackContext ? _callbackContext->resourceManager : nullptr;
+        FunctionReferences *references = manager != nullptr ? manager->GetFunctionReferences() : nullptr;
+        Engine *engine                 = manager != nullptr ? manager->GetEngine() : nullptr;
+        if (references == nullptr || engine == nullptr) {
+            return true;
+        }
+        // Out of the caller's isolate, into a form that belongs to no isolate. An argument that cannot cross (a
+        // promise, a cycle) is the caller's mistake: said once, and the event is not raised. A synchronous caller
+        // is then told no: the handlers that might have refused never saw it.
+        std::optional<std::vector<TransferredValue>> copied;
+        {
+            v8::TryCatch tryCatch(isolate);
+            copied = references->CopyArguments(isolate, args);
+            if (!copied) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Event '{}' was not raised: {}", eventName, FormatV8Exception(isolate, tryCatch, "its arguments cannot be copied to the script thread"));
+                tryCatch.Reset();
+                return !sync;
+            }
+        }
+
+        // On the script thread, from its own isolate: what every emit there always did.
+        auto emit = [this, engine, references, eventName, targetResource, scope, sync, arguments = std::move(*copied)](bool *result) {
+            if (!engine->IsInitialized()) {
+                return;
+            }
+            EngineScope entered(engine);
+            v8::Isolate *host = entered.Isolate();
+            v8::TryCatch failed(host);
+            const auto rebuilt = references->RebuildArguments(host, arguments);
+            if (!rebuilt) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Event '{}' was not raised: {}", eventName, FormatV8Exception(host, failed, "its arguments could not be rebuilt"));
+                if (result != nullptr) {
+                    *result = false;
+                }
+                return;
+            }
+            if (sync) {
+                // Only the global table has a synchronous form, and only the untargeted one.
+                const bool ok = EmitReservedSync(host, entered.Context(), eventName, *rebuilt);
+                if (result != nullptr) {
+                    *result = ok;
+                }
+            }
+            else {
+                EmitInternal(host, entered.Context(), eventName, *rebuilt, targetResource, scope);
+            }
+        };
+
+        ScriptGate *gate = ScriptGate::Get();
+        if (sync) {
+            bool proceed   = true;
+            const auto run = [&] {
+                gate->Run([&emit, &proceed] {
+                    emit(&proceed);
+                });
+            };
+            // A handler may call a function that was among the arguments, which runs in the caller's isolate, on
+            // the script thread: the caller lets go of it for the wait. Locals made in it stay valid.
+            if (v8::Locker::IsLocked(isolate)) {
+                const v8::Unlocker unlocked(isolate);
+                run();
+            }
+            else {
+                run();
+            }
+            return proceed;
+        }
+        gate->Post([emit = std::move(emit)]() mutable {
+            emit(nullptr);
+        });
+        return true;
+    }
+
     v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope) {
         v8::EscapableHandleScope handleScope(isolate);
 
         // Create Promise resolver
         v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
         v8::Local<v8::Promise> promise            = resolver->GetPromise();
+
+        // Raised from a thread scripts do not run on: the handlers run on the script thread, later. The caller
+        // gets a promise that is already settled, since nothing of the handlers comes back to this thread.
+        if (OffScriptThread()) {
+            EmitFromOtherThread(isolate, eventName, args, targetResource, scope, false);
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return handleScope.Escape(promise);
+        }
 
         auto handlersToCall = CollectHandlers(eventName, targetResource, scope);
 
@@ -765,7 +858,17 @@ namespace Framework::Scripting::Builtins {
     }
 
     bool Events::EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args) {
+        // The handlers answer before this returns, and they ask the world for entities: the one a
+        // caller still held would never be theirs. A caller that needs a veto lets go of its handles,
+        // asks, and takes them again.
+        Networking::Replication::World::RequireNoneHeld("an event was raised that waits for its handlers");
         v8::HandleScope handleScope(isolate);
+
+        // From a thread scripts do not run on: the handlers run on the script thread and this waits for their
+        // answer, which means for whatever script is running there first.
+        if (OffScriptThread()) {
+            return EmitFromOtherThread(isolate, eventName, args, "", HandlerScope::Global, true);
+        }
 
         auto handlersToCall = CollectHandlers(eventName, "", HandlerScope::Global);
         bool proceed        = true;

@@ -16,6 +16,7 @@
 //
 //   FrameworkReplicationBench [players...]     default: 50 100 164 250
 
+#include "../replication_test_world.h"
 #include "logging/logger.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_connection.h"
@@ -29,6 +30,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <string>
 #include <vector>
 
 namespace {
@@ -87,21 +89,21 @@ namespace {
         std::uniform_real_distribution<float> step(-150.0f, 150.0f);
         std::vector<NetworkEntity *> movers;
         for (int i = 0; i < kNpcs; ++i) {
-            NetworkEntity *entity   = manager->CreateEntity(npc);
+            NetworkEntity *entity   = TestWorld::Make(manager, npc);
             entity->position        = glm::vec3(spread(rng), 0.0f, spread(rng));
             entity->streaming.range = 50000.0f;
             movers.push_back(entity);
         }
         for (int i = 0; i < players; ++i) {
-            NetworkEntity *avatar   = manager->CreateEntity(human);
+            NetworkEntity *avatar   = TestWorld::Make(manager, human);
             avatar->position        = glm::vec3(spread(rng), 0.0f, spread(rng));
             avatar->streaming.range = 50000.0f;
             const MafiaNet::RakNetGUID guid(10000 + i);
             avatar->ownerGUID = MafiaNet::ToPeerGuid(guid);
-            manager->SetViewer(avatar->ownerGUID, avatar);
-            auto *connection        = manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid);
+            manager->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
+            auto *connection        = TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid);
             connection->isValidated = true;
-            manager->PushConnection(connection);
+            TestWorld::Rm3(manager)->PushConnection(connection);
             movers.push_back(avatar);
         }
 
@@ -125,7 +127,7 @@ namespace {
         }
 
         for (NetworkEntity *entity : movers) {
-            manager->DestroyEntity(entity);
+            TestWorld::Destroy(manager, entity);
         }
         manager->Clear();
 
@@ -152,10 +154,29 @@ int main(int argc, char **argv) {
     }
     std::printf("%d NPCs in a %.0f m hub, %d measured ticks\n", kNpcs, kHubRadius * 2 / 100, kMeasuredTicks);
     std::printf("%8s %8s | %9s %9s %9s %9s | %11s %9s\n", "players", "workers", "mean ms", "p50 ms", "p99 ms", "max ms", "interest ms", "pass ms");
+    // FW_BENCH_WORKERS=0,3,7 measures those worker counts instead of none and the default.
+    std::vector<int> workerCounts;
+    if (const char *list = std::getenv("FW_BENCH_WORKERS")) {
+        for (const char *at = list; *at != '\0';) {
+            char *end        = nullptr;
+            const long count = std::strtol(at, &end, 10);
+            // Nothing parsed, or something other than a comma after it: measuring a count nobody asked for
+            // would pass for the one they did.
+            if (end == at || (*end != '\0' && *end != ',')) {
+                std::fprintf(stderr, "FW_BENCH_WORKERS: '%s' is not a list of worker counts such as 0,3,-1\n", list);
+                return 1;
+            }
+            workerCounts.push_back(static_cast<int>(count));
+            at = (*end == ',') ? end + 1 : end;
+        }
+    }
+    if (workerCounts.empty()) {
+        workerCounts = {0, -1};
+    }
     for (const int players : counts) {
-        for (const int workers : {0, -1}) {
+        for (const int workers : workerCounts) {
             const Result r = Run(players, workers);
-            std::printf("%8d %8s | %9.2f %9.2f %9.2f %9.2f | %11.2f %9.2f\n", players, workers == 0 ? "0" : "default", r.meanMs, r.p50Ms, r.p99Ms, r.maxMs, r.interestMs, r.passMs);
+            std::printf("%8d %8s | %9.2f %9.2f %9.2f %9.2f | %11.2f %9.2f\n", players, workers < 0 ? "default" : std::to_string(workers).c_str(), r.meanMs, r.p50Ms, r.p99Ms, r.maxMs, r.interestMs, r.passMs);
         }
     }
     return 0;

@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "core_modules.h"
 #include "networking/network_server.h"
 #include "networking/replication/nametag_state.h"
@@ -29,7 +30,8 @@ class NametagRig {
   public:
     // `health` is owner-written, so every owner update carries something the server visibly applies.
     struct Avatar final: Framework::Networking::Replication::NetworkEntity {
-        uint8_t health = 100;
+        static constexpr const char *kTypeName = "Test::Nametag::Avatar";
+        uint8_t health                         = 100;
         Framework::Networking::Replication::NametagState nametag;
 
         Framework::Networking::Replication::NametagState *GetNametag() override {
@@ -46,8 +48,10 @@ class NametagRig {
     Framework::Networking::NetworkServer serverPeer;
     Framework::Networking::NetworkServer ownerPeer;
     Framework::Networking::NetworkServer viewerPeer;
-    Avatar avatar; // the server's copy
-    Avatar owner;  // the owning client's copy
+    // The server's copy, made through the world as a game makes one. The rig alone touches it, so
+    // it keeps the pointer.
+    Avatar *avatar = nullptr;
+    Avatar owner; // the owning client's copy
     Avatar viewer; // another client's copy
     MafiaNet::Connection_RM3 *ownerConnection = nullptr;
 
@@ -55,13 +59,16 @@ class NametagRig {
         Server()->Init(&serverPeer, true);
         ownerPeer.GetReplicationManager()->Init(&ownerPeer, false);
         viewerPeer.GetReplicationManager()->Init(&viewerPeer, false);
-        owner.replicaManager  = ownerPeer.GetReplicationManager();
-        viewer.replicaManager = viewerPeer.GetReplicationManager();
+        owner.replicaManager  = TestWorld::Rm3(ownerPeer.GetReplicationManager());
+        viewer.replicaManager = TestWorld::Rm3(viewerPeer.GetReplicationManager());
 
-        avatar.SetNetworkID(1);
-        avatar.ownerGUID = ownerPeer.GetReplicationManager()->GetMyGUID();
-        Server()->Reference(&avatar);
-        ownerConnection = Server()->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, MafiaNet::ToGuid(avatar.ownerGUID));
+        Framework::Networking::Replication::EntityRegistry::Get().Register<Avatar>(Avatar::kTypeName);
+        {
+            const auto created = Server()->GetWorld().Create<Avatar>();
+            created->ownerGUID = ownerPeer.GetReplicationManager()->GetMyGUID();
+            avatar             = &*created;
+        }
+        ownerConnection = TestWorld::Rm3(Server())->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, MafiaNet::ToGuid(avatar->ownerGUID));
         Framework::CoreModules::SetReplication(Server());
         if (clientsInWorld) {
             Construct(owner);
@@ -74,29 +81,30 @@ class NametagRig {
     }
 
     Framework::Scripting::Builtins::Player Handle() {
-        return Framework::Scripting::Builtins::Player(avatar.GetNetworkID());
+        return Framework::Scripting::Builtins::Player(avatar->GetNetworkID());
     }
 
     // What a client that constructs the avatar now (on join, or after streaming it in) starts from.
     void Construct(Avatar &into) {
         MafiaNet::BitStream bs;
-        avatar.SerializeConstruction(&bs, nullptr);
+        avatar->SerializeConstruction(&bs, nullptr);
         into.DeserializeConstruction(&bs, nullptr);
     }
 
     // The owner's next update, received on the owner's connection.
     void OwnerTick() {
-        Deliver(owner, avatar, ownerConnection, _ownerSent);
+        Deliver(owner, *avatar, ownerConnection, _ownerSent);
     }
 
     // The server's next update to the viewer.
     void ServerTick() {
-        Deliver(avatar, viewer, nullptr, _viewerSent);
+        Deliver(*avatar, viewer, nullptr, _viewerSent);
     }
 
     ~NametagRig() {
         Framework::CoreModules::SetReplication(nullptr);
-        Server()->DeallocConnection(ownerConnection);
+        TestWorld::Rm3(Server())->DeallocConnection(ownerConnection);
+        Server()->Clear();
     }
 
   private:
@@ -190,7 +198,7 @@ MODULE(nametag, {
         rig.OwnerTick();
         rig.ServerTick();
 
-        EQUALS(int64_t(rig.avatar.health), int64_t(42));
+        EQUALS(int64_t(rig.avatar->health), int64_t(42));
         EQUALS(int64_t(rig.viewer.health), int64_t(42));
         EQUALS(int64_t(rig.viewer.nametag.Has(NametagComponent::Name)), int64_t(0));
     });

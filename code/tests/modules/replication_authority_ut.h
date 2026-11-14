@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_connection.h"
@@ -27,6 +28,20 @@
 // These tests pin the owner gate directly: DeserializeDestruction's return value IS the decision
 // (true -> the base deletes + relays the destruction, false -> the entity is kept), so a return of
 // true for a non-owner connection reproduces the vulnerability and a return of false proves the fix.
+namespace ReplicationAuthorityTest {
+    // Counts what a mod would do when one of its entities is destroyed by its owner.
+    struct Counted final: Framework::Networking::Replication::NetworkEntity {
+        static inline int preDestructions = 0;
+        // How many of those calls were made with a lock of the world's held by the calling thread: the
+        // entity's own, which is the only one in reach when the hook runs.
+        static inline int underLock = 0;
+        void PreDestruction(MafiaNet::Connection_RM3 *) override {
+            ++preDestructions;
+            underLock += Framework::Networking::Replication::World::HeldByThisThread() == 1 ? 1 : 0;
+        }
+    };
+} // namespace ReplicationAuthorityTest
+
 MODULE(replication_authority, {
     using Framework::Networking::NetworkServer;
     using Framework::Networking::Replication::NetworkEntity;
@@ -53,8 +68,8 @@ MODULE(replication_authority, {
     // Fresh connection objects carrying the chosen guid; GetRakNetGUID() (what the gate reads)
     // returns exactly what we pass here. Allocated through the manager so they are real
     // ReplicationConnection instances, freed at the end of each case.
-    MafiaNet::Connection_RM3 *ownerConn    = serverManager->AllocConnection(noAddress, ownerGuid);
-    MafiaNet::Connection_RM3 *attackerConn = serverManager->AllocConnection(noAddress, attackerGuid);
+    MafiaNet::Connection_RM3 *ownerConn    = TestWorld::Rm3(serverManager)->AllocConnection(noAddress, ownerGuid);
+    MafiaNet::Connection_RM3 *attackerConn = TestWorld::Rm3(serverManager)->AllocConnection(noAddress, attackerGuid);
 
     struct ServerLifetimeEntity final: Framework::Networking::Replication::NetworkEntity {
         bool CanOwnerDestroy() const override {
@@ -64,7 +79,7 @@ MODULE(replication_authority, {
 
     IT("refuses an owner's destruction of an entity whose lifetime the server keeps", {
         ServerLifetimeEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         MafiaNet::BitStream bs;
@@ -75,7 +90,7 @@ MODULE(replication_authority, {
 
     IT("accepts the server's destruction on a client whatever the owner policy", {
         ServerLifetimeEntity entity;
-        entity.replicaManager = clientManager;
+        entity.replicaManager = TestWorld::Rm3(clientManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         MafiaNet::BitStream bs;
@@ -101,21 +116,21 @@ MODULE(replication_authority, {
         manager->SetInterestRebuildInterval(1000000);
         const MafiaNet::RakNetGUID player(3000), other(3001);
         const auto type   = EntityRegistry::Get().Register<NetworkEntity>("Test::OwnerDestruction");
-        auto *avatar      = manager->CreateEntity(type);
-        auto *prop        = manager->CreateEntity(type);
-        auto *watcher     = manager->CreateEntity(type);
+        auto *avatar      = TestWorld::Make(manager, type);
+        auto *prop        = TestWorld::Make(manager, type);
+        auto *watcher     = TestWorld::Make(manager, type);
         avatar->ownerGUID = MafiaNet::ToPeerGuid(player);
         prop->ownerGUID   = MafiaNet::ToPeerGuid(player);
-        manager->SetViewer(MafiaNet::ToPeerGuid(player), avatar);
-        manager->SetViewer(MafiaNet::ToPeerGuid(other), watcher);
+        manager->SetViewer(MafiaNet::ToPeerGuid(player), avatar->GetNetworkID());
+        manager->SetViewer(MafiaNet::ToPeerGuid(other), watcher->GetNetworkID());
         manager->SetOnEntityDestroyed([&destroyed](uint64_t networkId) {
             destroyed.push_back(networkId);
         });
         manager->RebuildInterest();
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, player));
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, other));
-        auto *playerConnection = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(player));
-        auto *otherConnection  = static_cast<ReplicationConnection *>(manager->GetConnectionByGUID(other));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, player));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, other));
+        auto *playerConnection = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(player));
+        auto *otherConnection  = static_cast<ReplicationConnection *>(TestWorld::Rm3(manager)->GetConnectionByGUID(other));
 
         // A construction message carrying one destruction.
         const auto destroyFrom = [&](MafiaNet::RakNetGUID sender, MafiaNet::NetworkID networkId) {
@@ -131,7 +146,7 @@ MODULE(replication_authority, {
             packet.data   = bs.GetData();
             packet.length = bs.GetNumberOfBytesUsed();
             packet.guid   = sender;
-            manager->OnReceive(&packet);
+            TestWorld::OnReceive(manager, &packet);
         };
         // Compared by address only: a freed entity is what came back here.
         const auto offered = [](ReplicationConnection *connection, const MafiaNet::Replica3 *entity) {
@@ -152,28 +167,79 @@ MODULE(replication_authority, {
         EQUALS(offered(playerConnection, propReplica), true);
 
         destroyFrom(other, propId);
-        EQUALS(manager->GetEntityByNetworkID(propId) == prop, true);
+        EQUALS(TestWorld::Find(manager, propId) == prop, true);
         EQUALS(destroyed.size(), 0u);
 
         destroyFrom(player, propId);
-        EQUALS(manager->GetEntityByNetworkID(propId) == nullptr, true);
+        EQUALS(TestWorld::Find(manager, propId) == nullptr, true);
         EQUALS(destroyed.size(), 1u);
         EQUALS(destroyed[0], propId);
         EQUALS(offered(otherConnection, propReplica), false);
         EQUALS(offered(playerConnection, propReplica), false);
 
         destroyFrom(player, avatarId);
-        EQUALS(manager->GetEntityByNetworkID(avatarId) == nullptr, true);
+        EQUALS(TestWorld::Find(manager, avatarId) == nullptr, true);
         EQUALS(destroyed.size(), 2u);
-        EQUALS(manager->GetViewer(MafiaNet::ToPeerGuid(player)) == nullptr, true);
-        manager->DestroyEntity(watcher);
+        EQUALS(TestWorld::Find(manager, manager->GetViewerId(MafiaNet::ToPeerGuid(player))) == nullptr, true);
+        TestWorld::Destroy(manager, watcher);
+    });
+
+    IT("runs an owner's PreDestruction only once nothing else holds the entity", {
+        using ReplicationAuthorityTest::Counted;
+        Counted::preDestructions = 0;
+        Counted::underLock       = 0;
+        NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        const auto type = Framework::Networking::Replication::EntityRegistry::Get().Register<Counted>("Test::OwnerDestruction::Counted");
+        auto &world     = manager->GetWorld();
+        const MafiaNet::RakNetGUID player(3100);
+        MafiaNet::Connection_RM3 *connection = TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, player);
+        uint64_t ids[2] = {0, 0};
+        for (uint64_t &id : ids) {
+            const auto created = world.Create(type);
+            created->ownerGUID = MafiaNet::ToPeerGuid(player);
+            id                 = created.Id();
+        }
+        MafiaNet::BitStream bs;
+
+        // Nobody holds the first: destroyed at once, the hook run under its lock alone.
+        NetworkEntity *free = TestWorld::Find(manager, ids[0]);
+        EQUALS(free->DeserializeDestruction(&bs, connection), true);
+        EQUALS(Counted::preDestructions, 1);
+        EQUALS(Counted::underLock, 1);
+        EQUALS(world.Exists(ids[0]), false);
+
+        // The second is held, as by a handler in the middle of its work: the destruction waits for it,
+        // and so does the hook.
+        int duringHold = -1;
+        bool kept      = true;
+        {
+            const auto held = world.Write<NetworkEntity>(ids[1]);
+            kept            = !held->DeserializeDestruction(&bs, connection);
+            duringHold      = Counted::preDestructions;
+        }
+        EQUALS(kept, true);
+        EQUALS(duringHold, 1);
+        EQUALS(Counted::preDestructions, 2);
+        // Put off to the teardown, the hook still had the entity to itself: the handle that kept it was gone
+        // by then, so the one lock held was taken for the hook.
+        EQUALS(Counted::underLock, 2);
+        EQUALS(world.Exists(ids[1]), false);
+        TestWorld::Rm3(manager)->DeallocConnection(connection);
     });
 
     IT("refuses a client's attempt to destroy an entity it does not own", {
         // The exploit: a non-owner names another entity's NetworkID in a construction packet's
         // destruction sublist. Before the fix this returned true and the server deleted it.
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         MafiaNet::BitStream bs;
@@ -183,7 +249,7 @@ MODULE(replication_authority, {
     IT("refuses any client's attempt to destroy a server-owned entity", {
         // A server-owned entity has no client owner, so no client connection may destroy it.
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::UNASSIGNED_PEER_GUID;
 
         MafiaNet::BitStream bs;
@@ -192,7 +258,7 @@ MODULE(replication_authority, {
 
     IT("fails closed when the server sees a destruction with no source connection", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         MafiaNet::BitStream bs;
@@ -203,7 +269,7 @@ MODULE(replication_authority, {
         // On a client every destruction originates from the server and must be honoured, regardless
         // of the entity's owner — otherwise the client could never despawn anything.
         NetworkEntity entity;
-        entity.replicaManager = clientManager;
+        entity.replicaManager = TestWorld::Rm3(clientManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         MafiaNet::BitStream bs;
@@ -231,7 +297,7 @@ MODULE(replication_authority, {
 
     IT("treats a pose no owner has reported as the server's own", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
         entity.position       = glm::vec3(1.0f, 2.0f, 3.0f);
 
@@ -240,7 +306,7 @@ MODULE(replication_authority, {
 
     IT("reads the owner's own reported pose as an echo, not a move", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         deliverOwnerPose(entity, glm::vec3(10.0f, 20.0f, 30.0f));
@@ -250,7 +316,7 @@ MODULE(replication_authority, {
 
     IT("reads a server write after the owner's report as a move", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         deliverOwnerPose(entity, glm::vec3(10.0f, 20.0f, 30.0f));
@@ -264,7 +330,7 @@ MODULE(replication_authority, {
 
     IT("ignores a pose delivered by a connection that does not own the entity", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
         entity.ownerGUID      = MafiaNet::ToPeerGuid(attackerGuid);
         entity.position       = glm::vec3(1.0f, 2.0f, 3.0f);
 
@@ -343,12 +409,12 @@ MODULE(replication_authority, {
 
     IT("keeps a server field out of the owner's upstream state", {
         VerdictEntity simulator;
-        simulator.replicaManager = clientManager;
+        simulator.replicaManager = TestWorld::Rm3(clientManager);
         simulator.measured       = 7;
         simulator.verdict        = 1;
 
         VerdictEntity server;
-        server.replicaManager = serverManager;
+        server.replicaManager = TestWorld::Rm3(serverManager);
         server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
         server.verdict        = 2;
 
@@ -359,13 +425,13 @@ MODULE(replication_authority, {
 
     IT("carries a server field to the clients the server relays to", {
         VerdictEntity server;
-        server.replicaManager = serverManager;
+        server.replicaManager = TestWorld::Rm3(serverManager);
         server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
         server.measured       = 7;
         server.verdict        = 2;
 
         VerdictEntity observer;
-        observer.replicaManager = clientManager;
+        observer.replicaManager = TestWorld::Rm3(clientManager);
 
         deliverState(server, observer, nullptr);
         EQUALS(observer.measured, 7);
@@ -374,12 +440,12 @@ MODULE(replication_authority, {
 
     IT("applies a stale update's measured fields but keeps the ones the server forced", {
         ForcedEntity simulator;
-        simulator.replicaManager = clientManager;
+        simulator.replicaManager = TestWorld::Rm3(clientManager);
         simulator.measured       = 1;
         simulator.forced         = 1;
 
         ForcedEntity server;
-        server.replicaManager = serverManager;
+        server.replicaManager = TestWorld::Rm3(serverManager);
         server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         deliverState(simulator, server, ownerConn);
@@ -415,11 +481,11 @@ MODULE(replication_authority, {
 
     IT("resends a forced field the owner moves back to the value it sent before the override", {
         ForcedEntity simulator;
-        simulator.replicaManager = clientManager;
+        simulator.replicaManager = TestWorld::Rm3(clientManager);
         simulator.forced         = 1;
 
         ForcedEntity server;
-        server.replicaManager = serverManager;
+        server.replicaManager = TestWorld::Rm3(serverManager);
         server.ownerGUID      = MafiaNet::ToPeerGuid(ownerGuid);
 
         deliverState(simulator, server, ownerConn);
@@ -441,7 +507,7 @@ MODULE(replication_authority, {
 
     IT("adopts nothing from a truncated forced state", {
         ForcedEntity simulator;
-        simulator.replicaManager = clientManager;
+        simulator.replicaManager = TestWorld::Rm3(clientManager);
         simulator.stateEpoch     = 3;
 
         MafiaNet::BitStream empty;
@@ -458,13 +524,13 @@ MODULE(replication_authority, {
         EQUALS(simulator.forcedHooks, 0);
 
         ForcedEntity server;
-        server.replicaManager = serverManager;
+        server.replicaManager = TestWorld::Rm3(serverManager);
         server.stateEpoch     = 4;
         deliverForcedState(server, simulator);
         EQUALS(simulator.stateEpoch, 4);
         EQUALS(simulator.forcedHooks, 1);
     });
 
-    serverManager->DeallocConnection(ownerConn);
-    serverManager->DeallocConnection(attackerConn);
+    TestWorld::Rm3(serverManager)->DeallocConnection(ownerConn);
+    TestWorld::Rm3(serverManager)->DeallocConnection(attackerConn);
 });

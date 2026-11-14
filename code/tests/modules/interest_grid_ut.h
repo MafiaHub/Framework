@@ -27,12 +27,12 @@
 
 // The server's relevance rule: per-entity streaming range, the stream-out margin, the velocity
 // look-ahead and the per-type budget. See m2o's docs/design_streaming_range.md.
-// Dependency set directly, so the post-pass is testable without a manager behind ResolveSibling.
+// Names its dependency by network id, as a game entity does.
 class InterestDependentEntity final : public Framework::Networking::Replication::NetworkEntity {
   public:
-    Framework::Networking::Replication::NetworkEntity *dependency = nullptr;
+    uint64_t dependency = 0;
 
-    Framework::Networking::Replication::NetworkEntity *GetInterestDependency() override {
+    uint64_t GetInterestDependency() override {
         return dependency;
     }
 };
@@ -49,9 +49,12 @@ MODULE(interest_grid, {
 
     // Owned by the test, not by a manager; the grid only stores raw pointers.
     std::vector<std::unique_ptr<NetworkEntity>> owned;
-    auto make = [&owned](uint32_t typeId, float x, float y) {
+    // No manager hands out ids here; a dependency is named by one.
+    uint64_t nextId = 0;
+    auto make       = [&owned, &nextId](uint32_t typeId, float x, float y) {
         NetworkEntity *entity = EntityRegistry::Get().Create(typeId);
-        entity->position      = glm::vec3(x, y, 0.0f);
+        entity->SetNetworkID(++nextId);
+        entity->position = glm::vec3(x, y, 0.0f);
         owned.emplace_back(entity);
         return entity;
     };
@@ -375,10 +378,8 @@ MODULE(interest_grid, {
         NetworkEntity *farCar  = make(typeB, 200.0f, 0.0f);
 
         // A seated player out by the distant car: it must come with them or the ped floats.
-        auto *rider       = static_cast<InterestDependentEntity *>(EntityRegistry::Get().Create(typeHolder));
-        rider->position   = glm::vec3(200.0f, 0.0f, 0.0f);
-        rider->dependency = farCar;
-        owned.emplace_back(rider);
+        auto *rider       = static_cast<InterestDependentEntity *>(make(typeHolder, 200.0f, 0.0f));
+        rider->dependency = farCar->GetNetworkID();
 
         rebuild(grid, {viewer, nearCar, farCar, rider});
 
@@ -388,6 +389,77 @@ MODULE(interest_grid, {
         EQUALS(out.contains(rider), true);
         EQUALS(out.contains(nearCar), true); // the one budgeted slot, being nearest
         EQUALS(out.contains(farCar), true);  // uncounted, dragged in by its occupant
+    });
+
+    IT("resolves an interest dependency by id", {
+        InterestGrid grid;
+        freshGrid(grid);
+
+        NetworkEntity *viewer   = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range = 250.0f;
+        // Out of the viewer's reach on its own; in it only as what the rider depends on.
+        NetworkEntity *car      = make(typeA, 1000.0f, 0.0f);
+        auto *rider             = static_cast<InterestDependentEntity *>(make(typeHolder, 100.0f, 0.0f));
+        rider->dependency       = car->GetNetworkID();
+
+        rebuild(grid, {viewer, car, rider});
+        EQUALS(grid.DependencyOf(grid.SlotOf(rider)), grid.SlotOf(car));
+        std::unordered_set<NetworkEntity *> out;
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(rider), true);
+        EQUALS(out.contains(car), true);
+
+        // The rider itself out of reach: the car is shown only with it.
+        rider->position = glm::vec3(1000.0f, 0.0f, 0.0f);
+        rebuild(grid, {viewer, car, rider});
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(rider), false);
+        EQUALS(out.contains(car), false);
+
+        // An id nothing answers to is no dependency.
+        rider->position   = glm::vec3(100.0f, 0.0f, 0.0f);
+        rider->dependency = 987654;
+        rebuild(grid, {viewer, car, rider});
+        EQUALS(grid.DependencyOf(grid.SlotOf(rider)), InterestGrid::kNoSlot);
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(rider), true);
+        EQUALS(out.contains(car), false);
+
+        // Nor is the id of an entity that has left.
+        rider->dependency = car->GetNetworkID();
+        rebuild(grid, {viewer, car, rider});
+        EQUALS(grid.DependencyOf(grid.SlotOf(rider)), grid.SlotOf(car));
+        grid.Remove(car);
+        rebuild(grid, {viewer, rider});
+        EQUALS(grid.DependencyOf(grid.SlotOf(rider)), InterestGrid::kNoSlot);
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(rider), true);
+        EQUALS(out.contains(car), false);
+    });
+
+    IT("answers from what the last sync took of an entity, not from the entity", {
+        InterestGrid grid;
+        freshGrid(grid);
+
+        NetworkEntity *viewer   = make(typeA, 0.0f, 0.0f);
+        viewer->streaming.range = 250.0f;
+        NetworkEntity *walker   = make(typeA, 50.0f, 0.0f);
+        rebuild(grid, {viewer, walker});
+
+        // Written since, as another thread may while a query runs: the query does not look.
+        walker->position          = glm::vec3(3000.0f, 0.0f, 0.0f);
+        walker->streaming.visible = false;
+        walker->streaming.viewers = std::make_unique<Framework::Networking::Replication::ViewerFilter>();
+        walker->streaming.viewers->except.insert(viewerGuid);
+        std::unordered_set<NetworkEntity *> out;
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(walker), true);
+        EQUALS(grid.Evaluate(viewer, viewerGuid, grid.SlotOf(walker), true) == InterestGrid::Verdict::In, true);
+
+        rebuild(grid, {viewer, walker});
+        out = collect(grid, viewer, nothingBefore);
+        EQUALS(out.contains(walker), false);
+        EQUALS(grid.Evaluate(viewer, viewerGuid, grid.SlotOf(walker), true) == InterestGrid::Verdict::Out, true);
     });
 
     IT("skips an entity destroyed since the last rebuild", {
@@ -444,12 +516,20 @@ MODULE(interest_grid, {
         }
         for (NetworkEntity *e : world) {
             if (e->GetTypeId() == typeHolder) {
-                static_cast<InterestDependentEntity *>(e)->dependency = world[rng() % world.size()];
+                static_cast<InterestDependentEntity *>(e)->dependency = world[rng() % world.size()]->GetNetworkID();
             }
         }
 
         const auto admits = [&](const NetworkEntity *e) {
             return e->streaming.Admits(viewerGuid);
+        };
+        const auto byId = [&](uint64_t id) -> NetworkEntity * {
+            for (NetworkEntity *e : world) {
+                if (e->GetNetworkID() == id) {
+                    return e;
+                }
+            }
+            return nullptr;
         };
         const auto targeted = [](const NetworkEntity *e) {
             return e->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID;
@@ -509,7 +589,7 @@ MODULE(interest_grid, {
             out.insert(viewer);
             std::unordered_set<NetworkEntity *> direct = out;
             for (NetworkEntity *e : direct) {
-                NetworkEntity *dependency = e->GetInterestDependency();
+                NetworkEntity *dependency = byId(e->GetInterestDependency());
                 if (dependency && live.contains(dependency) && dependency->streaming.visible && admits(dependency)) {
                     out.insert(dependency);
                 }
@@ -585,7 +665,9 @@ MODULE(interest_grid, {
 
         rebuild(grid, {viewer, nearby, global});
 
+        // A query reads what the last sync took of each entity, so each change is synced first.
         const auto sees = [&](NetworkEntity *entity) {
+            rebuild(grid, {viewer, nearby, global});
             return collect(grid, viewer, nothingBefore).contains(entity);
         };
 

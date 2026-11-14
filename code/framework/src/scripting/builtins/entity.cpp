@@ -20,64 +20,74 @@
 #include <stdexcept>
 
 namespace Framework::Scripting::Builtins {
-    Entity::Entity(uint64_t networkId): _id(networkId) {
-        if (!Resolve()) {
+    void Entity::RequireExists(uint64_t networkId) {
+        auto *replication = CoreModules::GetReplication();
+        if (replication == nullptr || !replication->GetWorld().Exists(networkId)) {
             throw std::runtime_error(fmt::format("Entity handle '{}' is not valid!", networkId));
         }
     }
 
     Vector3 Entity::GetPosition() const {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             return Vector3(e->position.x, e->position.y, e->position.z);
         }
         return Vector3(0, 0, 0);
     }
 
     void Entity::SetPosition(const Vector3 &pos) {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             e->position = pos.vec();
             e->ForceState();
         }
     }
 
     Quaternion Entity::GetRotation() const {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             return Quaternion(e->rotation);
         }
         return Quaternion();
     }
 
     void Entity::SetRotationFromEuler(const Vector3 &rot) {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             e->rotation = glm::quat(glm::radians(rot.vec()));
             e->ForceState();
         }
     }
 
     void Entity::SetRotationFromQuaternion(const Quaternion &quat) {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             e->rotation = quat.quat();
             e->ForceState();
         }
     }
 
     uint32_t Entity::GetVirtualWorld() const {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             return e->GetVirtualWorld();
         }
         return 0;
     }
 
     void Entity::SetVirtualWorld(uint32_t world) {
-        if (auto *e = Resolve()) {
+        if (const auto e = Resolve()) {
             e->SetVirtualWorld(world);
         }
     }
 
-    void Entity::SetVisibleTo(Networking::Replication::NetworkEntity *targetEntity) {
-        if (auto *e = Resolve()) {
-            CoreModules::GetReplication()->SetStreamTarget(*e, targetEntity ? targetEntity->ownerGUID : MafiaNet::UNASSIGNED_PEER_GUID);
+    void Entity::SetVisibleTo(MafiaNet::PeerGuid target) {
+        if (const auto e = Resolve()) {
+            CoreModules::GetReplication()->SetStreamTarget(*e, target);
         }
+    }
+
+    bool Entity::ResolveOwner(MafiaNet::PeerGuid &owner) const {
+        const auto e = Resolve();
+        if (!e) {
+            return false;
+        }
+        owner = e->ownerGUID;
+        return true;
     }
 
     std::string Entity::ToString() const {
@@ -90,7 +100,7 @@ namespace Framework::Scripting::Builtins {
         return _classes.Get(isolate, [isolate]() {
             auto cls = std::make_unique<v8pp::class_<Entity>>(isolate, GetScriptingCatalog(isolate), "Entity", "Base handle for a live replicated network entity.");
             cls->auto_wrap_objects(true);
-            cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."))
+            cls->ctor<uint64_t>(v8pp::metadata::docs("void", {v8pp::metadata::param("id", "number", false, "Network entity identifier.")}, "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity."), &Entity::ConstructFromScript<Entity>)
                 .function("toString", &Entity::ToString, v8pp::metadata::docs("string", {}, "Formats this entity handle for logging and debugging.", "Text containing the network entity ID."))
                 .property("id", &Entity::GetId, v8pp::metadata::property_docs("number", "Immutable network entity identifier."))
                 .property("virtualWorld", &Entity::GetVirtualWorld, v8pp::metadata::property_docs("number", "Current virtual-world identifier."))
@@ -155,7 +165,7 @@ namespace Framework::Scripting::Builtins {
                         return;
                     }
                     if (info.Length() < 1 || info[0]->IsNullOrUndefined()) {
-                        self->SetVisibleTo(nullptr);
+                        self->SetVisibleTo(MafiaNet::UNASSIGNED_PEER_GUID);
                         return;
                     }
                     auto *target = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
@@ -163,12 +173,13 @@ namespace Framework::Scripting::Builtins {
                         ThrowTypeError(isolate, "setVisibleTo: expected a Player (or null to clear)");
                         return;
                     }
-                    auto *targetEntity = target->Resolve();
-                    if (!targetEntity || targetEntity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+                    // One entity at a time: the target's owner is read and let go before this one is taken.
+                    MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+                    if (!target->ResolveOwner(owner) || owner == MafiaNet::UNASSIGNED_PEER_GUID) {
                         isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "setVisibleTo: target has no owning connection")));
                         return;
                     }
-                    self->SetVisibleTo(targetEntity);
+                    self->SetVisibleTo(owner);
                 },
                 v8pp::metadata::docs("void", {v8pp::metadata::param("player", "Entity | null", false, "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.")},
                     "Restricts replication of this entity to one owning connection while preserving normal range and visibility checks."));
@@ -188,9 +199,9 @@ namespace Framework::Scripting::Builtins {
         StateBag::GetClass(isolate);
     }
 
-    Networking::Replication::NetworkEntity *Entity::Resolve() const {
+    Entity::Held Entity::Resolve() const {
         auto *replication = CoreModules::GetReplication();
-        return replication ? replication->GetEntityByNetworkID(_id) : nullptr;
+        return replication ? replication->GetWorld().Write<Networking::Replication::NetworkEntity>(_id) : Held();
     }
 
     void Entity::UnregisterIsolate(v8::Isolate *isolate) {

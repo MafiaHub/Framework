@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
@@ -60,7 +61,7 @@ MODULE(state_bag, {
 
     IT("stores and reads back a value", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         EQUALS(entity.state.Set("job", text("blacksmith")) == StateBag::WriteResult::Applied, true);
         EQUALS(entity.state.Has("job"), true);
@@ -70,7 +71,7 @@ MODULE(state_bag, {
 
     IT("reads an unset key as nothing rather than as a default", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         EQUALS(entity.state.Get("missing") == nullptr, true);
         EQUALS(entity.state.Has("missing"), false);
@@ -78,7 +79,7 @@ MODULE(state_bag, {
 
     IT("reports an unchanged write instead of resending it", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("job", text("blacksmith"));
         entity.state.ClearDirty();
@@ -90,7 +91,7 @@ MODULE(state_bag, {
 
     IT("treats a scope change on the same value as a real change", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("cuffed", text("yes"), StateScope::Broadcast);
         entity.state.ClearDirty();
@@ -104,7 +105,7 @@ MODULE(state_bag, {
 
     IT("refuses a key longer than the limit", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         const std::string key(StateBag::kMaxKeyLength + 1, 'k');
         EQUALS(entity.state.Set(key, text("x")) == StateBag::WriteResult::KeyTooLong, true);
@@ -113,14 +114,14 @@ MODULE(state_bag, {
 
     IT("refuses an empty key", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         EQUALS(entity.state.Set("", text("x")) == StateBag::WriteResult::KeyTooLong, true);
     });
 
     IT("accepts a key of exactly the limit", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         const std::string key(StateBag::kMaxKeyLength, 'k');
         EQUALS(entity.state.Set(key, text("x")) == StateBag::WriteResult::Applied, true);
@@ -128,7 +129,7 @@ MODULE(state_bag, {
 
     IT("refuses a value larger than the limit", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         EQUALS(entity.state.Set("blob", text(std::string(StateBag::kMaxValueBytes + 1, 'v'))) == StateBag::WriteResult::ValueTooLarge, true);
         EQUALS(entity.state.Has("blob"), false);
@@ -136,7 +137,7 @@ MODULE(state_bag, {
 
     IT("refuses a new key once the bag is full but still updates an existing one", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         for (size_t i = 0; i < StateBag::kMaxKeys; ++i) {
             entity.state.Set("k" + std::to_string(i), number(static_cast<double>(i)));
@@ -149,7 +150,7 @@ MODULE(state_bag, {
 
     IT("removes a key and reports whether there was one", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("job", text("blacksmith"));
         EQUALS(entity.state.Remove("job"), true);
@@ -159,7 +160,7 @@ MODULE(state_bag, {
 
     IT("keeps a Server-scoped key off the wire entirely", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("secret", text("hidden"), StateScope::Server);
         // Readable locally but never dirty, so the flush has nothing to send.
@@ -169,7 +170,7 @@ MODULE(state_bag, {
 
     IT("records the scope a removal has to travel with", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("cuffed", text("yes"), StateScope::Owner);
         entity.state.ClearDirty();
@@ -181,7 +182,7 @@ MODULE(state_bag, {
 
     IT("lists keys in a stable order", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("zulu", number(1.0));
         entity.state.Set("alpha", number(2.0));
@@ -197,7 +198,7 @@ MODULE(state_bag, {
 
     IT("raises a change with the previous value and whether there was one", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         std::vector<StateChange> seen;
         const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&seen](const StateChange &change) {
@@ -225,7 +226,7 @@ MODULE(state_bag, {
 
     IT("raises nothing for a write that changed nothing", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("job", text("blacksmith"));
 
@@ -241,7 +242,7 @@ MODULE(state_bag, {
 
     IT("delivers only the key a subscription filtered on", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         std::vector<std::string> seen;
         StateChangeFilter filter;
@@ -264,10 +265,10 @@ MODULE(state_bag, {
 
     IT("delivers only the entity a subscription filtered on", {
         NetworkEntity watched;
-        watched.replicaManager = serverManager;
+        watched.replicaManager = TestWorld::Rm3(serverManager);
         watched.SetNetworkID(4001);
         NetworkEntity other;
-        other.replicaManager = serverManager;
+        other.replicaManager = TestWorld::Rm3(serverManager);
         other.SetNetworkID(4002);
 
         size_t seen = 0;
@@ -286,10 +287,10 @@ MODULE(state_bag, {
 
     IT("applies both filters together", {
         NetworkEntity watched;
-        watched.replicaManager = serverManager;
+        watched.replicaManager = TestWorld::Rm3(serverManager);
         watched.SetNetworkID(4003);
         NetworkEntity other;
-        other.replicaManager = serverManager;
+        other.replicaManager = TestWorld::Rm3(serverManager);
         other.SetNetworkID(4004);
 
         size_t seen = 0;
@@ -310,7 +311,7 @@ MODULE(state_bag, {
 
     IT("sees every change through an empty filter", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         size_t seen                    = 0;
         const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&seen](const StateChange &) {
@@ -327,7 +328,7 @@ MODULE(state_bag, {
 
     IT("stops delivering once a subscription is removed", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         size_t seen                    = 0;
         const StateChangeHandle handle = serverManager->AddStateChangeHandler({}, [&seen](const StateChange &) {
@@ -349,7 +350,7 @@ MODULE(state_bag, {
 
     IT("honours a subscription that cancels itself while being dispatched", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         size_t seen = 0;
         StateChangeHandle handle {};
@@ -368,7 +369,7 @@ MODULE(state_bag, {
 
     IT("does not call a subscription added while a change is being dispatched", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         size_t late                     = 0;
         StateChangeHandle lateHandle    = Framework::Networking::Replication::kInvalidStateChangeHandle;
@@ -392,7 +393,7 @@ MODULE(state_bag, {
 
     IT("does not send a value on the audience an earlier write in the same tick had", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("note", text("public"), StateScope::Broadcast);
         entity.state.Set("note", text("secret"), StateScope::Server);
@@ -409,7 +410,7 @@ MODULE(state_bag, {
 
     IT("dirties a key that leaves the wire entirely", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("note", text("public"), StateScope::Broadcast);
         entity.state.ClearDirty();
@@ -422,7 +423,7 @@ MODULE(state_bag, {
 
     IT("leaves a key that was never on the wire alone", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("secret", text("hidden"), StateScope::Server);
         entity.state.ClearDirty();
@@ -434,7 +435,7 @@ MODULE(state_bag, {
 
     IT("keeps the audience from before the first write of a tick", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("note", text("public"), StateScope::Broadcast);
         entity.state.ClearDirty();
@@ -481,7 +482,7 @@ MODULE(state_bag, {
 
     IT("seeds a non-owner with broadcast keys only", {
         NetworkEntity source;
-        source.replicaManager = serverManager;
+        source.replicaManager = TestWorld::Rm3(serverManager);
         source.state.Set("job", text("blacksmith"), StateScope::Broadcast);
         source.state.Set("cuffed", text("yes"), StateScope::Owner);
         source.state.Set("secret", text("hidden"), StateScope::Server);
@@ -490,7 +491,7 @@ MODULE(state_bag, {
         source.state.SerializeSeed(&bs, false);
 
         NetworkEntity destination;
-        destination.replicaManager                = serverManager;
+        destination.replicaManager                = TestWorld::Rm3(serverManager);
         const std::vector<std::string> seededKeys = destination.state.DeserializeSeed(&bs);
 
         EQUALS(seededKeys.size(), size_t(1));
@@ -502,7 +503,7 @@ MODULE(state_bag, {
 
     IT("seeds the owner with its own keys as well", {
         NetworkEntity source;
-        source.replicaManager = serverManager;
+        source.replicaManager = TestWorld::Rm3(serverManager);
         source.state.Set("job", text("blacksmith"), StateScope::Broadcast);
         source.state.Set("cuffed", text("yes"), StateScope::Owner);
         source.state.Set("secret", text("hidden"), StateScope::Server);
@@ -511,7 +512,7 @@ MODULE(state_bag, {
         source.state.SerializeSeed(&bs, true);
 
         NetworkEntity destination;
-        destination.replicaManager = serverManager;
+        destination.replicaManager = TestWorld::Rm3(serverManager);
         destination.state.DeserializeSeed(&bs);
 
         EQUALS(destination.state.Has("job"), true);
@@ -522,7 +523,7 @@ MODULE(state_bag, {
 
     IT("survives a seed round trip with every value type", {
         NetworkEntity source;
-        source.replicaManager = serverManager;
+        source.replicaManager = TestWorld::Rm3(serverManager);
 
         StateValue flag;
         flag.type    = StateValue::Type::Boolean;
@@ -542,7 +543,7 @@ MODULE(state_bag, {
         source.state.SerializeSeed(&bs, false);
 
         NetworkEntity destination;
-        destination.replicaManager = serverManager;
+        destination.replicaManager = TestWorld::Rm3(serverManager);
         destination.state.DeserializeSeed(&bs);
 
         EQUALS(destination.state.Size(), size_t(5));
@@ -555,13 +556,13 @@ MODULE(state_bag, {
 
     IT("replaces the whole bag when a seed arrives", {
         NetworkEntity destination;
-        destination.replicaManager = serverManager;
+        destination.replicaManager = TestWorld::Rm3(serverManager);
         // State from a previous stream-in. A re-seed is a fresh snapshot, so anything the server no
         // longer holds must not survive it.
         destination.state.Set("stale", text("old"));
 
         NetworkEntity source;
-        source.replicaManager = serverManager;
+        source.replicaManager = TestWorld::Rm3(serverManager);
         source.state.Set("job", text("blacksmith"));
 
         MafiaNet::BitStream bs;
@@ -574,20 +575,20 @@ MODULE(state_bag, {
 
     IT("seeds an empty bag as an empty bag", {
         NetworkEntity source;
-        source.replicaManager = serverManager;
+        source.replicaManager = TestWorld::Rm3(serverManager);
 
         MafiaNet::BitStream bs;
         source.state.SerializeSeed(&bs, false);
 
         NetworkEntity destination;
-        destination.replicaManager = serverManager;
+        destination.replicaManager = TestWorld::Rm3(serverManager);
         EQUALS(destination.state.DeserializeSeed(&bs).size(), size_t(0));
         EQUALS(destination.state.Empty(), true);
     });
 
     IT("applies an inbound change on the receiving side", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Apply("job", text("blacksmith"), false);
         STREQUALS(entity.state.Get("job")->text.c_str(), "blacksmith");
@@ -598,7 +599,7 @@ MODULE(state_bag, {
 
     IT("does not dirty the bag when applying an inbound change", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Apply("job", text("blacksmith"), false);
         // Apply is the receiving path; dirtying it would send the server's own change back to it.
@@ -607,7 +608,7 @@ MODULE(state_bag, {
 
     IT("lists the owner-scoped keys an ownership change has to re-send", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("job", text("blacksmith"), StateScope::Broadcast);
         entity.state.Set("cuffed", text("yes"), StateScope::Owner);
@@ -624,7 +625,7 @@ MODULE(state_bag, {
 
     IT("revokes an owner key removed earlier in the same tick", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("cuffed", text("yes"), StateScope::Owner);
         entity.state.ClearDirty();
@@ -641,7 +642,7 @@ MODULE(state_bag, {
 
     IT("revokes an owner key narrowed to server scope in the same tick", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("cuffed", text("yes"), StateScope::Owner);
         entity.state.ClearDirty();
@@ -654,7 +655,7 @@ MODULE(state_bag, {
 
     IT("does not revoke an owner key that widened to broadcast", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("cuffed", text("yes"), StateScope::Owner);
         entity.state.ClearDirty();
@@ -666,7 +667,7 @@ MODULE(state_bag, {
 
     IT("combines live owner keys and tombstones without repeating one", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("cuffed", text("yes"), StateScope::Owner);
         entity.state.Set("warrant", text("open"), StateScope::Owner);
@@ -683,7 +684,7 @@ MODULE(state_bag, {
 
     IT("revokes nothing for an owner key created and dropped before any flush", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("warrant", text("open"), StateScope::Owner);
         entity.state.Remove("warrant");
@@ -695,7 +696,7 @@ MODULE(state_bag, {
 
     IT("leaves a broadcast key out of the revoke set", {
         NetworkEntity entity;
-        entity.replicaManager = serverManager;
+        entity.replicaManager = TestWorld::Rm3(serverManager);
 
         entity.state.Set("job", text("blacksmith"), StateScope::Broadcast);
         entity.state.Remove("job");

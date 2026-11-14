@@ -7,8 +7,10 @@
  */
 
 #include "engine.h"
+
 #include "callback_scope.h"
 #include "engine_helpers.h"
+#include "script_gate.h"
 
 #include <logging/logger.h>
 
@@ -20,6 +22,7 @@ namespace Framework::Scripting {
             return false;
         }
 
+        const RuntimeEntry entry;
         v8::Isolate *isolate = GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);

@@ -17,6 +17,7 @@
 #include "function_references.h"
 #include "node_runtime.h"
 #include "resource_monitor.h"
+#include "script_gate.h"
 
 #include <node.h>
 #include <uv.h>
@@ -24,6 +25,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -48,6 +50,13 @@ namespace Framework::Scripting {
          * - require.resolve paths are restricted
          */
         bool sandboxed = false;
+
+        /**
+         * Threads of Node's platform pool, which every isolate in the process shares for collection and
+         * compilation. With an isolate per resource a server sizes it to its cores. Read once, by the first
+         * engine initialised in the process.
+         */
+        int platformThreads = 4;
 
         /**
          * Process name shown in Node.js (argv[0]).
@@ -149,6 +158,36 @@ namespace Framework::Scripting {
         /**
          * Get the engine options.
          */
+        // For a host that runs the engine on a thread of its own: RunUntil() gives the world up through the gate
+        // while it waits for work and between two runtimes, and returns at once when the gate turns it away. Not
+        // owned; null, the default, runs as before.
+        void SetRunGate(RunGate *gate) {
+            _runGate = gate;
+        }
+
+        // For a host that runs the engine on a thread of its own: a runtime GetIsolate() and GetContext() name on
+        // another thread. Code there builds values the way it always did (an EngineScope, or V8's own scopes,
+        // on the engine's isolate), in an isolate the engine's thread never enters, so neither side waits for the
+        // other's lock; what it emits is copied across. It has the bindings a resource's runtime has and runs no
+        // script. From the engine's thread, once per name, after Init() and before any other thread uses the
+        // engine: the threads the runtimes are for read the list of them without a lock.
+        bool CreateOffThreadRuntime(std::string_view name);
+
+        // Makes the runtime of that name the one the calling thread sees, so that two threads off the engine's never
+        // wait for each other's isolate either. A thread that bound none sees "tick", and so does one that asks for
+        // a name that was not created, which is logged.
+        void BindOffThreadRuntime(std::string_view name);
+
+        // Whether the last RunUntil() ended because the gate turned it away.
+        bool LostRunGate() const {
+            return _gateLost;
+        }
+
+        // Before Init(), and before any other engine in the process initialised: the platform pool is made once.
+        void SetPlatformThreads(int threads) {
+            _options.platformThreads = threads;
+        }
+
         const NodeEngineOptions &GetOptions() const {
             return _options;
         }
@@ -295,9 +334,27 @@ namespace Framework::Scripting {
         // Calls and values between the engine's runtime and every resource's.
         std::unique_ptr<FunctionReferences> _references;
         uint32_t _hostReference = 0;
+        struct OffThreadRuntime {
+            std::string name;
+            std::unique_ptr<NodeRuntime> runtime;
+            uint32_t reference = 0;
+        };
+        // In the order they were created; none goes before Shutdown().
+        std::vector<OffThreadRuntime> _offThreadRuntimes;
+        // Tells this engine's off-thread runtimes from any other's, and from its own before a Shutdown(): what a
+        // thread bound is only good for the set it was bound in.
+        uint64_t _offThreadSet = 0;
+        // Whether the calling thread is one the off-thread runtimes are for.
+        bool OffEngineThread() const;
+        // The off-thread runtime `current` belongs to, or else the one the calling thread sees; null on the engine's
+        // thread.
+        NodeRuntime *OffThreadRuntimeFor(v8::Isolate *current) const;
 
         // One runtime per running resource, and the isolate each one owns.
         std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;
+        // Changed where resources start and stop, and asked by every thread that opens a scope on the engine
+        // (GetIsolate, GetContext): under this mutex, held for the table only.
+        mutable std::shared_mutex _runtimeByIsolateMutex;
         std::unordered_map<v8::Isolate *, ResourceRuntime *> _runtimeByIsolate;
 
         // Runtimes stopped while script was running; destroyed at the next tick.
@@ -320,6 +377,12 @@ namespace Framework::Scripting {
         // The loops this tick's poll found I/O ready in.
         std::vector<NodeRuntime *> _ioReady;
 #endif
+
+        RunGate *_runGate = nullptr;
+        // The gate turned the engine away during a wait or between runtimes: it no longer has the world.
+        bool _gateLost = false;
+        void GateRelease();
+        void GateAcquire();
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:

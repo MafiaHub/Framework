@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/channels.h"
 #include "networking/network_server.h"
 #include "networking/replication/network_entity.h"
@@ -293,20 +294,20 @@ MODULE(replication_rate, {
         std::vector<NetworkEntity *> viewers;
         const auto connect = [&](uint64_t id, float x) {
             const MafiaNet::RakNetGUID guid(id);
-            auto *viewer            = manager->CreateEntity(viewerType);
+            auto *viewer            = TestWorld::Make(manager, viewerType);
             viewer->position.x      = x;
             viewer->streaming.range = 1000;
             viewer->ownerGUID       = MafiaNet::ToPeerGuid(guid);
             viewers.push_back(viewer);
-            manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer);
-            manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
-            MafiaNet::Connection_RM3 *connection = manager->GetConnectionByGUID(guid);
+            manager->SetViewer(MafiaNet::ToPeerGuid(guid), viewer->GetNetworkID());
+            TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, guid));
+            MafiaNet::Connection_RM3 *connection = TestWorld::Rm3(manager)->GetConnectionByGUID(guid);
             connection->isValidated              = true;
             return connection;
         };
         const MafiaNet::Connection_RM3 *nearConnection = connect(301, 0.0f);
         const MafiaNet::Connection_RM3 *farConnection  = connect(302, 500.0f);
-        auto *mover = static_cast<PoseProbe *>(manager->CreateEntity(moverType));
+        auto *mover = static_cast<PoseProbe *>(TestWorld::Make(manager, moverType));
         manager->RebuildInterest();
         manager->Update();
         manager->Update();
@@ -327,9 +328,9 @@ MODULE(replication_rate, {
         manager->Update();
         EQUALS(mover->poseSends[farConnection], 1);
 
-        manager->DestroyEntity(mover);
+        TestWorld::Destroy(manager, mover);
         for (auto *viewer : viewers) {
-            manager->DestroyEntity(viewer);
+            TestWorld::Destroy(manager, viewer);
         }
     });
 });

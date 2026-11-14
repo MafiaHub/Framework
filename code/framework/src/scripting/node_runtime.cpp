@@ -7,13 +7,16 @@
  */
 
 #include "node_runtime.h"
+
 #include "callback_scope.h"
+#include "script_gate.h"
 
 #include <utils/profiler.h>
 
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <mutex>
 #include <unordered_map>
 
 namespace {
@@ -41,8 +44,13 @@ namespace Framework::Scripting {
         // A message per pause this long or longer: shorter scavenges would flood the timeline.
         constexpr double kGCReportMs = 1.0;
 
-        // V8 names only the isolate when a call completes. Read and written on the scripting thread alone: worker
-        // threads run isolates of their own, which never register.
+        // V8 names only the isolate when a call completes. Runtimes are made and freed on the scripting thread, while
+        // a call completes on whichever thread made it: the tick and packet threads in their own runtimes. Hence
+        // the mutex, held for the table only.
+        std::mutex &RuntimesByIsolateMutex() {
+            static std::mutex mutex;
+            return mutex;
+        }
         std::unordered_map<v8::Isolate *, Framework::Scripting::NodeRuntime *> &RuntimesByIsolate() {
             static std::unordered_map<v8::Isolate *, Framework::Scripting::NodeRuntime *> runtimes;
             return runtimes;
@@ -70,8 +78,13 @@ namespace Framework::Scripting {
         runtime->_keepAlive = new uv_async_t();
         uv_async_init(runtime->_setup->event_loop(), runtime->_keepAlive, nullptr);
 
-        RuntimesByIsolate()[runtime->_isolate] = runtime.get();
+        {
+            const std::lock_guard guard(RuntimesByIsolateMutex());
+            RuntimesByIsolate()[runtime->_isolate] = runtime.get();
+        }
         runtime->_isolate->AddCallCompletedCallback(&NodeRuntime::OnCallCompleted);
+        // Before it runs any script: a server with a script thread asks it for safe points.
+        RegisterIsolate(runtime->_isolate);
 
         // From here every entry into the runtime (a script, an event handler, another runtime's call) runs inside
         // Node's scope, as its own callbacks do.
@@ -140,7 +153,11 @@ namespace Framework::Scripting {
 #endif
         LeaveSchedule();
         UnregisterCallbackScope(_isolate);
-        RuntimesByIsolate().erase(_isolate);
+        {
+            const std::lock_guard guard(RuntimesByIsolateMutex());
+            RuntimesByIsolate().erase(_isolate);
+        }
+        UnregisterIsolate(_isolate);
 
         // CommonEnvironmentSetup's teardown runs the loop until the platform lets go of the isolate, which takes at
         // least one run, and that run frees this handle. Left open, it would keep that run waiting and the loop from
@@ -187,6 +204,8 @@ namespace Framework::Scripting {
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
 
+        OnIsolateRunning(_isolate);
+
         // Cleared first: script that runs in this tick sets it again, so the runtime is ticked once more for what
         // that script queued where the loop does not show it, such as an unreferenced immediate.
         _entered = false;
@@ -227,6 +246,7 @@ namespace Framework::Scripting {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
         v8::Context::Scope contextScope(_setup->context());
+        OnIsolateRunning(_isolate);
         RunLoopOnce();
     }
 
@@ -249,10 +269,16 @@ namespace Framework::Scripting {
     }
 
     void NodeRuntime::OnCallCompleted(v8::Isolate *isolate) {
-        const auto it = RuntimesByIsolate().find(isolate);
-        if (it != RuntimesByIsolate().end()) {
-            it->second->_entered = true;
-            it->second->ScheduleChanged();
+        // The runtime of the isolate this thread is inside, which nobody frees meanwhile.
+        NodeRuntime *runtime = nullptr;
+        {
+            const std::lock_guard guard(RuntimesByIsolateMutex());
+            const auto it = RuntimesByIsolate().find(isolate);
+            runtime       = it != RuntimesByIsolate().end() ? it->second : nullptr;
+        }
+        if (runtime != nullptr) {
+            runtime->_entered = true;
+            runtime->ScheduleChanged();
         }
     }
 

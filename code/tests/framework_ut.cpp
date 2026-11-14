@@ -36,6 +36,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/asset_http_ut.h"
 #include "modules/bitops_ut.h"
 #include "modules/cef_runtime_files_ut.h"
+#include "modules/client_package_ut.h"
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
@@ -53,6 +54,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/playout_buffer_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_parallel_ut.h"
+#include "modules/replication_threads_ut.h"
 #include "modules/replication_rate_ut.h"
 #include "modules/resource_package_ut.h"
 #include "modules/result_ut.h"
@@ -68,7 +70,10 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/streamed_assets_ut.h"
 #include "modules/string_utils_ut.h"
 #include "modules/system_graphics_ut.h"
+#include "modules/task_scheduler_ut.h"
 #include "modules/text_label_ut.h"
+#include "modules/thread_budget_ut.h"
+#include "modules/token_bucket_ut.h"
 #include "modules/tick_breakdown_ut.h"
 #include "modules/logger_ut.h"
 #include "modules/transform_batch_ut.h"
@@ -78,7 +83,10 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/voice_positions_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
 #include "modules/voice_router_ut.h"
+#include "modules/webserver_main_thread_ut.h"
+#include "modules/world_lock_ut.h"
 #include "modules/world_text_ut.h"
+#include "modules/world_ut.h"
 
 #ifdef _WIN32
 #include "modules/d3d12_backend_ut.h"
@@ -105,6 +113,11 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
+// Starts and stops whole servers, which shuts the logger down with each: kept last.
+#include "modules/packet_drain_ut.h"
+#include "modules/server_threading_ut.h"
+#include "modules/server_script_thread_ut.h"
+#include "modules/server_packet_thread_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -126,10 +139,18 @@ int main() {
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
     UNIT_MODULE(replication_parallel);
+    UNIT_MODULE(replication_threads);
     UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
     UNIT_MODULE(interest_scale);
     UNIT_MODULE(fork_join_pool);
+    UNIT_MODULE(task_scheduler);
+    UNIT_MODULE(thread_budget);
+    UNIT_MODULE(token_bucket);
+    UNIT_MODULE(webserver_main_thread);
+    UNIT_MODULE(world_lock);
+    UNIT_MODULE(world);
+    UNIT_MODULE(client_package);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);
@@ -183,6 +204,10 @@ int main() {
     UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(packet_drain);
+    UNIT_MODULE(server_threading);
+    UNIT_MODULE(server_script_thread);
+    UNIT_MODULE(server_packet_thread);
 
     return UNIT_RUN();
 }

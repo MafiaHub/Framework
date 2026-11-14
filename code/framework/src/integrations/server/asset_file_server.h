@@ -51,6 +51,15 @@ namespace Framework::Integrations::Server {
         // both. Chunk lists are small and answered outside the transfer slots.
         void Publish(std::unordered_map<std::string, std::filesystem::path> files);
 
+        // --- Chunk lists, on any thread ---
+        // Where the chunk list of a served file is kept: beside it.
+        static std::filesystem::path ChunkListPath(const std::filesystem::path &file);
+        // Whether that list exists, is no older than the file and still describes it.
+        static bool HasCurrentChunkList(const std::filesystem::path &file);
+        // Hashes `file` into `list`. Publish does it for a file that has no current list; whoever built
+        // the file off the tick thread does it there first, so publishing it hashes nothing.
+        static bool WriteChunkList(const std::filesystem::path &file, const std::filesystem::path &list);
+
         // A fresh token for this peer, replacing any it held; empty if no randomness was available.
         std::string Grant(uint64_t peer);
         void Revoke(uint64_t peer);

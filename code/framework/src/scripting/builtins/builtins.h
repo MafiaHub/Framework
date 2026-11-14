@@ -79,7 +79,8 @@ namespace Framework::Scripting::Builtins {
                 uint64_t id = 0;
                 std::memcpy(&id, bytes.data(), std::min(bytes.size(), sizeof(id)));
                 T::GetClass(isolate);
-                // A handle constructor throws when its entity is gone by the time the value arrives.
+                // A handle wraps its id whether or not the entity is still there when the value arrives;
+                // a project's own handle may still refuse in its constructor.
                 try {
                     return v8pp::class_<T>::create_object(isolate, id);
                 }

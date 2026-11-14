@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "script_gate.h"
+
 #include <v8.h>
 #include <v8pp/metadata.hpp>
 
@@ -39,6 +41,32 @@ namespace Framework::Scripting {
             return environments;
         }
     } // namespace detail
+
+    // A catalog is shared by every isolate that registers into it, and registering is not only done
+    // when a runtime is set up: a handle class is built the first time an isolate wraps one, on
+    // whichever thread that isolate is being used by. So one registration runs at a time, a runtime's
+    // setup or a class being built, under this lock. It nests (a class builds its base).
+    //
+    // What runs under it declares bindings; it should run no script and must ask the world for no
+    // handle. A mod's ModuleRegister runs under it, though, and may do the first anyway, so the
+    // thread is not stopped at a safe point while it holds the lock: a script parked here for a tick
+    // would keep the tick, or a packet handler wrapping its first entity, waiting for the lock for
+    // as long as the tick waits for the script.
+    class CatalogWriteLock final {
+      public:
+        CatalogWriteLock(): _lock(Mutex()) {}
+        CatalogWriteLock(const CatalogWriteLock &)            = delete;
+        CatalogWriteLock &operator=(const CatalogWriteLock &) = delete;
+
+      private:
+        static std::recursive_mutex &Mutex() {
+            static std::recursive_mutex mutex;
+            return mutex;
+        }
+        // Before the lock is taken and until after it is let go.
+        NoSafePoint _noSafePoint;
+        std::lock_guard<std::recursive_mutex> _lock;
+    };
 
     inline void SetScriptingCatalog(v8::Isolate *isolate, std::string_view name) {
         if (!isolate) {

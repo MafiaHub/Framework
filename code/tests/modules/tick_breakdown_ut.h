@@ -20,10 +20,10 @@ MODULE(tick_breakdown, {
         tick.scriptsMs             = 280.4;
         tick.replicationInterestMs = 12.2;
         tick.replicationPassMs     = 83.1;
-        tick.packetsMs             = 20.0;
+        tick.networkMs             = 20.0;
         tick.gameMs                = 9.6;
         tick.otherMs               = 6.7;
-        STREQUALS(tick.Describe().c_str(), "scripts 280 ms, replication 95 ms (interest 12, pass 83), packets 20 ms, game 10 ms, other 7 ms");
+        STREQUALS(tick.Describe().c_str(), "scripts 280 ms, replication 95 ms (interest 12, pass 83), network 20 ms, game 10 ms, other 7 ms");
     });
 
     IT("leaves out phases that took less than a millisecond", {
@@ -32,8 +32,8 @@ MODULE(tick_breakdown, {
         tick.scriptsMs             = 148.0;
         tick.replicationInterestMs = 0.3;
         tick.replicationPassMs     = 0.4;
-        tick.packetsMs             = 1.0;
+        tick.networkMs             = 1.0;
         tick.gameMs                = 0.2;
-        STREQUALS(tick.Describe().c_str(), "scripts 148 ms, packets 1 ms");
+        STREQUALS(tick.Describe().c_str(), "scripts 148 ms, network 1 ms");
     });
 });

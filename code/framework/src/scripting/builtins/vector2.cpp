@@ -13,7 +13,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector2>>> Vector2::_classes;
+    ClassCache<Vector2> Vector2::_classes;
 
     Vector2 &Vector2::normalize() {
         float len = glm::length(_vec);
@@ -29,13 +29,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Vector2> &Vector2::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
+        if (auto *found = _classes.Find(isolate)) {
+            return *found;
         }
+        const CatalogWriteLock building;
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector2>>(isolate, GetScriptingCatalog(isolate), "Vector2", "Mutable two-dimensional vector.");
+        auto cls = std::make_unique<v8pp::class_<Vector2>>(isolate, GetScriptingCatalog(isolate), "Vector2", "Mutable two-dimensional vector.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float>(v8pp::metadata::docs("void",
                                     {
@@ -98,7 +97,7 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<decltype(&Vector2::zero)>("zero", v8pp::metadata::docs("Vector2", {}, "Creates a vector whose components are zero.", "New Vector2(0, 0)."), true));
         metadata.record(v8pp::metadata::function_of<decltype(&Vector2::one)>("one", v8pp::metadata::docs("Vector2", {}, "Creates a vector whose components are one.", "New Vector2(1, 1)."), true));
 
-        return *cls;
+        return _classes.Add(isolate, std::move(cls));
     }
 
     void Vector2::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -113,7 +112,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Vector2::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 
 } // namespace Framework::Scripting::Builtins

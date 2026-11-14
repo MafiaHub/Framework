@@ -56,6 +56,7 @@
 #include "utils/config_schema.h"
 #include "utils/path.h"
 #include "utils/profiler.h"
+#include "utils/thread_budget.h"
 #include "utils/time.h"
 #include "utils/version.h"
 
@@ -63,6 +64,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <csignal>
+#include <thread>
 
 #ifdef _WIN32
 #include <timeapi.h>
@@ -226,6 +228,22 @@ namespace Framework::Integrations::Server {
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
+        // The host's cores, shared out before anything starts a thread of its own. This thread is the
+        // tick thread: it owns the scheduler, so completions and tick-thread routes run in Update().
+        // Packets are handled on a thread of their own, started last (see the end of Init).
+        const Utils::ThreadBudget threads = Utils::ThreadBudget::For(std::thread::hardware_concurrency(), _opts.replicationThreads, _opts.backgroundThreads);
+        _tickWorkers                      = std::make_unique<Utils::ForkJoinPool>(threads.replicationWorkers);
+        _scheduler                        = std::make_unique<Utils::TaskScheduler>(threads.backgroundWorkers);
+        CoreModules::SetTickWorkers(_tickWorkers.get());
+        CoreModules::SetTaskScheduler(_scheduler.get());
+        _scriptingModule->SetPlatformThreads(threads.scriptPlatformThreads);
+
+        // From here to the end of Init() this thread has the world, as a tick has: what Init() sets up is
+        // not seen half-made by a script that is already running.
+        _scriptThread = std::make_unique<ScriptThread>(_opts.worldConfig.tickInterval);
+        _scriptThread->LockWorld();
+        _worldHeld = true;
+
         // Initialize our networking engine
         // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
         Framework::Networking::AdmissionSettings admission;
@@ -250,6 +268,7 @@ namespace Framework::Integrations::Server {
             return Error("Failed to start the HTTP server on TCP " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }
         CoreModules::SetWebserver(_webServer.get());
+        _webServer->SetTickThreadScheduler(_scheduler.get());
         // Downloads never take the last workers: the info endpoint and the mod's routes share the pool.
         constexpr size_t kWorkersKeptFromDownloads = 4;
         _assetFileServer.Register(webWorkers - kWorkersKeptFromDownloads);
@@ -264,6 +283,7 @@ namespace Framework::Integrations::Server {
         auto *replication = _networkingEngine->GetNetworkServer()->GetReplicationManager();
         CoreModules::SetReplication(replication);
         if (replication) {
+            replication->SetReplicationWorkerPool(_tickWorkers.get());
             replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Utils::Time::SecondsToMs(_opts.worldConfig.tickInterval)));
             replication->ConfigureGrid(_opts.worldConfig.streamCellSize, _opts.worldConfig.streamWorldMin, _opts.worldConfig.streamWorldMax);
             // A text label streams exactly as far as it draws. Held to its own range, labels are
@@ -271,9 +291,16 @@ namespace Framework::Integrations::Server {
             replication->SetInterestUsesEntityRange(Framework::Networking::Replication::Entities::TextLabelEntity::kTypeName, true);
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
-            replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
-                if (_readyPlayerGuids.contains(static_cast<uint64_t>(guid))) {
-                    OnPlayerDisconnect(guid);
+            replication->SetOnClientDisconnect([this, replication](MafiaNet::PeerGuid guid) {
+                bool ready = false;
+                {
+                    const std::lock_guard guard(_connectionsMutex);
+                    ready = _readyPlayerGuids.contains(static_cast<uint64_t>(guid));
+                }
+                if (ready) {
+                    GuardOverride("OnPlayerDisconnect", static_cast<uint64_t>(guid), [&] {
+                        OnPlayerDisconnect(guid, replication->GetWorld());
+                    });
                 }
             });
         }
@@ -309,6 +336,56 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
 
+        // Every runtime is made, run and freed on the script thread.
+        if (auto *engine = _scriptingModule->GetEngine()) {
+            engine->SetRunGate(_scriptThread.get());
+        }
+        ScriptThread::Hooks hooks;
+        hooks.round = [this] {
+            ScriptRound();
+        };
+        hooks.runUntil = [this](std::chrono::steady_clock::time_point until) {
+            return _scriptingModule->RunScriptsUntil(until);
+        };
+        _scriptThread->Start(std::move(hooks));
+        std::string scriptingError;
+        RunOnScriptThread([&] {
+            scriptingError = InitScripting(replication);
+        });
+        if (!scriptingError.empty()) {
+            return Error(scriptingError);
+        }
+
+        // This thread ticks: the runtime it builds script values in is the tick's, by name rather
+        // than by being what a thread that bound nothing gets.
+        if (auto *engine = _scriptingModule->GetEngine()) {
+            engine->BindOffThreadRuntime("tick");
+        }
+
+        // Last: a handler may raise an event, which needs the runtimes made just above, and every
+        // handler the mod registered in PostInit and PostScriptInit is in place.
+        _packetThread.Start(*_networkingEngine->GetNetworkServer(), [this] {
+            if (auto *engine = _scriptingModule->GetEngine()) {
+                engine->BindOffThreadRuntime("packet");
+            }
+        });
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)
+            ->info("Threads:\t{} cores: tick, network, packet, {} replication, {} background, {} script platform, {} web", std::thread::hardware_concurrency(), threads.replicationWorkers, threads.backgroundWorkers, threads.scriptPlatformThreads, webWorkers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+
+        _initialized  = true;
+        _shuttingDown = false;
+        return {};
+    }
+
+    std::string Instance::InitScripting(Framework::Networking::Replication::ReplicationManager *replication) {
         const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
             this->RegisterScriptingBuiltins(engine);
         };
@@ -318,10 +395,17 @@ namespace Framework::Integrations::Server {
         _scriptingModule->SetDevMode(_opts.developmentMode);
         _scriptingModule->SetModVersion(_opts.modVersion);
         if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
-            return Error("Failed to initialize the scripting engine");
+            return "Failed to initialize the scripting engine";
         }
         if (auto *engine = _scriptingModule->GetEngine()) {
             engine->GetMonitor().SetSlowThresholdMs(_opts.slowScriptWarnMs);
+            // What the tick thread and the packet thread each build their script values in, so neither waits for a
+            // script to do it, nor for the other.
+            for (const char *name : {"tick", "packet"}) {
+                if (!engine->CreateOffThreadRuntime(name)) {
+                    return std::string("Failed to create the ") + name + " thread's scripting runtime: " + engine->GetLastError();
+                }
+            }
         }
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
@@ -371,18 +455,63 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.GetError());
         }
         _resourcesBooted = true;
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Password:\t{}", _opts.bindPassword.empty() ? "none" : "required");
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
-
-        _initialized  = true;
-        _shuttingDown = false;
         return {};
+    }
+
+    void Instance::GuardOverride(const char *name, uint64_t guid, const fu2::function<void() const> &call) {
+        try {
+            call();
+        }
+        catch (const std::exception &error) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("{} threw for guid {}: {}", name, guid, error.what());
+        }
+        catch (...) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("{} threw for guid {}", name, guid);
+        }
+    }
+
+    void Instance::PostToScripts(Utils::TaskScheduler::Task task) {
+        if (_scriptThread) {
+            _scriptThread->Post(std::move(task));
+        }
+        else {
+            task();
+        }
+    }
+
+    void Instance::RunOnScriptThread(Utils::TaskScheduler::Task task) {
+        // The task runs on the script thread while this one waits, and what runs there asks the world
+        // for entities: one this thread still held would never be given, and neither thread would move.
+        Framework::Networking::Replication::World::RequireNoneHeld("a task was run on the script thread and waited for");
+        if (_scriptThread) {
+            _scriptThread->Run(std::move(task));
+        }
+        else {
+            task();
+        }
+    }
+
+    void Instance::ScriptRound() {
+        // One monitor frame per tick interval, so a resource's handlers, timers and events in it add up together.
+        if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
+            engine->CloseMonitorTick();
+        }
+        {
+            FW_PROFILE_SCOPE_N("Server::VoiceChanges");
+            DispatchVoiceChanges();
+        }
+        if (_scriptingModule) {
+            FW_PROFILE_SCOPE_N("Server::Scripting");
+            _scriptingModule->Update();
+        }
+        if (_networkingEngine) {
+            FW_PROFILE_SCOPE_N("Server::Admission");
+            ApplyAdmissionDecisions();
+        }
+        if (_commandListener) {
+            FW_PROFILE_SCOPE_N("Server::Commands");
+            _commandListener->Update();
+        }
     }
 
     void Instance::InitEndpoints() {
@@ -419,7 +548,9 @@ namespace Framework::Integrations::Server {
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()},
                 {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"download-url", "http(s) base URLs clients fetch resource files from before the game port, separated by spaces or commas", cxxopts::value<std::string>()},
                 {"max-downloading", "Connections admitted beyond maxplayers while they download; 0 keeps downloads on player slots", cxxopts::value<int32_t>()},
-                {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
+                {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()},
+                {"replication-threads", "Threads sharing the replication pass with the tick thread; -1 sizes them to the host, 0 uses none", cxxopts::value<int32_t>()},
+                {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
     }
 
     void ApplyConfigDocument(const nlohmann::json &document, InstanceOptions &opts) {
@@ -439,6 +570,9 @@ namespace Framework::Integrations::Server {
         read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
         read("slow-script-ms", opts.slowScriptWarnMs);
+        read("slow-packet-handler-ms", opts.slowPacketHandlerWarnMs);
+        read("replication-threads", opts.replicationThreads);
+        read("background-threads", opts.backgroundThreads);
     }
 
     void ApplyCommandLine(const cxxopts::ParseResult &result, InstanceOptions &opts) {
@@ -457,6 +591,8 @@ namespace Framework::Integrations::Server {
         read("download-url", opts.assetDownloadUrl);
         read("max-downloading", opts.maxDownloading);
         read("package-secret", opts.packageSecret);
+        read("replication-threads", opts.replicationThreads);
+        read("background-threads", opts.backgroundThreads);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -547,6 +683,9 @@ namespace Framework::Integrations::Server {
         frameworkKeys["max-downloading"] = _opts.maxDownloading;
         frameworkKeys["package-secret"]  = _opts.packageSecret;
         frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
+        frameworkKeys["slow-packet-handler-ms"] = _opts.slowPacketHandlerWarnMs;
+        frameworkKeys["replication-threads"] = _opts.replicationThreads;
+        frameworkKeys["background-threads"]  = _opts.backgroundThreads;
         return Framework::Utils::BuildDefaultConfigDocument(_opts.modConfigSchema, frameworkKeys);
     }
 
@@ -574,6 +713,7 @@ namespace Framework::Integrations::Server {
     void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkServer();
         net->SetIdentifierSalt(_opts.rpcIdentifierSalt);
+        net->SetSlowHandlerWarnMs(_opts.slowPacketHandlerWarnMs);
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
         if (_opts.verifyBuildToken) {
@@ -592,7 +732,10 @@ namespace Framework::Integrations::Server {
 
         // A waiting request went away: the client gave up, or MafiaNet timed it out.
         net->SetOnSessionAbandonedCallback([this](MafiaNet::RakNetGUID guid) {
-            _connectionGate.Drop(guid.g);
+            // The gate holds the handlers' promises: dropped where scripts run.
+            PostToScripts([this, guid = guid.g] {
+                _connectionGate.Drop(guid);
+            });
         });
 
         // Admitted and build verified -> send the resource list (carries the ReadyEvent id and tick rate).
@@ -600,29 +743,38 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Build verified for player guid {}, sending resource list", guid.g);
 
             Framework::Networking::RPC::ServerResources resources;
-            resources.readyEventId  = Framework::Networking::NetworkServer::ReadyEventId(guid);
-            resources.tickRate      = _opts.worldConfig.tickInterval;
-            resources.packageKey    = _packageKeyHex;
+            resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            resources.tickRate     = _opts.worldConfig.tickInterval;
+            // Granted here, where the disconnection that revokes it is handled too: after it, never.
             resources.downloadToken = _assetFileServer.Grant(guid.g);
             resources.downloadUrl   = _opts.assetDownloadUrl;
-            resources.resources     = DescribeClientResources();
-            net->SendRPC(resources, guid);
+            // The list is read off the resources, which start, stop and are republished where scripts
+            // run and in the tick: it is put together there.
+            PostToScripts([this, net, guid, resources = std::move(resources)]() mutable {
+                resources.packageKey = _packageKeyHex;
+                resources.resources  = DescribeClientResources();
+                net->SendRPC(resources, guid);
 
-            // Travels with the resource list: a client that learns the ranges only when
-            // someone speaks would misjudge the first words it hears.
-            _voiceServer.SendSettingsTo(guid);
+                // Travels with the resource list: a client that learns the ranges only when
+                // someone speaks would misjudge the first words it hears.
+                _voiceServer.SendSettingsTo(guid);
+            });
         });
 
         net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason, const std::string &) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
-            _armedSpawnBarrierGuids.erase(guid.g);
-            _readyPlayerGuids.erase(guid.g);
-            _joinedGuids.erase(guid.g);
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                _armedSpawnBarrierGuids.erase(guid.g);
+                _readyPlayerGuids.erase(guid.g);
+                _joinedGuids.erase(guid.g);
+            }
             // Drop voice state unconditionally: a peer that never reached the ready barrier can
             // still have been registered in the router by a position push.
             _voiceServer.OnPlayerDisconnect(guid.g);
             _assetFileServer.Revoke(guid.g);
+            _clientEventLimits.erase(guid.g);
 
             // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
             // which RakNet fires before this packet is delivered; here we just finalise the connection.
@@ -630,19 +782,27 @@ namespace Framework::Integrations::Server {
         });
 
         net->SetOnConnectionReadyCallback([this, net](int eventId, MafiaNet::RakNetGUID guid) {
-            if (eventId != Framework::Networking::NetworkServer::ReadyEventId(guid) || _armedSpawnBarrierGuids.erase(guid.g) == 0 || !_readyPlayerGuids.insert(guid.g).second) {
+            if (eventId != Framework::Networking::NetworkServer::ReadyEventId(guid)) {
                 return;
             }
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                if (_armedSpawnBarrierGuids.erase(guid.g) == 0 || !_readyPlayerGuids.insert(guid.g).second) {
+                    return;
+                }
+            }
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client spawn ready for player guid {}", guid.g);
-            OnPlayerReady(MafiaNet::ToPeerGuid(guid));
+            GuardOverride("OnPlayerReady", guid.g, [&] {
+                OnPlayerReady(MafiaNet::ToPeerGuid(guid), net->GetReplicationManager()->GetWorld());
+            });
             net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
         // Client is done downloading and its resources run: build the avatar. Gated on the build check
         // so an unverified peer cannot conjure one; admission needs no check, because a refused or
         // still-waiting peer has no connection to send this over.
-        net->RegisterRPC<Framework::Networking::RPC::ClientJoin>([this, net](const Framework::Networking::RPC::ClientJoin &, MafiaNet::Packet *packet) {
-            const auto guid = packet->guid;
+        net->RegisterRPC<Framework::Networking::RPC::ClientJoin>([this, net](const Framework::Networking::RPC::ClientJoin &, Framework::Networking::Sender sender, Framework::Networking::Replication::World &world) {
+            const auto guid = sender.Connection();
             if (!net->IsAuthenticated(guid)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring join from unauthenticated peer {}", guid.g);
                 return;
@@ -650,26 +810,36 @@ namespace Framework::Integrations::Server {
 
             auto *replication   = net->GetReplicationManager();
             const auto peerGuid = MafiaNet::ToPeerGuid(guid);
-            if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
+            if (replication && (replication->HasConnection(guid) || sender.Avatar() != 0)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate join from {}", guid.g);
                 return;
             }
 
             // The player slot is taken here, not at admission: a connection that only downloaded held
             // one of the maxDownloading places. The world may have filled meanwhile.
-            if (_joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers)) {
+            bool full = false;
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                full = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+                if (!full) {
+                    _joinedGuids.insert(guid.g);
+                }
+            }
+            if (full) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing the join of guid {}: the server filled up while it was downloading", guid.g);
                 net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_CUSTOM, kServerFullReason);
                 return;
             }
-            _joinedGuids.insert(guid.g);
 
             // An accepted request always carried an identity, but what is stored for a connection
             // is only as trustworthy as every packet since: refuse rather than dereference.
-            const Framework::Networking::RPC::ClientIdentity *storedIdentity = net->GetPeerIdentity(guid);
-            if (storedIdentity == nullptr) {
+            const std::optional<Framework::Networking::RPC::ClientIdentity> storedIdentity = net->GetPeerIdentity(guid);
+            if (!storedIdentity) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing the join of guid {}: it has no stored identity", guid.g);
-                _joinedGuids.erase(guid.g);
+                {
+                    const std::lock_guard guard(_connectionsMutex);
+                    _joinedGuids.erase(guid.g);
+                }
                 net->KickPlayer(guid, Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET, "");
                 return;
             }
@@ -686,7 +856,11 @@ namespace Framework::Integrations::Server {
             data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
             data.discordName = identity.discordName;
-            OnPlayerConnect(data);
+            // Whatever the override leaves undone, the connection goes on to replicate: it is not
+            // left half joined.
+            GuardOverride("OnPlayerConnect", guid.g, [&] {
+                OnPlayerConnect(data, world);
+            });
 
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);
@@ -694,63 +868,96 @@ namespace Framework::Integrations::Server {
             const int eventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
             net->GetReadyEvent()->SetEvent(eventId, false);
             net->GetReadyEvent()->AddToWaitList(eventId, guid);
-            _armedSpawnBarrierGuids.insert(guid.g);
+            {
+                const std::lock_guard guard(_connectionsMutex);
+                _armedSpawnBarrierGuids.insert(guid.g);
+            }
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
         // observes via the OnChatMessage / OnChatCommand overrides.
-        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *packet) {
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &world) {
             if (payload.text.empty()) {
                 return;
             }
-            // Resolve the sender from its connection's viewer entity.
-            auto *engine = GetNetworkingEngine();
-            auto *server = engine ? engine->GetNetworkServer() : nullptr;
-            auto *repl   = server ? server->GetReplicationManager() : nullptr;
-            auto *sender = repl ? repl->GetViewer(MafiaNet::ToPeerGuid(packet->guid)) : nullptr;
-            if (!sender) {
+            // The sender is its connection's viewer entity.
+            const uint64_t senderId = sender.Avatar();
+            if (senderId == 0) {
                 return;
             }
-            HandleIncomingChat(sender->GetNetworkID(), payload.text);
+            HandleIncomingChat(senderId, payload.text, world);
         });
 
         // Client -> server scripting events (the client's Game.emitServer). Resolve the sender from
         // its viewer entity, then hand off to OnClientEvent, which routes into the dedicated
         // client-event table (Events.onClient) — never the global bus a client could otherwise
         // collide with.
-        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitScriptEvent>([this](const Framework::Integrations::Shared::RPC::EmitScriptEvent &payload, MafiaNet::Packet *packet) {
+        net->RegisterRPC<Framework::Integrations::Shared::RPC::EmitScriptEvent>([this](const Framework::Integrations::Shared::RPC::EmitScriptEvent &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &) {
             const std::string name = payload.GetEventName();
             if (name.empty()) {
                 return;
             }
-            auto *engine = GetNetworkingEngine();
-            auto *server = engine ? engine->GetNetworkServer() : nullptr;
-            auto *repl   = server ? server->GetReplicationManager() : nullptr;
-            auto *sender = repl ? repl->GetViewer(MafiaNet::ToPeerGuid(packet->guid)) : nullptr;
-            if (!sender) {
+            const uint64_t senderId = sender.Avatar();
+            if (senderId == 0) {
                 return;
             }
-            OnClientEvent(sender->GetNetworkID(), name, payload.GetPayload());
+            // Before it costs the script thread anything: a client can send these as fast as it likes.
+            if (!AllowClientEvent(sender)) {
+                return;
+            }
+            // Handlers run where scripts run: a slow one holds up other scripts, not the packets behind this one.
+            PostToScripts([this, senderId, name, eventPayload = payload.GetPayload()] {
+                OnClientEvent(senderId, name, eventPayload);
+            });
         });
 
         // A client announcing whether its player left voice chat on. The GUID is the packet's,
         // never a field, so a peer can only ever speak for itself.
-        net->RegisterRPC<Framework::Networking::RPC::VoicePreference>([this, net](const Framework::Networking::RPC::VoicePreference &payload, MafiaNet::Packet *packet) {
-            if (!net->IsAuthenticated(packet->guid)) {
+        net->RegisterRPC<Framework::Networking::RPC::VoicePreference>([this, net](const Framework::Networking::RPC::VoicePreference &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &) {
+            if (!net->IsAuthenticated(sender.Connection())) {
                 return;
             }
-            _voiceServer.OnPlayerPreference(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.enabled);
+            _voiceServer.OnPlayerPreference(static_cast<uint64_t>(sender.Guid()), payload.enabled);
         });
 
         // A player switching how far their voice carries. Same rule: the packet's GUID only.
-        net->RegisterRPC<Framework::Networking::RPC::VoiceTierRequest>([this, net](const Framework::Networking::RPC::VoiceTierRequest &payload, MafiaNet::Packet *packet) {
-            if (!net->IsAuthenticated(packet->guid)) {
+        net->RegisterRPC<Framework::Networking::RPC::VoiceTierRequest>([this, net](const Framework::Networking::RPC::VoiceTierRequest &payload, Framework::Networking::Sender sender, Framework::Networking::Replication::World &) {
+            if (!net->IsAuthenticated(sender.Connection())) {
                 return;
             }
-            _voiceServer.OnTierRequest(static_cast<uint64_t>(MafiaNet::ToPeerGuid(packet->guid)), payload.tier);
+            _voiceServer.OnTierRequest(static_cast<uint64_t>(sender.Guid()), payload.tier);
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
+    }
+
+    bool Instance::AllowClientEvent(Framework::Networking::Sender sender) {
+        const uint64_t guid = sender.Connection().g;
+        auto it             = _clientEventLimits.find(guid);
+        if (it == _clientEventLimits.end()) {
+            it = _clientEventLimits.emplace(guid, ClientEventLimit {Utils::TokenBucket(_opts.clientEventRate, _opts.clientEventBurst), Utils::TokenBucket(_opts.clientEventFloodRate, _opts.clientEventFloodBurst), false}).first;
+        }
+        if (it->second.dropped) {
+            return false;
+        }
+        if (it->second.events.Take()) {
+            return true;
+        }
+        _clientEventsDropped.fetch_add(1, std::memory_order_relaxed);
+        ++_clientEventsDroppedSinceWarning;
+        if (!it->second.flood.Take()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropping guid {}: it kept raising script events past the rate limit", guid);
+            it->second.dropped = true;
+            sender.Drop("Reliable network event overflow.");
+            return false;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= _nextClientEventWarning) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Dropped {} client script event(s) over the rate limit, last one from guid {}", _clientEventsDroppedSinceWarning, guid);
+            _clientEventsDroppedSinceWarning = 0;
+            _nextClientEventWarning          = now + std::chrono::seconds(1);
+        }
+        return false;
     }
 
     void Instance::OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &request) {
@@ -790,9 +997,12 @@ namespace Framework::Integrations::Server {
         net->SetPeerIdentity(guid, identity);
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {} is connecting", identity.name, guid.g, identity.hardwareId);
-        if (!_connectionGate.Begin(guid, identity, net->GetAddress(guid))) {
-            AdmitSession(guid);
-        }
+        // playerConnecting is raised where scripts run; the request waits in MafiaNet's pool meanwhile.
+        PostToScripts([this, guid, identity, address = net->GetAddress(guid)] {
+            if (!_connectionGate.Begin(guid, identity, address)) {
+                AdmitSession(guid);
+            }
+        });
     }
 
     void Instance::AdmitSession(MafiaNet::RakNetGUID guid) {
@@ -800,7 +1010,11 @@ namespace Framework::Integrations::Server {
         // The pool let the request in whatever the player count, so a queue can hold people while the
         // server is full. Letting one in still needs a free slot: a player slot for the world it will
         // join, and a connection for the download in between.
-        const bool worldFull       = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+        bool worldFull = false;
+        {
+            const std::lock_guard guard(_connectionsMutex);
+            worldFull = _joinedGuids.size() >= static_cast<size_t>(_opts.maxPlayers);
+        }
         const bool connectionsFull = net->GetPlayerCount() >= static_cast<uint32_t>(_opts.maxPlayers + _opts.maxDownloading);
         if (worldFull || connectionsFull) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refusing guid {}: the server is full", guid.g);
@@ -824,12 +1038,12 @@ namespace Framework::Integrations::Server {
         }
     }
 
-    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) {
+    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text, Framework::Networking::Replication::World &world) {
         if (text.empty()) {
             return;
         }
         if (text[0] != '/') {
-            OnChatMessage(senderNetworkId, text);
+            OnChatMessage(senderNetworkId, text, world);
             return;
         }
         // Same tokenizer as console commands, so a line parses identically on both surfaces.
@@ -839,7 +1053,7 @@ namespace Framework::Integrations::Server {
         }
         const std::string command = std::move(tokens.front());
         tokens.erase(tokens.begin());
-        OnChatCommand(senderNetworkId, text, command, tokens);
+        OnChatCommand(senderNetworkId, text, command, tokens, world);
     }
 
     void Instance::OnClientEvent(uint64_t senderNetworkId, const std::string &eventName, const std::string &payloadJson) {
@@ -924,6 +1138,8 @@ namespace Framework::Integrations::Server {
         _packageHashes.clear();
         _packageSizes.clear();
         _servedFiles.clear();
+        // Kept aside, not dropped: a resource whose paks cannot be rebuilt below goes on serving these.
+        _assetPaksBefore = std::move(_assetPaks);
         _assetPaks.clear();
 
         const auto resourceManager = scripting->GetResourceManager();
@@ -934,21 +1150,39 @@ namespace Framework::Integrations::Server {
         // Clients never receive these, so a client manifest must not depend on them.
         _serverOnlyResources = CollectServerOnlyResources();
 
-        size_t packagedFiles = 0;
-        for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-            PackageClientResource(resourceName, stagingDir, packagedFiles);
-        }
-
         // Asset paks: plain ZIPs the client's engine mounts, staged beside the packages and served
         // the same way. A resource stopped at runtime ships none until it starts again.
-        if (_opts.assetPakPolicy) {
-            if (!_assetPakBuilder.IsActive()) {
-                _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
-            }
-            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
-                PublishResourceAssetPaks(resourceName);
+        if (_opts.assetPakPolicy && !_assetPakBuilder.IsActive()) {
+            _assetPakBuilder.Init(_opts.assetPakPolicy, stagingDir);
+        }
+
+        // Every resource is built on its own, so they are built side by side; what they produced is
+        // then recorded here, in order.
+        const std::vector<std::string> names = resourceManager->GetAllResourceNames();
+        std::vector<ClientPublishJob> jobs;
+        jobs.reserve(names.size());
+        for (const auto &resourceName : names) {
+            jobs.push_back(PlanClientPublish(resourceName, stagingDir));
+        }
+        std::vector<ClientPublish> built(jobs.size());
+        const auto build = [&](uint32_t index, uint32_t) {
+            built[index] = RunClientPublish(jobs[index], _assetPakBuilder);
+        };
+        if (_tickWorkers) {
+            _tickWorkers->Run(static_cast<uint32_t>(jobs.size()), build);
+        }
+        else {
+            for (uint32_t i = 0; i < jobs.size(); ++i) {
+                build(i, 0);
             }
         }
+        size_t packagedFiles = 0;
+        for (size_t i = 0; i < names.size(); ++i) {
+            RecordClientPublish(names[i], std::move(built[i]), packagedFiles);
+        }
+        _assetPaksBefore.clear();
+        // A rebuild still on its way was planned against the set this one just replaced.
+        _publishAgain.insert(_publishing.begin(), _publishing.end());
 
         if (!_opts.assetDownloadUrl.empty()) {
             std::string names;
@@ -977,71 +1211,111 @@ namespace Framework::Integrations::Server {
         return serverOnlyResources;
     }
 
-    bool Instance::PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles) {
-        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(resourceName);
+    Instance::ClientPublishJob Instance::PlanClientPublish(const std::string &name, const std::string &stagingDir) {
+        ClientPublishJob job;
+        job.name            = name;
+        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(name);
         if (!resource) {
-            return false;
+            return job;
         }
-        if (!resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
-            return false;
-        }
-        if (!Framework::Utils::StreamedAssets::IsValidPackageName(resourceName)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", resourceName, Framework::Utils::StreamedAssets::kMaxPackageName);
-            return false;
-        }
-
-        Framework::Scripting::PackagedResource packaged;
-        std::string error;
-        if (!Framework::Scripting::ResourcePackager::Package(resourceName, resource->GetPath(), resource->GetManifest(), &_packageKey, packaged, error, _serverOnlyResources)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", resourceName, error);
-            return false;
-        }
-
-        std::error_code ec;
-        const std::string packageName = resourceName + Framework::Utils::Package::kExtension;
-        const auto packagePath        = std::filesystem::path(stagingDir) / packageName;
-
-        bool needsWrite = true;
-        if (std::filesystem::exists(packagePath, ec) && !ec) {
-            const auto existing = Framework::Utils::Crypto::Sha256FileHex(packagePath.string());
-            needsWrite          = !Framework::Utils::Crypto::ConstantTimeEquals(existing, packaged.sha256);
-        }
-
-        if (needsWrite) {
-            std::ofstream out(packagePath, std::ios::binary | std::ios::trunc);
-            if (!out.is_open()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", packagePath.string());
-                return false;
+        if (resource->GetManifest().GetMafiaHubConfig().HasClientContent()) {
+            if (!Framework::Utils::StreamedAssets::IsValidPackageName(name)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client resource '{}' cannot be served: its name is not [A-Za-z0-9._-], at most {} characters", name, Framework::Utils::StreamedAssets::kMaxPackageName);
             }
-            out.write(packaged.blob.data(), static_cast<std::streamsize>(packaged.blob.size()));
-            if (!out.good()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed while writing package '{}'", packagePath.string());
-                return false;
+            else {
+                // Copies: the build may run while the tick thread restarts the resource again.
+                job.package = ClientPackageRequest {name, resource->GetPath(), resource->GetManifest(), _packageKey, _serverOnlyResources, stagingDir, ++_publishSerial};
             }
         }
-
-        _servedFiles[packageName]    = packagePath;
-        _packageHashes[resourceName] = packaged.sha256;
-        _packageSizes[resourceName]  = packaged.blob.size();
-        packagedFiles += packaged.fileCount;
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}{}", resourceName, packaged.fileCount, packaged.blob.size(), packaged.sha256.substr(0, 16), needsWrite ? "" : " (unchanged)");
-        return true;
+        if (_opts.assetPakPolicy && (!_resourcesBooted || resource->IsRunning())) {
+            job.pakFolder = resource->GetPath();
+        }
+        return job;
     }
 
-    void Instance::PublishResourceAssetPaks(const std::string &resourceName) {
-        const auto resource = GetScriptingModule()->GetResourceManager()->GetResource(resourceName);
-        if (!resource || (_resourcesBooted && !resource->IsRunning())) {
-            _assetPakBuilder.Forget(resourceName);
+    Instance::ClientPublish Instance::RunClientPublish(const ClientPublishJob &job, const AssetPakBuilder &paks) {
+        // Each half fails on its own, and a build that throws still comes back with what it has: the caller's
+        // completion is what clears the way for the next build, and a package already written must reach it to be
+        // put in place or removed.
+        ClientPublish built;
+        if (job.package) {
+            built.wantsPackage = true;
+            try {
+                built.package = BuildClientPackage(*job.package);
+            }
+            catch (const std::exception &ex) {
+                built.package       = {};
+                built.package.name  = job.name;
+                built.package.error = ex.what();
+            }
+        }
+        if (job.pakFolder) {
+            built.wantsPaks = true;
+            try {
+                built.paks = paks.Prepare(job.name, *job.pakFolder);
+                // A lane that could not be written fails the build as a throw does; it has logged why.
+                built.paksFailed = built.paks.Failed();
+            }
+            catch (const std::exception &ex) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not build the asset paks of '{}': {}", job.name, ex.what());
+                built.paksFailed = true;
+            }
+        }
+        return built;
+    }
+
+    void Instance::RecordClientPublish(const std::string &name, ClientPublish built, size_t &packagedFiles) {
+        if (built.wantsPackage) {
+            ClientPackage &package = built.package;
+            if (!package.built) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not package client resource '{}': {}", name, package.error);
+            }
+            else if (!CommitClientPackage(package)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Could not write package '{}'", package.served.string());
+            }
+            else {
+                _servedFiles[name + Framework::Utils::Package::kExtension] = package.served;
+                _packageHashes[name]                                       = package.sha256;
+                _packageSizes[name]                                        = package.size;
+                packagedFiles += package.fileCount;
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Packaged client resource '{}': {} files, {} bytes, sha256 {}", name, package.fileCount, package.size, package.sha256.substr(0, 16));
+            }
+        }
+
+        if (!_opts.assetPakPolicy) {
             return;
         }
-        std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Build(resourceName, resource->GetPath());
+        // Nothing to adopt, and no reason to drop what was built last time. A hot reload left it published; a full
+        // publish set it aside, and it is put back here, for the paks that are still on disk.
+        if (built.paksFailed) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("The asset paks of '{}' were not rebuilt; clients keep the ones published before", name);
+            if (const auto before = _assetPaksBefore.find(name); before != _assetPaksBefore.end()) {
+                std::vector<Framework::Networking::RPC::AssetPakInfo> kept;
+                for (const auto &pak : before->second) {
+                    const std::filesystem::path path = _assetPakBuilder.PathOf(name, pak);
+                    std::error_code code;
+                    if (std::filesystem::is_regular_file(path, code)) {
+                        _servedFiles[Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256)] = path;
+                        kept.push_back(pak);
+                    }
+                }
+                if (!kept.empty()) {
+                    _assetPaks[name] = std::move(kept);
+                }
+            }
+            return;
+        }
+        if (!built.wantsPaks) {
+            _assetPakBuilder.Forget(name);
+            return;
+        }
+        std::vector<Framework::Networking::RPC::AssetPakInfo> paks = _assetPakBuilder.Adopt(name, std::move(built.paks));
         for (auto &pak : paks) {
-            pak.deferred                                                                                   = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
-            _servedFiles[Framework::Utils::StreamedAssets::PakFileName(resourceName, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(resourceName, pak);
+            pak.deferred                                                                            = _opts.assetPakPolicy->LaneMayDefer(pak.lane);
+            _servedFiles[Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256)] = _assetPakBuilder.PathOf(name, pak);
         }
         if (!paks.empty()) {
-            _assetPaks[resourceName] = std::move(paks);
+            _assetPaks[name] = std::move(paks);
         }
     }
 
@@ -1051,17 +1325,60 @@ namespace Framework::Integrations::Server {
         // A manifest edit that moved a resource in or out of the server-only set changes what other
         // packages may depend on; so does a first publish that never happened.
         if (!resourceManager || !_packageKeyReady || CollectServerOnlyResources() != _serverOnlyResources) {
+            // Publishing everything again can change packages of resources that did not restart: their manifests
+            // drop or gain dependencies with the server-only set. Clients are told about each one that changed.
+            const std::unordered_map<std::string, std::string> before = _packageHashes;
             PublishClientAssets();
+            AnnounceResourceRefresh(name);
+            for (const auto &[other, hash] : _packageHashes) {
+                const auto was = before.find(other);
+                if (other != name && (was == before.end() || was->second != hash)) {
+                    AnnounceResourceRefresh(other);
+                }
+            }
             return;
         }
 
-        const std::string stagingDir = GetPackageStagingDir();
+        // One build at a time per resource: a second change waits for the first build and starts over.
+        if (!_publishing.insert(name).second) {
+            _publishAgain.insert(name);
+            return;
+        }
+        _scheduler->Compute(
+            [job = PlanClientPublish(name, GetPackageStagingDir()), paks = &std::as_const(_assetPakBuilder)] {
+                return RunClientPublish(job, *paks);
+            },
+            [this, name](ClientPublish built) {
+                FinishRepublish(name, std::move(built));
+            });
+    }
 
-        // Drop what the resource served before; it is rebuilt below or it is gone.
+    void Instance::FinishRepublish(const std::string &name, ClientPublish built) {
+        _publishing.erase(name);
+        if (_shuttingDown) {
+            DiscardClientPackage(built.package);
+            return;
+        }
+        if (_publishAgain.erase(name) > 0) {
+            DiscardClientPackage(built.package);
+            RepublishClientResource(name);
+            return;
+        }
+        const auto scripting       = GetScriptingModule();
+        const auto resourceManager = scripting ? scripting->GetResourceManager() : nullptr;
+        const auto *resource       = resourceManager ? resourceManager->GetResource(name) : nullptr;
+        if (!resource || !resource->IsRunning()) {
+            // Stopped while it was being built: there is nothing left to announce.
+            DiscardClientPackage(built.package);
+            return;
+        }
+
+        // Drop what the resource served before; it is recorded again below or it is gone.
         _servedFiles.erase(name + Framework::Utils::Package::kExtension);
         _packageHashes.erase(name);
         _packageSizes.erase(name);
-        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end()) {
+        // The paks only when there are new ones to put in their place, or the resource now ships none.
+        if (const auto paks = _assetPaks.find(name); paks != _assetPaks.end() && !built.paksFailed) {
             for (const auto &pak : paks->second) {
                 _servedFiles.erase(Framework::Utils::StreamedAssets::PakFileName(name, pak.lane, pak.sha256));
             }
@@ -1069,12 +1386,10 @@ namespace Framework::Integrations::Server {
         }
 
         size_t packagedFiles = 0;
-        PackageClientResource(name, stagingDir, packagedFiles);
-        if (_opts.assetPakPolicy) {
-            PublishResourceAssetPaks(name);
-        }
+        RecordClientPublish(name, std::move(built), packagedFiles);
         _assetFileServer.Publish(_servedFiles);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Republished client resource '{}' ({} files); {} packages and {} resource(s) shipping asset paks are served", name, packagedFiles, _packageHashes.size(), _assetPaks.size());
+        AnnounceResourceRefresh(name);
     }
 
     Framework::Networking::RPC::ResourceInfo Instance::DescribeResource(const std::string &name, const std::string &version) const {
@@ -1133,8 +1448,17 @@ namespace Framework::Integrations::Server {
         }
 
         // Republish this resource so its changed files are announced with fresh hashes; the whole set only
-        // when the change could reach other packages. See docs/resource_hot_reload.md.
+        // when the change could reach other packages. Clients are told once the new files are served,
+        // which is a later tick: the build runs off this thread. See docs/resource_hot_reload.md.
         RepublishClientResource(resource->GetName());
+    }
+
+    void Instance::AnnounceResourceRefresh(const std::string &name) {
+        const auto *resource = _scriptingModule ? _scriptingModule->GetResourceManager()->GetResource(name) : nullptr;
+        const auto net       = _networkingEngine ? _networkingEngine->GetNetworkServer() : nullptr;
+        if (!resource || !net) {
+            return;
+        }
 
         // Only resources with a client entry point or asset paks need a client-side refresh.
         const bool scripts = resource->GetManifest().GetMafiaHubConfig().HasClientContent();
@@ -1439,8 +1763,8 @@ namespace Framework::Integrations::Server {
         // A peer whose viewer is already gone is skipped rather than reported against a
         // network id that no longer names anyone.
         const auto networkIdOf = [replication](uint64_t guid) -> std::optional<uint64_t> {
-            auto *viewer = replication ? replication->GetViewer(static_cast<MafiaNet::PeerGuid>(guid)) : nullptr;
-            return viewer ? std::optional<uint64_t>(static_cast<uint64_t>(viewer->GetNetworkID())) : std::nullopt;
+            const uint64_t viewer = replication ? replication->GetViewerId(static_cast<MafiaNet::PeerGuid>(guid)) : 0;
+            return viewer != 0 ? std::optional<uint64_t>(viewer) : std::nullopt;
         };
 
         for (const Voice::TalkingChange &change : _voiceTalkingChanges) {
@@ -1476,33 +1800,80 @@ namespace Framework::Integrations::Server {
         if (_shuttingDown) {
             return;
         }
+        if (_packetThread.OnPacketThread()) {
+            // Shutting down joins the packet thread, which this is. Run() is asked to stop instead,
+            // and whoever called it shuts the server down from there, as after a signal.
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Instance::Shutdown was called from a packet handler, which cannot stop the thread it runs on; the server is asked to stop instead. Shut down from the thread that runs it");
+            _stopRequested = true;
+            return;
+        }
 
         _shuttingDown = true;
         // Run() may still be looping: end it before a tick can observe a half-torn-down
         // instance. Lifecycle::Shutdown() below clears _initialized far too late for that.
         _stopRequested = true;
 
+        // No packet is handled from here on. A handler in progress finishes first, and may be waiting
+        // for scripts (a synchronous event), which wait for the world: it is let go for the join.
+        if (_scriptThread && _worldHeld) {
+            _scriptThread->UnlockWorld();
+            _worldHeld = false;
+        }
+        _packetThread.Stop();
+
+        // As in Init(): this thread has the world until the script thread is gone.
+        if (_scriptThread && !_worldHeld) {
+            _scriptThread->LockWorld();
+            _worldHeld = true;
+        }
+
         PreShutdown();
 
         Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
 
-        // Holds Promises of the engine torn down below.
-        _connectionGate.Shutdown();
+        // What ends in script is ended where scripts run.
+        RunOnScriptThread([this] {
+            // Holds Promises of the engine torn down below.
+            _connectionGate.Shutdown();
+            if (_scriptingModule) {
+                _scriptingModule->PreShutdown();
+            }
+        });
         CoreModules::SetConnectionGate(nullptr);
-
-        if (_scriptingModule) {
-            _scriptingModule->PreShutdown();
-        }
 
         // Detach from the peer before the networking engine tears it down.
         _voiceServer.Shutdown();
 
+        // No tick will run a request or a completion from here on. The web server goes first: its workers
+        // post to the scheduler, so they are stopped and joined before it is destroyed (requests waiting on
+        // a tick are answered 503). Background work then finishes before the objects it reads go.
+        if (_webServer) {
+            _webServer->Shutdown();
+            _webServer->SetTickThreadScheduler(nullptr);
+        }
+        CoreModules::SetTaskScheduler(nullptr);
+        _scheduler.reset();
+
         if (_networkingEngine) {
+            if (auto *server = _networkingEngine->GetNetworkServer(); server != nullptr && server->GetReplicationManager() != nullptr) {
+                server->GetReplicationManager()->SetReplicationWorkerPool(nullptr);
+            }
             _networkingEngine->Shutdown();
         }
+        CoreModules::SetTickWorkers(nullptr);
+        _tickWorkers.reset();
 
-        if (_scriptingModule) {
-            _scriptingModule->Shutdown();
+        // The runtimes are freed on the thread that ran them, which then has nothing left to run.
+        RunOnScriptThread([this] {
+            if (_scriptingModule) {
+                _scriptingModule->Shutdown();
+            }
+        });
+        if (_scriptThread) {
+            _scriptThread->Stop();
+            _scriptThread->UnlockWorld();
+            _worldHeld = false;
+            _scriptThread.reset();
         }
 
         if (_webServer) {
@@ -1549,12 +1920,23 @@ namespace Framework::Integrations::Server {
                 lapStart = now;
             };
 
-            // One monitor frame per server tick, so a resource's RPC handlers, timers and events in it add up together.
-            if (auto *engine = _scriptingModule ? _scriptingModule->GetEngine() : nullptr; engine != nullptr && engine->IsInitialized()) {
-                engine->CloseMonitorTick();
+            // The tick takes the world from the script thread: at once when scripts are idle, at a running
+            // script's next safe point otherwise. That wait is all a tick spends on scripts.
+            if (!_worldHeld) {
+                FW_PROFILE_SCOPE_N("Server::WaitForScripts");
+                _scriptThread->LockWorld();
+                _worldHeld = true;
+            }
+            lap(tick.scriptsMs);
+
+            // What background work finished and what other threads asked of this one: run before the
+            // replication pass, so what it changes leaves with this tick.
+            if (_scheduler) {
+                FW_PROFILE_SCOPE_N("Server::TickThreadTasks");
+                _scheduler->Drain();
             }
 
-            // Before the packet pump: voice frames are routed inline there, and must see the worlds
+            // Voice frames are routed as they arrive, on MafiaNet's thread, and must see the worlds
             // scripts and PostUpdate set last tick, not the ones from before them.
             auto *replication = _networkingEngine ? _networkingEngine->GetNetworkServer()->GetReplicationManager() : nullptr;
             if (replication) {
@@ -1562,8 +1944,8 @@ namespace Framework::Integrations::Server {
                 _voiceServer.SyncAvatars(*replication);
             }
 
-            // Before the interest rebuild in the packet pump, so attached labels stream from where
-            // their targets are now.
+            // Before the interest rebuild below, so attached labels stream from where their targets
+            // are now.
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::TextLabels");
                 Framework::Scripting::Builtins::TextLabel::FollowTargets(*replication);
@@ -1574,41 +1956,25 @@ namespace Framework::Integrations::Server {
                 FW_PROFILE_SCOPE_N("Server::Networking");
                 _networkingEngine->Update();
             }
-            // The packet pump runs the replication pass; report it apart from the packets themselves.
-            double pumpMs = 0.0;
-            lap(pumpMs);
+            // No packet is handled here: that is the packet thread's. What the tick does for the
+            // network is interest and the pass, reported apart from the little that is left
+            // (delegation, the state-bag flush).
+            double networkingMs = 0.0;
+            lap(networkingMs);
             if (replication) {
                 tick.replicationInterestMs = replication->LastInterestMs();
                 tick.replicationPassMs     = replication->LastPassMs();
             }
-            tick.packetsMs = std::max(0.0, pumpMs - tick.replicationInterestMs - tick.replicationPassMs);
+            tick.networkMs = std::max(0.0, networkingMs - tick.replicationInterestMs - tick.replicationPassMs);
 
             if (replication) {
                 FW_PROFILE_SCOPE_N("Server::Voice");
                 _voiceServer.Update();
             }
 
-            {
-                FW_PROFILE_SCOPE_N("Server::VoiceChanges");
-                DispatchVoiceChanges();
-            }
-            lap(tick.packetsMs);
-
-            if (_scriptingModule) {
-                FW_PROFILE_SCOPE_N("Server::Scripting");
-                _scriptingModule->Update();
-            }
-            lap(tick.scriptsMs);
-
-            if (_networkingEngine) {
-                FW_PROFILE_SCOPE_N("Server::Admission");
-                ApplyAdmissionDecisions();
-            }
-
-            if (_commandListener) {
-                FW_PROFILE_SCOPE_N("Server::Commands");
-                _commandListener->Update();
-            }
+            // Voice events, the runtimes, admission and console commands all end in script: they run on the
+            // script thread's own round.
+            lap(tick.networkMs);
 
             if (_masterlist->IsInitialized()) {
                 FW_PROFILE_SCOPE_N("Server::MasterlistPing");
@@ -1649,22 +2015,10 @@ namespace Framework::Integrations::Server {
 
             // Tick work consumes the interval; overruns leave no wait and no catch-up backlog.
             _nextTick = start + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(_opts.worldConfig.tickInterval));
-        }
-        else if (_scriptingModule) {
-            _scriptingModule->WaitUntil(_nextTick);
 
-            // A callback that ran between ticks and overran the deadline holds the next tick up as much as a slow
-            // tick does, and the tick's own timing above cannot see it.
-            const auto now      = std::chrono::steady_clock::now();
-            const double lateMs = std::chrono::duration<double, std::milli>(now - _nextTick).count();
-            if (lateMs >= kTickHitchWarnMs) {
-                ++_suppressedLateTicks;
-                if (std::chrono::duration<double, std::milli>(now - _lastLateTickWarnAt).count() >= kTickHitchWarnIntervalMs) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Script run between ticks held the next tick up by {:.0f} ms ({} late tick(s) since the last warning)", lateMs, _suppressedLateTicks);
-                    _lastLateTickWarnAt  = now;
-                    _suppressedLateTicks = 0;
-                }
-            }
+            // The world is the scripts' again until the next tick.
+            _worldHeld = false;
+            _scriptThread->UnlockWorld();
         }
         else {
             std::this_thread::sleep_until(_nextTick);

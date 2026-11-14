@@ -65,6 +65,9 @@ target_link_libraries(FrameworkLoggingBench Framework)
 
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
+# Opens ReplicationManager to replication_test_world.h's TestAccess, for these two targets alone.
+target_compile_definitions(FrameworkTests PRIVATE FW_TESTING=1)
+target_compile_definitions(FrameworkReplicationBench PRIVATE FW_TESTING=1)
 
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>

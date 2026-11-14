@@ -65,7 +65,9 @@ namespace Framework::Networking::Replication {
     };
 
     struct StateChange {
-        NetworkEntity *entity = nullptr;
+        // The entity whose bag changed. A server handler asks the world for it; a client finds it
+        // through ClientEntities.
+        uint64_t networkId = 0;
         std::string key;
         StateValue value;
         StateValue previous;

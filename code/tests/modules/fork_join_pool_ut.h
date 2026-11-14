@@ -13,6 +13,7 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -61,5 +62,48 @@ MODULE(fork_join_pool, {
         });
         EQUALS(count, 10);
         EQUALS(elsewhere, false);
+    });
+
+    IT("runs a loop started from inside another on the thread that started it", {
+        ForkJoinPool pool(3);
+        std::vector<std::atomic<int>> hits(8 * 8);
+        std::atomic<bool> innerLeftItsThread {false};
+        pool.Run(8, [&](uint32_t outer, uint32_t outerLane) {
+            const auto self = std::this_thread::get_id();
+            // The inner loop keeps the lane too, so scratch indexed by lane stays one thread's.
+            pool.Run(8, [&, outer, outerLane](uint32_t inner, uint32_t lane) {
+                hits[outer * 8 + inner].fetch_add(1);
+                if (std::this_thread::get_id() != self || lane != outerLane) {
+                    innerLeftItsThread = true;
+                }
+            });
+        });
+        int wrong = 0;
+        for (const auto &hit : hits) {
+            wrong += hit.load() != 1;
+        }
+        EQUALS(wrong, 0);
+        EQUALS(innerLeftItsThread.load(), false);
+    });
+
+    IT("still shares work out after an iteration threw on the caller", {
+        ForkJoinPool pool(3);
+        bool threw = false;
+        try {
+            // One iteration runs on the caller alone.
+            pool.Run(1, [](uint32_t, uint32_t) {
+                throw std::runtime_error("iteration failed");
+            });
+        }
+        catch (const std::runtime_error &) {
+            threw = true;
+        }
+        EQUALS(threw, true);
+        std::atomic<uint32_t> lanesSeen {0};
+        pool.Run(64, [&](uint32_t, uint32_t lane) {
+            lanesSeen.fetch_or(1u << lane);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        });
+        GREATER(std::popcount(lanesSeen.load()), 1);
     });
 });

@@ -32,6 +32,9 @@ namespace Framework::Utils::StreamedAssets {
      * a resource are lanes, which entry paths each lane accepts, and how each is compressed. The
      * same policy is applied by the server when it builds a pak and by the client before it uses
      * one -- the server is the threat model, so the client's check is the one that counts.
+     *
+     * The server builds paks off its tick thread: it calls these from one thread at a time, but not
+     * always the same one. An implementation that keeps state must not tie it to a thread.
      */
     class Policy {
       public:

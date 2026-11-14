@@ -16,11 +16,13 @@
 #include <networking/network_server.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
+#include <networking/replication/world.h>
 #include <networking/rpc/voice_settings.h>
 #include <utils/time.h>
 
 #include <iterator>
 #include <utility>
+#include <vector>
 
 namespace Framework::Voice {
     bool VoiceServer::Init(Networking::NetworkServer *server) {
@@ -61,6 +63,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::Shutdown() {
+        const std::lock_guard lock(_mutex);
         // Idempotent: the explicit shutdown path and the destructor both land here. DetachPlugin
         // waits for a relay in flight, so nothing below races one.
         if (_attached && _server != nullptr && _server->GetPeer() != nullptr) {
@@ -85,6 +88,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::Update() {
+        const std::lock_guard lock(_mutex);
         TakeArrivals();
 
         // The tier switches that were waiting on the floor, and retiring talkers who went quiet,
@@ -165,14 +169,29 @@ namespace Framework::Voice {
         _relayTable = std::move(table);
     }
 
-    void VoiceServer::SyncAvatars(const Networking::Replication::ReplicationManager &replication) {
+    void VoiceServer::SyncAvatars(Networking::Replication::ReplicationManager &replication) {
         // Avatars, not every owned entity: a delegated NPC or ridden horse carries the player's
-        // guid too, and taking it would move their voice to wherever that entity stands.
+        // guid too, and taking it would move their voice to wherever that entity stands. Each is
+        // read under its own lock, before this class's is taken.
+        struct Avatar {
+            uint64_t peer;
+            glm::vec3 position;
+            MafiaNet::VirtualWorldId world;
+        };
+        std::vector<Avatar> avatars;
+        Networking::Replication::World &world = replication.GetWorld();
+        for (const auto &[peer, id] : replication.GetViewerIds()) {
+            if (const auto avatar = world.Read<Networking::Replication::NetworkEntity>(id)) {
+                avatars.push_back({static_cast<uint64_t>(peer), avatar->position, avatar->GetVirtualWorld()});
+            }
+        }
+
+        const std::lock_guard lock(_mutex);
         bool audibilityChanged = false;
         _router.BeginAvatarPass();
-        replication.ForEachAvatar([this, &audibilityChanged](MafiaNet::PeerGuid peer, Networking::Replication::NetworkEntity *avatar) {
-            audibilityChanged |= _router.SetPlayerAvatar(static_cast<uint64_t>(peer), avatar->position, avatar->GetVirtualWorld());
-        });
+        for (const Avatar &avatar : avatars) {
+            audibilityChanged |= _router.SetPlayerAvatar(avatar.peer, avatar.position, avatar.world);
+        }
         audibilityChanged |= _router.EndAvatarPass();
 
         // Moves ride the refresh interval; a world change, or an avatar appearing or going, cuts
@@ -191,15 +210,18 @@ namespace Framework::Voice {
     }
 
     bool VoiceServer::IsPlayerTalking(uint64_t guid) const {
+        const std::lock_guard lock(_mutex);
         return _talking.contains(guid);
     }
 
     void VoiceServer::DrainTalkingChanges(std::vector<TalkingChange> &out) {
+        const std::lock_guard lock(_mutex);
         out.clear();
         out.swap(_talkingChanges);
     }
 
     void VoiceServer::OnPlayerDisconnect(uint64_t guid) {
+        const std::lock_guard lock(_mutex);
         _router.RemovePlayer(guid);
         // No stop edge: the avatar is torn down in ReplicationManager::OnClosedConnection,
         // which RakNet fires before this runs, so the event could not name the player.
@@ -234,6 +256,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::SetProximityRange(float meters) {
+        const std::lock_guard lock(_mutex);
         _router.SetDefaultRange(meters);
         InvalidateRecipients();
 
@@ -244,6 +267,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::SetTierRange(VoiceTier tier, float meters) {
+        const std::lock_guard lock(_mutex);
         _router.SetTierRange(tier, meters);
         InvalidateRecipients();
 
@@ -254,6 +278,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::SetPlayerRange(uint64_t guid, float meters) {
+        const std::lock_guard lock(_mutex);
         _router.SetPlayerRange(guid, meters);
         InvalidateRecipients();
 
@@ -266,6 +291,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::SetPlayerTier(uint64_t guid, VoiceTier tier) {
+        const std::lock_guard lock(_mutex);
         if (tier >= VoiceTier::Count || _router.GetPlayerTier(guid) == tier) {
             return;
         }
@@ -281,6 +307,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::SendSettingsTo(MafiaNet::RakNetGUID guid) {
+        const std::lock_guard lock(_mutex);
         if (_server == nullptr) {
             return;
         }
@@ -295,6 +322,7 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::OnTierRequest(uint64_t guid, uint8_t tier) {
+        const std::lock_guard lock(_mutex);
         if (tier >= std::to_underlying(VoiceTier::Count)) {
             return;
         }
@@ -329,11 +357,13 @@ namespace Framework::Voice {
     }
 
     void VoiceServer::DrainTierChanges(std::vector<TierChange> &out) {
+        const std::lock_guard lock(_mutex);
         out.clear();
         out.swap(_tierChanges);
     }
 
     void VoiceServer::OnPlayerPreference(uint64_t guid, bool enabled) {
+        const std::lock_guard lock(_mutex);
         if (_router.IsPlayerVoiceDisabled(guid) == !enabled) {
             return;
         }

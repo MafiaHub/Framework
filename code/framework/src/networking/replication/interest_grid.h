@@ -16,6 +16,7 @@
 #include <bit>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -53,6 +54,9 @@ namespace Framework::Networking::Replication {
                 _words.resize(words, 0);
             }
         }
+        void Swap(SlotSet &other) {
+            _words.swap(other._words);
+        }
         size_t Count() const {
             size_t count = 0;
             for (const uint64_t word : _words) {
@@ -82,7 +86,8 @@ namespace Framework::Networking::Replication {
     // once (Remove), so no query can hand out its pointer.
     //
     // Queries are const and write only to the Scratch they are given: several threads may run them
-    // at once, each with its own, while nothing changes the index.
+    // at once, each with its own, while nothing changes the index. They read what Sync took of each
+    // entity, under its lock, and never the entity itself: another thread may be writing it.
     class InterestGrid final {
       public:
         static constexpr uint32_t kNoSlot = std::numeric_limits<uint32_t>::max();
@@ -212,15 +217,46 @@ namespace Framework::Networking::Replication {
         // at the last sync), or kNoSlot.
         uint32_t DependencyOf(uint32_t slot) const;
 
+        // As of the entity's last sync: its virtual world, and whether it is visible and its
+        // audience admits this viewer.
+        MafiaNet::VirtualWorldId WorldOf(uint32_t slot) const {
+            return slot < _entries.size() ? _entries[slot].view.world : MafiaNet::VirtualWorldId {};
+        }
+        bool Shows(uint32_t slot, MafiaNet::PeerGuid viewerGUID) const {
+            return slot < _entries.size() && _entries[slot].view.visible && _entries[slot].view.Admits(viewerGUID);
+        }
+
       private:
         static constexpr uint32_t kNoCell = std::numeric_limits<uint32_t>::max();
 
+        // What a query needs of an entity, copied by Sync while the caller holds it.
+        struct View {
+            glm::vec3 position = glm::vec3(0.0f);
+            glm::vec3 velocity = glm::vec3(0.0f);
+            float range        = 0.0f;
+            uint32_t typeId    = 0;
+            MafiaNet::VirtualWorldId world {};
+            MafiaNet::PeerGuid target = MafiaNet::UNASSIGNED_PEER_GUID;
+            bool visible              = true;
+            bool alwaysVisible        = false;
+            // A copy, refreshed only when the entity's filter changed.
+            std::unique_ptr<ViewerFilter> viewers;
+
+            bool Admits(MafiaNet::PeerGuid guid) const {
+                return (target == MafiaNet::UNASSIGNED_PEER_GUID || target == guid) && (!viewers || viewers->Admits(guid));
+            }
+        };
+
         struct Entry {
+            View view;
             NetworkEntity *entity         = nullptr;
             uint32_t generation           = 0;
             uint32_t cell                 = kNoCell;
             uint32_t indexInCell          = 0;
             uint32_t syncStamp            = 0;
+            uint32_t alwaysStamp          = 0; // the pass that listed it as always visible
+            uint64_t id                   = 0; // network id, as of the last sync
+            uint64_t dependencyId         = 0; // GetInterestDependency, as of the last sync
             uint32_t dependency           = kNoSlot;
             uint32_t dependencyGeneration = 0; // the dependency slot's generation when resolved
             MafiaNet::PeerGuid owner      = MafiaNet::UNASSIGNED_PEER_GUID;
@@ -242,11 +278,11 @@ namespace Framework::Networking::Replication {
         float GroundV(const glm::vec3 &p) const {
             return _groundXY ? p.y : p.z;
         }
-        Focus FocusOf(const NetworkEntity *viewer) const;
+        Focus FocusOf(const View &viewer) const;
         float NearestFocusDistSq(const Focus &focus, const glm::vec3 &p) const;
         uint32_t BudgetFor(uint32_t typeId) const;
-        float RangeFor(const NetworkEntity *entity, float viewerRange) const;
-        bool InDimension(const NetworkEntity *entity, MafiaNet::VirtualWorldId observerWorld) const;
+        float RangeFor(const View &entity, float viewerRange) const;
+        bool InDimension(const View &entity, MafiaNet::VirtualWorldId observerWorld) const;
 
         void EnsureGrid(Grid &grid);
         uint32_t CellOf(const glm::vec3 &position) const;
@@ -274,6 +310,8 @@ namespace Framework::Networking::Replication {
 
         std::vector<Entry> _entries;
         std::vector<uint32_t> _freeSlots;
+        // Filed entities by network id: how a dependency, named by id, finds its slot.
+        std::unordered_map<uint64_t, uint32_t> _slotById;
         uint32_t _syncStamp = 0;
         std::vector<uint32_t> _dropped;
         std::vector<uint32_t> _dependencyChanges;

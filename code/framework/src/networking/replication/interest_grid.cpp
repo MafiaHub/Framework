@@ -21,10 +21,6 @@ namespace Framework::Networking::Replication {
         // ~15% nearer to evict it. Ranking only; never admits what the range check rejected.
         constexpr float kStickyDiscount = 0.72f;
 
-        bool Targeted(const NetworkEntity *entity) {
-            return entity->streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID;
-        }
-
         void EraseValue(std::vector<uint32_t> &values, uint32_t value) {
             const auto it = std::find(values.begin(), values.end(), value);
             if (it != values.end()) {
@@ -93,19 +89,19 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    float InterestGrid::RangeFor(const NetworkEntity *entity, float viewerRange) const {
+    float InterestGrid::RangeFor(const View &entity, float viewerRange) const {
         // The entity's own range wins when longer; that is what makes per-type distances work.
         // A type that opted in is held to its own range even when the viewer's is longer.
-        if (!_entityRangeTypes.empty() && _entityRangeTypes.contains(entity->GetTypeId())) {
-            return entity->streaming.range;
+        if (!_entityRangeTypes.empty() && _entityRangeTypes.contains(entity.typeId)) {
+            return entity.range;
         }
-        return std::max(viewerRange, entity->streaming.range);
+        return std::max(viewerRange, entity.range);
     }
 
-    bool InterestGrid::InDimension(const NetworkEntity *entity, MafiaNet::VirtualWorldId observerWorld) const {
+    bool InterestGrid::InDimension(const View &entity, MafiaNet::VirtualWorldId observerWorld) const {
         // A private entity (targetGUID set) is only ever relevant to its target connection, and for
         // that viewer the target stands in for the dimension gate.
-        return Targeted(entity) || MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld);
+        return entity.target != MafiaNet::UNASSIGNED_PEER_GUID || MafiaNet::VirtualWorldsCanSee(entity.world, observerWorld);
     }
 
     void InterestGrid::EnsureGrid(Grid &grid) {
@@ -210,8 +206,34 @@ namespace Framework::Networking::Replication {
             entity->_interestSlot = slot;
         }
 
-        Entry &entry        = _entries[slot];
-        entry.syncStamp     = _syncStamp;
+        Entry &entry    = _entries[slot];
+        entry.syncStamp = _syncStamp;
+        if (const uint64_t id = entity->GetNetworkID(); entry.id != id) {
+            if (const auto filed = _slotById.find(entry.id); filed != _slotById.end() && filed->second == slot) {
+                _slotById.erase(filed);
+            }
+            entry.id      = id;
+            _slotById[id] = slot;
+        }
+        entry.dependencyId  = entity->GetInterestDependency();
+
+        View &view         = entry.view;
+        view.position      = entity->position;
+        view.velocity      = entity->velocity;
+        view.range         = entity->streaming.range;
+        view.typeId        = entity->GetTypeId();
+        view.world         = entity->GetVirtualWorld();
+        view.target        = entity->streaming.targetGUID;
+        view.visible       = entity->streaming.visible;
+        view.alwaysVisible = entity->streaming.alwaysVisible;
+        if (const ViewerFilter *filter = entity->streaming.viewers.get()) {
+            if (!view.viewers || !(*view.viewers == *filter)) {
+                view.viewers = std::make_unique<ViewerFilter>(*filter);
+            }
+        }
+        else {
+            view.viewers.reset();
+        }
         const bool own      = !_entityRangeTypes.empty() && _entityRangeTypes.contains(entity->GetTypeId());
         const uint32_t cell = CellOf(entity->position);
         if (entry.cell != cell || entry.ownRange != own) {
@@ -230,7 +252,9 @@ namespace Framework::Networking::Replication {
             OwnerAdd(slot, entity->ownerGUID);
             entry.owner = entity->ownerGUID;
         }
-        if (entity->streaming.alwaysVisible) {
+        // Once per pass, however often the entity is synced within it.
+        if (entity->streaming.alwaysVisible && entry.alwaysStamp != _syncStamp) {
+            entry.alwaysStamp = _syncStamp;
             _alwaysVisible.push_back(slot);
         }
     }
@@ -262,11 +286,14 @@ namespace Framework::Networking::Replication {
             if (entry.entity == nullptr) {
                 continue;
             }
-            const uint32_t before           = DependencyOf(slot);
-            const NetworkEntity *dependency = entry.entity->GetInterestDependency();
-            entry.dependency                = dependency ? dependency->_interestSlot : kNoSlot;
-            entry.dependencyGeneration      = entry.dependency != kNoSlot ? _entries[entry.dependency].generation : 0;
-            const uint32_t after            = DependencyOf(slot);
+            const uint32_t before = DependencyOf(slot);
+            entry.dependency      = kNoSlot;
+            if (entry.dependencyId != 0) {
+                const auto filed = _slotById.find(entry.dependencyId);
+                entry.dependency = filed != _slotById.end() ? filed->second : kNoSlot;
+            }
+            entry.dependencyGeneration = entry.dependency != kNoSlot ? _entries[entry.dependency].generation : 0;
+            const uint32_t after       = DependencyOf(slot);
             if (after != kNoSlot && after != before) {
                 _dependencyChanges.push_back(slot);
             }
@@ -288,6 +315,9 @@ namespace Framework::Networking::Replication {
         Entry &entry = _entries[slot];
         OwnerRemove(slot, entry.owner);
         EraseValue(_alwaysVisible, slot);
+        if (const auto filed = _slotById.find(entry.id); filed != _slotById.end() && filed->second == slot) {
+            _slotById.erase(filed);
+        }
         const uint32_t generation = entry.generation + 1;
         entry                     = {};
         entry.generation          = generation;
@@ -309,15 +339,15 @@ namespace Framework::Networking::Replication {
         entry.owner = entity->ownerGUID;
     }
 
-    InterestGrid::Focus InterestGrid::FocusOf(const NetworkEntity *viewer) const {
+    InterestGrid::Focus InterestGrid::FocusOf(const View &viewer) const {
         // Focus points: the avatar, plus where its velocity puts it a moment from now. Relevance
         // takes the nearest, so the look-ahead only adds what is coming up.
         Focus focus;
-        focus.points[focus.count++] = viewer->position;
+        focus.points[focus.count++] = viewer.position;
         if (_lookaheadSeconds > 0.0f) {
-            const glm::vec3 ahead = viewer->position + viewer->velocity * _lookaheadSeconds;
-            const float dx        = ahead.x - viewer->position.x;
-            const float dv        = GroundV(ahead) - GroundV(viewer->position);
+            const glm::vec3 ahead = viewer.position + viewer.velocity * _lookaheadSeconds;
+            const float dx        = ahead.x - viewer.position.x;
+            const float dv        = GroundV(ahead) - GroundV(viewer.position);
             if (dx * dx + dv * dv > kMinLookaheadDist * kMinLookaheadDist) {
                 focus.points[focus.count++] = ahead;
             }
@@ -368,13 +398,15 @@ namespace Framework::Networking::Replication {
 
     void InterestGrid::CollectVisible(const NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, const SlotSet &previous, Scratch &scratch, std::vector<uint32_t> &out) const {
         out.clear();
-        if (!viewer) {
+        const uint32_t viewerSlot = SlotOf(viewer);
+        if (viewerSlot == kNoSlot) {
             return;
         }
+        const View &viewerView  = _entries[viewerSlot].view;
         const uint32_t capacity = Capacity();
-        const auto observer     = viewer->GetVirtualWorld();
-        const Focus focus       = FocusOf(viewer);
-        const float viewerRange = viewer->streaming.range;
+        const auto observer     = viewerView.world;
+        const Focus focus       = FocusOf(viewerView);
+        const float viewerRange = viewerView.range;
 
         // One query per focus point at the widest reach any entity can claim; the exact per-entity
         // range test happens below.
@@ -403,11 +435,12 @@ namespace Framework::Networking::Replication {
         // bypass range culling anyway, and counting them would let one player's cars evict others'.
         scratch.ranked.clear();
         for (const uint32_t slot : scratch.candidates) {
-            const NetworkEntity *entity = _entries[slot].entity;
-            if (entity == viewer || entity->ownerGUID == viewerGUID || entity->streaming.alwaysVisible) {
+            const Entry &entry = _entries[slot];
+            const View &entity = entry.view;
+            if (slot == viewerSlot || entry.owner == viewerGUID || entity.alwaysVisible) {
                 continue;
             }
-            if (!entity->streaming.visible || !entity->streaming.Admits(viewerGUID) || !InDimension(entity, observer)) {
+            if (!entity.visible || !entity.Admits(viewerGUID) || !InDimension(entity, observer)) {
                 continue;
             }
             const bool wasRelevant = previous.Test(slot);
@@ -415,15 +448,15 @@ namespace Framework::Networking::Replication {
             if (wasRelevant) {
                 range += _streamOutMargin;
             }
-            const float distSq = NearestFocusDistSq(focus, entity->position);
+            const float distSq = NearestFocusDistSq(focus, entity.position);
             if (distSq > range * range) {
                 continue;
             }
-            if (BudgetFor(entity->GetTypeId()) == 0) {
+            if (BudgetFor(entity.typeId) == 0) {
                 add(slot);
                 continue;
             }
-            scratch.ranked.push_back({entity->GetTypeId(), slot, wasRelevant ? distSq * kStickyDiscount : distSq});
+            scratch.ranked.push_back({entity.typeId, slot, wasRelevant ? distSq * kStickyDiscount : distSq});
         }
 
         // Budgeted types: keep the nearest `budget`, for this viewer only.
@@ -449,20 +482,17 @@ namespace Framework::Networking::Replication {
 
         if (const auto owned = _ownedByGuid.find(viewerGUID); owned != _ownedByGuid.end()) {
             for (const uint32_t slot : owned->second) {
-                const NetworkEntity *entity = _entries[slot].entity;
-                if (entity->streaming.visible && entity->streaming.Admits(viewerGUID)) {
+                if (Shows(slot, viewerGUID)) {
                     add(slot);
                 }
             }
         }
         for (const uint32_t slot : _alwaysVisible) {
-            const NetworkEntity *entity = _entries[slot].entity;
-            if (entity->streaming.visible && entity->streaming.Admits(viewerGUID) && InDimension(entity, observer)) {
+            if (_entries[slot].view.alwaysVisible && Shows(slot, viewerGUID) && InDimension(_entries[slot].view, observer)) {
                 add(slot);
             }
         }
-        const uint32_t viewerSlot = SlotOf(viewer);
-        if (viewerSlot != kNoSlot && viewer->streaming.visible && viewer->streaming.Admits(viewerGUID)) {
+        if (Shows(viewerSlot, viewerGUID)) {
             add(viewerSlot);
         }
 
@@ -474,34 +504,35 @@ namespace Framework::Networking::Replication {
             if (dependency == kNoSlot) {
                 continue;
             }
-            const NetworkEntity *entity = _entries[dependency].entity;
-            if (entity->streaming.visible && entity->streaming.Admits(viewerGUID)) {
+            if (Shows(dependency, viewerGUID)) {
                 add(dependency);
             }
         }
     }
 
     InterestGrid::Verdict InterestGrid::Evaluate(const NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, uint32_t slot, bool wasRelevant) const {
-        const NetworkEntity *entity = EntityAt(slot);
-        if (!viewer || !entity || !entity->streaming.visible || !entity->streaming.Admits(viewerGUID)) {
+        const uint32_t viewerSlot = SlotOf(viewer);
+        if (viewerSlot == kNoSlot || slot >= _entries.size() || _entries[slot].entity == nullptr || !Shows(slot, viewerGUID)) {
             return Verdict::Out;
         }
-        if (entity == viewer || entity->ownerGUID == viewerGUID) {
+        const Entry &entry = _entries[slot];
+        const View &entity = entry.view;
+        if (slot == viewerSlot || entry.owner == viewerGUID) {
             return Verdict::In;
         }
-        const auto observer = viewer->GetVirtualWorld();
-        if (!InDimension(entity, observer)) {
+        const View &viewerView = _entries[viewerSlot].view;
+        if (!InDimension(entity, viewerView.world)) {
             return Verdict::Out;
         }
-        if (entity->streaming.alwaysVisible) {
+        if (entity.alwaysVisible) {
             return Verdict::In;
         }
-        float range = RangeFor(entity, viewer->streaming.range);
+        float range = RangeFor(entity, viewerView.range);
         if (wasRelevant) {
             range += _streamOutMargin;
         }
-        const bool inRange = NearestFocusDistSq(FocusOf(viewer), entity->position) <= range * range;
-        if (BudgetFor(entity->GetTypeId()) != 0 && inRange != wasRelevant) {
+        const bool inRange = NearestFocusDistSq(FocusOf(viewerView), entity.position) <= range * range;
+        if (BudgetFor(entity.typeId) != 0 && inRange != wasRelevant) {
             return Verdict::Recompute;
         }
         return inRange ? Verdict::In : Verdict::Out;

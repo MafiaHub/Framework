@@ -10,6 +10,7 @@
 
 #include "errors.h"
 #include "replication/replication_manager.h"
+#include "replication/world.h"
 
 #include <logging/logger.h>
 #include <utils/profiler.h>
@@ -48,13 +49,17 @@ namespace Framework::Networking {
             _rpc.UnregisterSlot(ResolveIdentifier(registered.identifier));
         }
         _identifierSalt = salt;
-        _identifierTokens.clear();
+        {
+            const std::lock_guard guard(_identifierTokensMutex);
+            _identifierTokens.clear();
+        }
         for (const auto &registered : _rpcHandlers) {
             _rpc.RegisterSlot(ResolveIdentifier(registered.identifier), &NetworkPeer::DispatchRPC, registered.slot.get(), 0);
         }
     }
 
     const char *NetworkPeer::ResolveIdentifier(RPC::Identifier identifier) {
+        const std::lock_guard guard(_identifierTokensMutex);
         const auto it = _identifierTokens.find(identifier.digest);
         if (it != _identifierTokens.end()) {
             return it->second.c_str();
@@ -90,56 +95,78 @@ namespace Framework::Networking {
             return;
         }
 
-        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance, then
-        // send this tick's state-bag changes — the flush asks each connection what it has
-        // constructed, so it reads the relevance this rebuild just settled.
+        // A client's whole tick; a server splits it between its tick thread (NetworkServer::Update)
+        // and whoever drains its packets. The first three are a server's work and cost a client a
+        // call each, except that the flush drops a client's dirty marks.
         _replicationManager->RebuildInterest();
-        // After the rebuild and before the flush: the election reads the positions this tick
-        // settled, and a handover it decides is an ownership change the flush then sees, so an
-        // owner-scoped bag key travels to the peer that has just been given the entity rather
-        // than to the one that had it a moment ago.
         _replicationManager->Delegation().Update();
         _replicationManager->FlushStateBags();
 
         // Receive() updates every plugin before each packet; the replication pass runs on the first
         // one only, ahead of this drain's packets, which the next pass then serializes.
-        FW_PROFILE_SCOPE_N("Networking::Receive");
-        [[maybe_unused]] uint64_t packets = 0; // read by the profiler zone only
         _replicationManager->BeginNetworkUpdate();
-        for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
-            ++packets;
-            if (_packet->length == 0) {
-                continue;
-            }
-            const int offset = ResolvePacketDataOffset(_packet->data, _packet->length);
-            if (offset < 0) {
-                continue;
-            }
-            _packetDataOffset = offset;
-            uint8_t packetID  = _packet->data[_packetDataOffset];
-            if (_packetDataOffset != 0 && !IsAllowedBehindTimestamp(packetID)) {
-                ++_droppedBehindTimestamp;
-                const auto now = std::chrono::steady_clock::now();
-                if (now >= _nextTimestampDropWarning) {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropped {} control packet(s) sent behind a timestamp, last one {} from {}", _droppedBehindTimestamp, packetID, _packet->guid.g);
-                    _droppedBehindTimestamp   = 0;
-                    _nextTimestampDropWarning = now + std::chrono::seconds(1);
-                }
-                continue;
-            }
-
-            if (!HandlePacket(packetID, _packet)) {
-                if (IsReplicationPacket(packetID)) {
-                    continue;
-                }
-                if (_onUnknownPacketCallback && _onUnknownPacketCallback(_packet)) {
-                    continue;
-                }
-                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
-            }
-        }
-        FW_PROFILE_VALUE(packets);
+        DrainPackets();
         _replicationManager->EndNetworkUpdate();
+    }
+
+    void NetworkPeer::DrainPackets(const std::atomic<bool> *stop) {
+        if (!_peer) {
+            return;
+        }
+        FW_PROFILE_SCOPE_N("Networking::Receive");
+        // A server's pass is run by its tick thread (NetworkServer::Update), not by the plugin
+        // update each Receive() makes here.
+        const Replication::ReplicationManager::NoPassScope noPass(_replicationManager->IsServer());
+        [[maybe_unused]] uint64_t packets = 0; // read by the profiler zone only
+        _drainStop                        = stop;
+        while (stop == nullptr || !stop->load(std::memory_order_acquire)) {
+            BeforeReceive();
+            _packet = _peer->Receive();
+            if (_packet == nullptr) {
+                break;
+            }
+            ++packets;
+            Dispatch();
+            _peer->DeallocatePacket(_packet);
+        }
+        _packet    = nullptr;
+        _drainStop = nullptr;
+        // What the pass and the inbound state put off while they held an entity: a destruction or a
+        // state change made from inside one of their callbacks.
+        Replication::World::Settle();
+        FW_PROFILE_VALUE(packets);
+    }
+
+    void NetworkPeer::Dispatch() {
+        if (_packet->length == 0) {
+            return;
+        }
+        const int offset = ResolvePacketDataOffset(_packet->data, _packet->length);
+        if (offset < 0) {
+            return;
+        }
+        _packetDataOffset      = offset;
+        const uint8_t packetID = _packet->data[_packetDataOffset];
+        if (_packetDataOffset != 0 && !IsAllowedBehindTimestamp(packetID)) {
+            ++_droppedBehindTimestamp;
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= _nextTimestampDropWarning) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Dropped {} control packet(s) sent behind a timestamp, last one {} from {}", _droppedBehindTimestamp, packetID, _packet->guid.g);
+                _droppedBehindTimestamp   = 0;
+                _nextTimestampDropWarning = now + std::chrono::seconds(1);
+            }
+            return;
+        }
+
+        if (!HandlePacket(packetID, _packet)) {
+            if (IsReplicationPacket(packetID)) {
+                return;
+            }
+            if (_onUnknownPacketCallback && _onUnknownPacketCallback(_packet)) {
+                return;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
+        }
     }
 
     int NetworkPeer::ResolvePacketDataOffset(const uint8_t *data, uint32_t length) {

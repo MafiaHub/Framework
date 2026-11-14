@@ -14,7 +14,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Quaternion>>> Quaternion::_classes;
+    ClassCache<Quaternion> Quaternion::_classes;
 
     Vector3 Quaternion::rotateVector(const Vector3 &v) const {
         glm::vec3 result = _quat * v.vec();
@@ -46,13 +46,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Quaternion> &Quaternion::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
+        if (auto *found = _classes.Find(isolate)) {
+            return *found;
         }
+        const CatalogWriteLock building;
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.");
+        auto cls = std::make_unique<v8pp::class_<Quaternion>>(isolate, GetScriptingCatalog(isolate), "Quaternion", "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
                                                   {
@@ -126,7 +125,7 @@ namespace Framework::Scripting::Builtins {
                 "New axis-angle rotation quaternion."),
             true));
 
-        return *cls;
+        return _classes.Add(isolate, std::move(cls));
     }
 
     void Quaternion::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -141,7 +140,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Quaternion::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 
 } // namespace Framework::Scripting::Builtins

@@ -25,7 +25,7 @@ namespace Framework::Integrations::Server {
         std::array<Phase, 5> phases {{
             {"scripts", scriptsMs},
             {"replication", replicationInterestMs + replicationPassMs},
-            {"packets", packetsMs},
+            {"network", networkMs},
             {"game", gameMs},
             {"other", otherMs},
         }};

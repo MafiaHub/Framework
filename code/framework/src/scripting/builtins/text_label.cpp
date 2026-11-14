@@ -21,6 +21,7 @@
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace Framework::Scripting::Builtins {
@@ -509,29 +510,38 @@ namespace Framework::Scripting::Builtins {
             return maxSize <= 0.0f || minSize <= maxSize || Fail(isolate, "minSize must not exceed maxSize");
         }
 
+        bool Lives(uint64_t networkId) {
+            auto *replication = CoreModules::GetReplication();
+            return replication && networkId != 0 && replication->GetWorld().Read<Networking::Replication::NetworkEntity>(networkId);
+        }
+
         // `handle` is null while the label is still to be created, so it cannot be its own target.
         bool CheckTarget(v8::Isolate *isolate, const Options &options, const TextLabel *handle) {
             if (!options.attachTo || *options.attachTo == 0) {
                 return true;
             }
-            auto *replication     = CoreModules::GetReplication();
-            const bool attachable = handle ? handle->CanAttachTo(*options.attachTo) : replication && replication->GetEntityByNetworkID(*options.attachTo) != nullptr;
+            const bool attachable = handle ? handle->CanAttachTo(*options.attachTo) : Lives(*options.attachTo);
             return attachable || Fail(isolate, "attachTo must be another live entity");
         }
 
         // A player's connection, found from their avatar: what a viewer filter is keyed on. An id that
         // is no player's current avatar (gone, an NPC, or an entity they merely own) is an Error, so a
         // player can only be named once SetViewer has run for them.
-        bool ResolvePlayer(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, uint64_t id, const std::string &name, MafiaNet::PeerGuid &guid) {
-            const auto *entity = replication.GetEntityByNetworkID(id);
-            if (!entity || replication.GetViewer(entity->ownerGUID) != entity) {
+        bool ResolvePlayer(v8::Isolate *isolate, Networking::Replication::ReplicationManager &replication, uint64_t id, const std::string &name, MafiaNet::PeerGuid &guid) {
+            MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
+            bool lives               = false;
+            if (const auto entity = replication.GetWorld().Read<Networking::Replication::NetworkEntity>(id)) {
+                owner = entity->ownerGUID;
+                lives = true;
+            }
+            if (!lives || replication.GetViewerId(owner) != id) {
                 return FailError(isolate, name + ": " + std::to_string(id) + " is not a player's avatar");
             }
-            guid = entity->ownerGUID;
+            guid = owner;
             return true;
         }
 
-        bool ResolvePlayers(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const std::vector<uint64_t> &ids, const std::string &name, std::vector<MafiaNet::PeerGuid> &out) {
+        bool ResolvePlayers(v8::Isolate *isolate, Networking::Replication::ReplicationManager &replication, const std::vector<uint64_t> &ids, const std::string &name, std::vector<MafiaNet::PeerGuid> &out) {
             out.resize(ids.size());
             for (size_t i = 0; i < ids.size(); ++i) {
                 if (!ResolvePlayer(isolate, replication, ids[i], name, out[i])) {
@@ -541,15 +551,16 @@ namespace Framework::Scripting::Builtins {
             return true;
         }
 
-        bool CheckViewers(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, Options &options) {
+        bool CheckViewers(v8::Isolate *isolate, Networking::Replication::ReplicationManager &replication, Options &options) {
             const bool showTo = options.showTo && options.showTo->has_value();
             return (!showTo || ResolvePlayers(isolate, replication, **options.showTo, "showTo", options.showToGuids)) && (!options.hideFrom || ResolvePlayers(isolate, replication, *options.hideFrom, "hideFrom", options.hideFromGuids));
         }
 
-        // hideForTarget: the player the label follows is not sent it.
-        void HideFromTarget(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, const Networking::Replication::NetworkEntity *target) {
+        // hideForTarget: the player the label follows is not sent it. Both entities are the caller's
+        // to hold, here and below.
+        void HideFromTarget(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, Networking::Replication::NetworkEntity *target) {
             MafiaNet::PeerGuid hidden = MafiaNet::UNASSIGNED_PEER_GUID;
-            if (label.hideForTarget && target && replication.GetViewer(target->ownerGUID) == target) {
+            if (label.hideForTarget && target && replication.GetViewerId(target->ownerGUID) == target->GetNetworkID()) {
                 hidden = target->ownerGUID;
             }
             // Runs every tick for an attached label, so nothing is copied unless it changed.
@@ -562,7 +573,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         // An attached label streams from where its target is, in the target's virtual world.
-        void Follow(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, const Networking::Replication::NetworkEntity &target) {
+        void Follow(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, Networking::Replication::NetworkEntity &target) {
             label.position = target.position;
             if (label.GetVirtualWorld() != target.GetVirtualWorld()) {
                 label.SetVirtualWorld(target.GetVirtualWorld());
@@ -588,9 +599,61 @@ namespace Framework::Scripting::Builtins {
             replication.SetViewerFilter(label, std::move(next));
         }
 
-        void ApplyOptions(TextLabel &handle, Networking::Replication::Entities::TextLabelEntity &label, const Options &options) {
+        void SetLabelText(Networking::Replication::Entities::TextLabelEntity &label, const std::string &text) {
+            label.text = text;
+            Utils::StringUtils::TruncateUtf8(label.text, TextLabel::kMaxTextBytes);
+        }
+
+        void SetLabelFontSize(Networking::Replication::Entities::TextLabelEntity &label, float size) {
+            label.fontSize = std::clamp(size, TextLabel::kMinFontSize, TextLabel::kMaxFontSize);
+        }
+
+        // The draw distance is also the label's streaming radius, so a game that holds the type to its
+        // entities' own range sends a label only to players who could see it.
+        void SetLabelDrawDistance(Networking::Replication::Entities::TextLabelEntity &label, float distance) {
+            label.drawDistance    = std::clamp(distance, 1.0f, TextLabel::kMaxDrawMetres * TextLabel::GetUnitsPerMetre());
+            label.streaming.range = label.drawDistance;
+        }
+
+        void SetLabelMinDrawDistance(Networking::Replication::Entities::TextLabelEntity &label, float distance) {
+            if (std::isfinite(distance)) {
+                label.minDrawDistance = std::clamp(distance, 0.0f, TextLabel::kMaxDrawMetres * TextLabel::GetUnitsPerMetre());
+            }
+        }
+
+        void SetLabelMinFadeDistance(Networking::Replication::Entities::TextLabelEntity &label, float distance) {
+            if (std::isfinite(distance)) {
+                label.minFadeDistance = std::clamp(distance, 0.0f, TextLabel::kMaxDrawMetres * TextLabel::GetUnitsPerMetre());
+            }
+        }
+
+        void AttachLabel(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, Networking::Replication::NetworkEntity &target, const glm::vec3 &offset) {
+            if (label.attachNetworkId == 0) {
+                label.ownPosition     = label.position;
+                label.ownVirtualWorld = label.GetVirtualWorld();
+            }
+            label.attachNetworkId = target.GetNetworkID();
+            label.attachOffset    = offset;
+            // From where the target is now, rather than from the next tick.
+            Follow(replication, label, target);
+        }
+
+        void DetachLabel(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label) {
+            if (label.attachNetworkId == 0) {
+                return;
+            }
+            label.attachNetworkId = 0;
+            label.attachOffset    = glm::vec3(0.0f);
+            label.position        = label.ownPosition;
+            label.SetVirtualWorld(label.ownVirtualWorld);
+            HideFromTarget(replication, label, nullptr);
+        }
+
+        // `target` is the entity the label follows once the options are in: the one attachTo names
+        // when it is given, else the one it follows already. Null for none.
+        void ApplyOptions(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, Networking::Replication::NetworkEntity *target, const Options &options) {
             if (options.text) {
-                handle.SetText(*options.text);
+                SetLabelText(label, *options.text);
             }
             if (options.markup) {
                 label.markup = *options.markup;
@@ -600,18 +663,18 @@ namespace Framework::Scripting::Builtins {
             }
             if (options.attachTo) {
                 if (*options.attachTo == 0) {
-                    handle.Detach();
+                    DetachLabel(replication, label);
                 }
-                else {
-                    // Checked by the caller before anything was applied.
-                    handle.AttachTo(*options.attachTo, options.offset.value_or(label.attachOffset));
+                else if (target) {
+                    // Checked by the caller before anything was applied; gone since, it is left as it was.
+                    AttachLabel(replication, label, *target, options.offset.value_or(label.attachOffset));
                 }
             }
             else if (options.offset) {
                 label.attachOffset = *options.offset;
             }
             if (options.fontSize) {
-                handle.SetFontSize(*options.fontSize);
+                SetLabelFontSize(label, *options.fontSize);
             }
             if (options.font) {
                 label.font = *options.font;
@@ -671,16 +734,16 @@ namespace Framework::Scripting::Builtins {
                 label.maxWidth = *options.maxWidth;
             }
             if (options.drawDistance) {
-                handle.SetDrawDistance(*options.drawDistance);
+                SetLabelDrawDistance(label, *options.drawDistance);
             }
             if (options.fadeDistance) {
-                handle.SetFadeDistance(*options.fadeDistance);
+                label.fadeDistance = std::max(*options.fadeDistance, 0.0f);
             }
             if (options.minDrawDistance) {
-                handle.SetMinDrawDistance(*options.minDrawDistance);
+                SetLabelMinDrawDistance(label, *options.minDrawDistance);
             }
             if (options.minFadeDistance) {
-                handle.SetMinFadeDistance(*options.minFadeDistance);
+                SetLabelMinFadeDistance(label, *options.minFadeDistance);
             }
             if (options.occlusion) {
                 label.occlusion = *options.occlusion;
@@ -690,15 +753,16 @@ namespace Framework::Scripting::Builtins {
                     label.ownVirtualWorld = *options.virtualWorld;
                 }
                 else {
-                    handle.SetVirtualWorld(*options.virtualWorld);
+                    label.SetVirtualWorld(*options.virtualWorld);
                 }
             }
             if (options.showTo || options.hideFrom) {
-                ApplyViewers(*CoreModules::GetReplication(), label, options);
+                ApplyViewers(replication, label, options);
             }
             // After attachTo, so the player it hides from is the one it now follows.
             if (options.hideForTarget) {
-                handle.SetHideForTarget(*options.hideForTarget);
+                label.hideForTarget = *options.hideForTarget;
+                HideFromTarget(replication, label, label.attachNetworkId != 0 ? target : nullptr);
             }
         }
 
@@ -707,14 +771,14 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Array> PlayerIdArray(v8::Isolate *isolate, const Networking::Replication::ReplicationManager &replication, const std::unordered_set<MafiaNet::PeerGuid> &guids) {
             std::vector<uint64_t> ids;
             for (const MafiaNet::PeerGuid guid : guids) {
-                if (auto *viewer = replication.GetViewer(guid)) {
-                    ids.push_back(viewer->GetNetworkID());
+                if (const uint64_t viewer = replication.GetViewerId(guid)) {
+                    ids.push_back(viewer);
                 }
             }
             std::sort(ids.begin(), ids.end());
             auto array = v8::Array::New(isolate, static_cast<int>(ids.size()));
             for (size_t i = 0; i < ids.size(); ++i) {
-                array->Set(isolate->GetCurrentContext(), static_cast<uint32_t>(i), v8pp::to_v8(isolate, static_cast<double>(ids[i]))).Check();
+                array->CreateDataProperty(isolate->GetCurrentContext(), static_cast<uint32_t>(i), v8pp::to_v8(isolate, static_cast<double>(ids[i]))).Check();
             }
             return array;
         }
@@ -738,9 +802,11 @@ namespace Framework::Scripting::Builtins {
             if (viewers && viewers->only) {
                 showTo = PlayerIdArray(isolate, replication, *viewers->only);
             }
-            out->Set(context, Str(isolate, "showTo"), showTo).Check();
-            out->Set(context, Str(isolate, "hideFrom"), viewers ? PlayerIdArray(isolate, replication, viewers->except) : v8::Array::New(isolate)).Check();
-            out->Set(context, Str(isolate, "hideForTarget"), v8pp::to_v8(isolate, label.hideForTarget)).Check();
+            // Defined, not assigned: the label is held here, and an assignment would run a setter a script
+            // put on Object.prototype, which may call back into a binding and ask the world again.
+            out->CreateDataProperty(context, Str(isolate, "showTo"), showTo).Check();
+            out->CreateDataProperty(context, Str(isolate, "hideFrom"), viewers ? PlayerIdArray(isolate, replication, viewers->except) : v8::Array::New(isolate)).Check();
+            out->CreateDataProperty(context, Str(isolate, "hideForTarget"), v8pp::to_v8(isolate, label.hideForTarget)).Check();
             return out;
         }
 
@@ -750,7 +816,8 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> OptionsObject(v8::Isolate *isolate, const Networking::Replication::Entities::TextLabelEntity &label, uint32_t virtualWorld) {
             auto context   = isolate->GetCurrentContext();
             const auto put = [&](v8::Local<v8::Object> object, std::string_view key, v8::Local<v8::Value> value) {
-                object->Set(context, Str(isolate, key), value).Check();
+                // Defined, not assigned, for the reason AudienceObject gives.
+                object->CreateDataProperty(context, Str(isolate, key), value).Check();
             };
             const auto set = [&](v8::Local<v8::Object> object, std::string_view key, auto value) {
                 put(object, key, v8pp::to_v8(isolate, value));
@@ -838,24 +905,49 @@ namespace Framework::Scripting::Builtins {
         return _unitsPerMetre;
     }
 
-    TextLabel::LabelEntity *TextLabel::ResolveLabel() const {
-        return dynamic_cast<LabelEntity *>(Resolve());
+    TextLabel::HeldLabel TextLabel::ResolveLabel(uint64_t with) const {
+        HeldLabel held;
+        auto *replication = CoreModules::GetReplication();
+        if (!replication) {
+            return held;
+        }
+        using Networking::Replication::NetworkEntity;
+        if (with != 0 && with != _id) {
+            std::tie(held.entity, held.target) = replication->GetWorld().Write<NetworkEntity, NetworkEntity>(_id, with);
+        }
+        else {
+            held.entity = replication->GetWorld().Write<NetworkEntity>(_id);
+        }
+        held.label = held.entity ? dynamic_cast<LabelEntity *>(&*held.entity) : nullptr;
+        return held;
+    }
+
+    TextLabel::HeldLabel TextLabel::ResolveLabelAndTarget() const {
+        uint64_t target = 0;
+        if (const auto label = ResolveLabel()) {
+            target = label->attachNetworkId;
+        }
+        HeldLabel held = ResolveLabel(target);
+        // Followed something else by now: without the entity that was asked for.
+        if (held && held->attachNetworkId != target) {
+            held.target = {};
+        }
+        return held;
     }
 
     std::string TextLabel::GetText() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->text : std::string();
     }
 
     void TextLabel::SetText(const std::string &text) {
-        if (auto *label = ResolveLabel()) {
-            label->text = text;
-            Utils::StringUtils::TruncateUtf8(label->text, kMaxTextBytes);
+        if (const auto label = ResolveLabel()) {
+            SetLabelText(*label, text);
         }
     }
 
     uint32_t TextLabel::GetColor() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->color : 0xFFFFFFFF;
     }
 
@@ -867,88 +959,85 @@ namespace Framework::Scripting::Builtins {
     }
 
     void TextLabel::SetColorPacked(uint32_t argb) {
-        if (auto *label = ResolveLabel()) {
+        if (const auto label = ResolveLabel()) {
             label->color = argb;
         }
     }
 
     float TextLabel::GetFontSize() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->fontSize : 0.0f;
     }
 
     void TextLabel::SetFontSize(float size) {
-        if (auto *label = ResolveLabel()) {
-            label->fontSize = std::clamp(size, kMinFontSize, kMaxFontSize);
+        if (const auto label = ResolveLabel()) {
+            SetLabelFontSize(*label, size);
         }
     }
 
     float TextLabel::GetDrawDistance() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->drawDistance : 0.0f;
     }
 
-    // The draw distance is also the label's streaming radius, so a game that holds the type to its
-    // entities' own range sends a label only to players who could see it.
     void TextLabel::SetDrawDistance(float distance) {
-        if (auto *label = ResolveLabel()) {
-            label->drawDistance    = std::clamp(distance, 1.0f, kMaxDrawMetres * _unitsPerMetre);
-            label->streaming.range = label->drawDistance;
+        if (const auto label = ResolveLabel()) {
+            SetLabelDrawDistance(*label, distance);
         }
     }
 
     float TextLabel::GetFadeDistance() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->fadeDistance : 0.0f;
     }
 
     void TextLabel::SetFadeDistance(float distance) {
-        if (auto *label = ResolveLabel()) {
+        if (const auto label = ResolveLabel()) {
             label->fadeDistance = std::max(distance, 0.0f);
         }
     }
 
     float TextLabel::GetMinDrawDistance() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->minDrawDistance : 0.0f;
     }
 
     void TextLabel::SetMinDrawDistance(float distance) {
-        if (auto *label = ResolveLabel(); label && std::isfinite(distance)) {
-            label->minDrawDistance = std::clamp(distance, 0.0f, kMaxDrawMetres * _unitsPerMetre);
+        if (const auto label = ResolveLabel()) {
+            SetLabelMinDrawDistance(*label, distance);
         }
     }
 
     float TextLabel::GetMinFadeDistance() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->minFadeDistance : 0.0f;
     }
 
     void TextLabel::SetMinFadeDistance(float distance) {
-        if (auto *label = ResolveLabel(); label && std::isfinite(distance)) {
-            label->minFadeDistance = std::clamp(distance, 0.0f, kMaxDrawMetres * _unitsPerMetre);
+        if (const auto label = ResolveLabel()) {
+            SetLabelMinFadeDistance(*label, distance);
         }
     }
 
     std::string TextLabel::GetFont() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? label->font : std::string();
     }
 
     void TextLabel::SetFont(const std::string &family) {
-        if (auto *label = ResolveLabel()) {
+        if (const auto label = ResolveLabel()) {
             label->font = family;
             Utils::StringUtils::TruncateUtf8(label->font, kMaxFontBytes);
         }
     }
 
     uint32_t TextLabel::GetStyle() const {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         return label ? static_cast<uint32_t>(label->style) : 0;
     }
 
     void TextLabel::SetStyle(uint32_t style) {
-        if (auto *label = ResolveLabel()) {
+        if (const auto label = ResolveLabel()) {
             if (style <= static_cast<uint32_t>(LabelStyle::Box)) {
                 Networking::Replication::Entities::ApplyTextLabelStylePreset(*label, static_cast<LabelStyle>(style));
             }
@@ -956,43 +1045,34 @@ namespace Framework::Scripting::Builtins {
     }
 
     bool TextLabel::CanAttachTo(uint64_t networkId) const {
-        auto *replication = CoreModules::GetReplication();
-        return replication && networkId != 0 && networkId != _id && replication->GetEntityByNetworkID(networkId) != nullptr;
+        return networkId != _id && Lives(networkId);
     }
 
     bool TextLabel::AttachTo(uint64_t networkId, const glm::vec3 &offset) {
-        auto *label = ResolveLabel();
-        if (!label || !CanAttachTo(networkId)) {
+        if (networkId == 0 || networkId == _id) {
             return false;
         }
-        if (label->attachNetworkId == 0) {
-            label->ownPosition     = label->position;
-            label->ownVirtualWorld = label->GetVirtualWorld();
+        // The label and what it is to follow, taken together.
+        const auto label = ResolveLabel(networkId);
+        if (!label || !label.target) {
+            return false;
         }
-        label->attachNetworkId = networkId;
-        label->attachOffset    = offset;
+        AttachLabel(*CoreModules::GetReplication(), *label, *label.target, offset);
         _attached.insert(_id);
-        // From where the target is now, rather than from the next tick.
-        auto *replication = CoreModules::GetReplication();
-        Follow(*replication, *label, *replication->GetEntityByNetworkID(networkId));
         return true;
     }
 
     void TextLabel::Detach() {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         if (!label || label->attachNetworkId == 0) {
             return;
         }
-        label->attachNetworkId = 0;
-        label->attachOffset    = glm::vec3(0.0f);
-        label->position        = label->ownPosition;
-        label->SetVirtualWorld(label->ownVirtualWorld);
+        DetachLabel(*CoreModules::GetReplication(), *label);
         _attached.erase(_id);
-        HideFromTarget(*CoreModules::GetReplication(), *label, nullptr);
     }
 
     void TextLabel::SetVisibleFor(MafiaNet::PeerGuid guid, bool visible) {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabel();
         if (!label) {
             return;
         }
@@ -1000,35 +1080,46 @@ namespace Framework::Scripting::Builtins {
     }
 
     void TextLabel::SetHideForTarget(bool hide) {
-        auto *label = ResolveLabel();
+        const auto label = ResolveLabelAndTarget();
         if (!label) {
             return;
         }
-        auto *replication    = CoreModules::GetReplication();
         label->hideForTarget = hide;
-        HideFromTarget(*replication, *label, label->attachNetworkId != 0 ? replication->GetEntityByNetworkID(label->attachNetworkId) : nullptr);
+        HideFromTarget(*CoreModules::GetReplication(), *label, label.target ? &*label.target : nullptr);
     }
 
     void TextLabel::FollowTargets(Networking::Replication::ReplicationManager &replication) {
-        std::vector<Networking::Replication::NetworkEntity *> orphans;
+        using Networking::Replication::NetworkEntity;
+        Networking::Replication::World &world = replication.GetWorld();
+        std::vector<uint64_t> orphans;
         for (auto it = _attached.begin(); it != _attached.end();) {
-            auto *label = dynamic_cast<LabelEntity *>(replication.GetEntityByNetworkID(*it));
-            if (!label || label->attachNetworkId == 0) {
+            uint64_t target = 0;
+            if (const auto entity = world.Read<NetworkEntity>(*it)) {
+                const auto *label = dynamic_cast<const LabelEntity *>(&*entity);
+                target            = label ? label->attachNetworkId : 0;
+            }
+            if (target == 0) {
                 it = _attached.erase(it);
                 continue;
             }
-            auto *target = replication.GetEntityByNetworkID(label->attachNetworkId);
-            if (!target) {
-                orphans.push_back(label);
+            // Both at once: the label is moved to where its target is while neither changes.
+            auto [entity, followed] = world.Write<NetworkEntity, NetworkEntity>(*it, target);
+            auto *label             = entity ? dynamic_cast<LabelEntity *>(&*entity) : nullptr;
+            if (!label || label->attachNetworkId != target) {
                 it = _attached.erase(it);
                 continue;
             }
-            Follow(replication, *label, *target);
+            if (!followed) {
+                orphans.push_back(*it);
+                it = _attached.erase(it);
+                continue;
+            }
+            Follow(replication, *label, *followed);
             ++it;
         }
         // A label lives as long as the entity it follows: a name tag must not outstay its player.
-        for (auto *label : orphans) {
-            replication.DestroyEntity(label);
+        for (const uint64_t label : orphans) {
+            world.Destroy(label);
         }
     }
 
@@ -1039,12 +1130,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     void TextLabel::Destroy() {
-        auto *label = ResolveLabel();
-        if (!label) {
+        // Let go of before it is destroyed, or it would outlive this call.
+        if (!ResolveLabel()) {
             return;
         }
         if (auto *replication = CoreModules::GetReplication()) {
-            replication->DestroyEntity(label);
+            replication->GetWorld().Destroy(_id);
         }
     }
 
@@ -1219,8 +1310,9 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        int count = 0;
-        replication->ForEach<LabelEntity>([&count](LabelEntity *) {
+        Networking::Replication::World &world = replication->GetWorld();
+        int count                             = 0;
+        world.ForEach<LabelEntity>([&count](Networking::Replication::Ref<LabelEntity> &) {
             ++count;
         });
         if (count >= kMaxLabels) {
@@ -1228,21 +1320,33 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        auto *label = replication->CreateEntity<LabelEntity>();
-        if (!label) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)")));
-            return;
+        uint64_t id = 0;
+        {
+            // Held by its creator until it has its place and text.
+            const Networking::Replication::Ref<LabelEntity> label = world.Create<LabelEntity>();
+            if (!label) {
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "TextLabel.create: failed to create entity (type not registered?)")));
+                return;
+            }
+            label->position = glm::vec3(static_cast<float>(v8pp::from_v8<double>(isolate, info[0])), static_cast<float>(v8pp::from_v8<double>(isolate, info[1])), static_cast<float>(v8pp::from_v8<double>(isolate, info[2])));
+            SetLabelText(*label, v8pp::from_v8<std::string>(isolate, info[3]));
+            SetLabelDrawDistance(*label, kDefaultMetres * _unitsPerMetre);
+            id = label->GetNetworkID();
         }
 
-        label->position = glm::vec3(static_cast<float>(v8pp::from_v8<double>(isolate, info[0])), static_cast<float>(v8pp::from_v8<double>(isolate, info[1])), static_cast<float>(v8pp::from_v8<double>(isolate, info[2])));
-
-        auto wrapped = v8pp::class_<TextLabel>::create_object(isolate, label->GetNetworkID());
+        auto wrapped = v8pp::class_<TextLabel>::create_object(isolate, id);
         auto *handle = v8pp::class_<TextLabel>::unwrap_object(isolate, wrapped);
-        handle->SetText(v8pp::from_v8<std::string>(isolate, info[3]));
-        handle->SetDrawDistance(kDefaultMetres * _unitsPerMetre);
 
         if (withOptions) {
-            ApplyOptions(*handle, *label, options);
+            // With the entity the options attach it to, which cannot be asked for while the label
+            // alone is held.
+            const uint64_t target = options.attachTo.value_or(0);
+            if (const auto label = handle->ResolveLabel(target)) {
+                ApplyOptions(*replication, *label, label.target ? &*label.target : nullptr, options);
+                if (label->attachNetworkId != 0) {
+                    _attached.insert(id);
+                }
+            }
         }
         else {
             if (info.Length() >= 5 && info[4]->IsNumber()) {
@@ -1273,10 +1377,34 @@ namespace Framework::Scripting::Builtins {
         if (!ParseOptions(isolate, info[0].As<v8::Object>(), _unitsPerMetre, options)) {
             return;
         }
-        // Parsing ran the options' getters, which can destroy the label; look it up only now.
-        auto *label = self->ResolveLabel();
-        if (label && CheckTarget(isolate, options, self) && CheckSizes(isolate, options, label) &&CheckViewers(isolate, *CoreModules::GetReplication(), options)) {
-            ApplyOptions(*self, *label, options);
+        // Parsing ran the options' getters, which can destroy the label; look it up only now. The
+        // checks ask the world for other entities, so each holds the label no longer than it needs.
+        const bool lives = static_cast<bool>(self->ResolveLabel());
+        if (!lives || !CheckTarget(isolate, options, self)) {
+            return;
+        }
+        uint64_t followed = 0;
+        {
+            const auto label = self->ResolveLabel();
+            if (!label || !CheckSizes(isolate, options, label.label)) {
+                return;
+            }
+            followed = label->attachNetworkId;
+        }
+        auto *replication = CoreModules::GetReplication();
+        if (!CheckViewers(isolate, *replication, options)) {
+            return;
+        }
+        // With the entity it follows once the options are in.
+        const uint64_t target = options.attachTo.value_or(followed);
+        if (const auto label = self->ResolveLabel(target)) {
+            ApplyOptions(*replication, *label, label.target ? &*label.target : nullptr, options);
+            if (label->attachNetworkId != 0) {
+                _attached.insert(self->GetId());
+            }
+            else {
+                _attached.erase(self->GetId());
+            }
         }
     }
 
@@ -1326,18 +1454,18 @@ namespace Framework::Scripting::Builtins {
     void TextLabel::JS_GetOptions(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate = info.GetIsolate();
         auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        auto *label          = self ? self->ResolveLabel() : nullptr;
+        const auto label     = self ? self->ResolveLabel() : HeldLabel();
         if (!label) {
             info.GetReturnValue().SetNull();
             return;
         }
-        info.GetReturnValue().Set(OptionsObject(isolate, *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : self->GetVirtualWorld()));
+        info.GetReturnValue().Set(OptionsObject(isolate, *label, label->attachNetworkId != 0 ? label->ownVirtualWorld : label->GetVirtualWorld()));
     }
 
     void TextLabel::JS_GetAudience(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate = info.GetIsolate();
         auto *self           = v8pp::class_<TextLabel>::unwrap_object(isolate, info.This());
-        auto *label          = self ? self->ResolveLabel() : nullptr;
+        const auto label     = self ? self->ResolveLabel() : HeldLabel();
         if (!label) {
             info.GetReturnValue().SetNull();
             return;

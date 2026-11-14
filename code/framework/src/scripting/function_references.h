@@ -33,7 +33,13 @@ namespace Framework::Scripting {
      * stand-ins held. A runtime gets one stand-in per export, so the same function arrives as the same stand-in.
      * A function sent as a property of an object runs with that object, in its owner, as `this`.
      *
-     * Every runtime is entered from the one scripting thread, so a call nests the owner's isolate inside the caller's.
+     * Calls are made on the scripting thread, or by a thread that has the world in its place: a call nests the owner's
+     * isolate inside the caller's, and runtimes are added and removed there too. Copying arguments out of a runtime
+     * (CopyArguments(), For()) and letting go of a copy may happen on any thread, at the same time as each other and
+     * as a call: a thread with a runtime of its own (see NodeEngine::CreateOffThreadRuntime) does both. The tables are
+     * behind a mutex for that, which is never held while script runs or while an isolate is waited for. A function a
+     * runtime exported is only ever touched in its isolate: released from elsewhere, its handle waits for the
+     * runtime's next export, import or removal.
      */
     class FunctionReferences final {
       public:
@@ -84,6 +90,9 @@ namespace Framework::Scripting {
          * an exception naming the argument is pending in the caller and the result is empty.
          */
         std::optional<std::vector<TransferredValue>> CopyArguments(v8::Isolate *caller, const std::vector<v8::Local<v8::Value>> &arguments);
+        // The other half, for copies that crossed threads on their own: builds them again in `target`, a runtime
+        // this object knows, inside its current context. Empty, with the exception pending there, on failure.
+        std::optional<std::vector<v8::Local<v8::Value>>> RebuildArguments(v8::Isolate *target, const std::vector<TransferredValue> &arguments);
 
         /**
          * Call a function that lives in `owner` from inside `caller`, whose scopes the caller holds. The arguments are

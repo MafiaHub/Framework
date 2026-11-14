@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <networking/packet_thread.h>
 #include <networking/replication/replication_manager.h>
 #include <networking/rpc/rpc_identifier.h>
 
@@ -18,10 +19,12 @@
 
 #include "asset_file_server.h"
 #include "asset_paks/asset_pak_builder.h"
+#include "client_package.h"
 #include "connection_gate.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
+#include "script_thread.h"
 #include "scripting/module.h"
 #include "tick_breakdown.h"
 #include "voice/server/voice_server.h"
@@ -38,12 +41,16 @@
 #include <mafianet/types.h>
 
 #include <utils/crypto.h>
+#include <utils/fork_join_pool.h>
 #include <utils/lifecycle.h>
+#include <utils/task_scheduler.h>
+#include <utils/token_bucket.h>
 
 #include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <sig.h>
@@ -87,6 +94,28 @@ namespace Framework::Integrations::Server {
         // A script handler, listener, export call or resource tick that spends at least this long in its own
         // script logs a warning naming the resource (server.json "slow-script-ms"; 0 turns the warnings off).
         int32_t slowScriptWarnMs = 50;
+
+        // An RPC handler that holds the packet thread at least this long logs a warning, at most once a second
+        // (server.json "slow-packet-handler-ms"; 0 turns the warnings off). It delays the packets behind it.
+        int32_t slowPacketHandlerWarnMs = 10;
+
+        // Script events a client may raise on the server (Events.emitServer): `clientEventRate` a
+        // second, with bursts of up to `clientEventBurst`. An event over that is dropped and counted.
+        // Each one dropped also counts against the flood limit (`clientEventFloodRate` a second,
+        // bursts of `clientEventFloodBurst`); a client past that is dropped from the server. The
+        // defaults are FiveM's for its network events. A rate of 0 turns that limit off.
+        double clientEventRate       = 50.0;
+        double clientEventBurst      = 200.0;
+        double clientEventFloodRate  = 75.0;
+        double clientEventFloodBurst = 300.0;
+
+        // Threads beside the tick thread (server.json "replication-threads" and "background-threads", or
+        // the flags of the same names). Negative, the default, sizes them to the host's cores (see
+        // Utils::ThreadBudget); 0 keeps that work on the tick thread.
+        // Replication: interest and the serialize pass, and the game's own per-tick loops.
+        int32_t replicationThreads = -1;
+        // Background: blocking work such as packaging a hot-reloaded resource.
+        int32_t backgroundThreads = -1;
 
         // What a resource's asset paks may carry, one lane per folder (`<resource>/<lane>/`). Null
         // ships none. See AssetPakBuilder.
@@ -210,9 +239,6 @@ namespace Framework::Integrations::Server {
         std::chrono::steady_clock::time_point _lastHitchWarnAt {};
         uint32_t _suppressedHitches = 0;
         TickBreakdown _lastTick;
-        // Script work run between ticks that came back past the tick's due time; warned about like a slow tick.
-        std::chrono::steady_clock::time_point _lastLateTickWarnAt {};
-        uint32_t _suppressedLateTicks = 0;
 
         InstanceOptions _opts;
 
@@ -235,10 +261,29 @@ namespace Framework::Integrations::Server {
         // Reused every tick so the drain never allocates.
         std::vector<Voice::TalkingChange> _voiceTalkingChanges;
         std::vector<Voice::TierChange> _voiceTierChanges;
+        // Where each connection is on its way into the world. Written where packets are handled and
+        // read by admission, where scripts run: under this mutex, which is held across no call.
+        mutable std::mutex _connectionsMutex;
         std::unordered_set<uint64_t> _armedSpawnBarrierGuids;
         std::unordered_set<uint64_t> _readyPlayerGuids;
         // Connections that joined the world (ClientJoin): the ones holding a player slot.
         std::unordered_set<uint64_t> _joinedGuids;
+
+        // What each connection has left of its script-event allowance. The packet thread's own: read
+        // where the events are handled and forgotten where the disconnection is.
+        struct ClientEventLimit {
+            Utils::TokenBucket events;
+            Utils::TokenBucket flood;
+            // Dropped for flooding: what it had already sent is still in the queue, and gets nowhere.
+            bool dropped = false;
+        };
+        std::unordered_map<uint64_t, ClientEventLimit> _clientEventLimits;
+        std::atomic<uint64_t> _clientEventsDropped {0};
+        uint64_t _clientEventsDroppedSinceWarning = 0;
+        std::chrono::steady_clock::time_point _nextClientEventWarning {};
+        // Whether this event of that connection may go on to the scripts; drops the connection when
+        // it floods.
+        bool AllowClientEvent(Framework::Networking::Sender sender);
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;
@@ -264,6 +309,10 @@ namespace Framework::Integrations::Server {
 
         void InitEndpoints();
         void InitNetworkingMessages();
+        // Calls a mod's override where a packet is handled. One that throws is logged and the packet
+        // thread carries on with what the Framework does next for that connection: thrown out of
+        // RakPeer::Receive it would end the thread and the process.
+        static void GuardOverride(const char *name, uint64_t guid, const fu2::function<void() const> &call);
         // A connection request arrived: hand it to the admission gate, or admit it at once when no
         // script gates connections. Refused outright when it carries no identity.
         void OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &identity);
@@ -281,17 +330,46 @@ namespace Framework::Integrations::Server {
         std::set<std::string> _serverOnlyResources;
 
         std::set<std::string> CollectServerOnlyResources() const;
-        // Packages one resource into the staging directory and records its hash, size and served
-        // file. False when it ships no package (no client content, bad name, packaging failed).
-        bool PackageClientResource(const std::string &resourceName, const std::string &stagingDir, size_t &packagedFiles);
-        // Builds (or forgets) one resource's asset paks and records what is served.
-        void PublishResourceAssetPaks(const std::string &resourceName);
-        // After one resource (re)started at runtime: repackage it alone when nothing else can have
-        // changed, the whole set otherwise.
+
+        // Publishing one resource to clients is cut in three so the slow part can leave the tick
+        // thread: what to build is read off the resource here (Plan), built anywhere (RunClientPublish:
+        // its package beside the served one, its asset paks under new names), and only then recorded,
+        // put in place and served, here again (Record). Nothing the server has announced changes
+        // before Record.
+        struct ClientPublishJob {
+            std::string name;
+            std::optional<ClientPackageRequest> package;
+            std::optional<std::filesystem::path> pakFolder;
+        };
+        struct ClientPublish {
+            bool wantsPackage = false;
+            ClientPackage package;
+            bool wantsPaks = false;
+            // The paks could not be built: not the same as a resource that ships none. What it served before stays.
+            bool paksFailed = false;
+            AssetPakBuilder::Prepared paks;
+        };
+        ClientPublishJob PlanClientPublish(const std::string &name, const std::string &stagingDir);
+        // Numbers the builds, so two of one resource never share the file they write.
+        uint64_t _publishSerial = 0;
+        static ClientPublish RunClientPublish(const ClientPublishJob &job, const AssetPakBuilder &paks);
+        void RecordClientPublish(const std::string &name, ClientPublish built, size_t &packagedFiles);
+        // After one resource (re)started at runtime: rebuilt alone on a background thread when nothing
+        // else can have changed, and announced to clients once it is served; the whole set, at once,
+        // otherwise.
         void RepublishClientResource(const std::string &name);
+        void FinishRepublish(const std::string &name, ClientPublish built);
+        // Tell connected clients a resource's files changed. Only after they are served.
+        void AnnounceResourceRefresh(const std::string &name);
+        // While everything is published again: what each resource's paks were before, to put back for a
+        // resource whose paks could not be rebuilt. Empty otherwise.
+        std::unordered_map<std::string, std::vector<Framework::Networking::RPC::AssetPakInfo>> _assetPaksBefore;
+        // Resources being rebuilt in the background, and those that changed again meanwhile.
+        std::unordered_set<std::string> _publishing;
+        std::unordered_set<std::string> _publishAgain;
         // Directory the built .fwpak containers are staged in for the streamer to upload.
         std::string GetPackageStagingDir() const;
-        // Re-sync a hot-reloaded/started client resource to connected clients.
+        // A client resource started or was hot-reloaded: republish it, then re-sync connected clients.
         void BroadcastResourceRefresh(const std::string &name);
         // Tell connected clients to stop a client resource.
         void BroadcastResourceStop(const std::string &name);
@@ -313,12 +391,35 @@ namespace Framework::Integrations::Server {
         // Subscription raising entityStateChange; released on shutdown.
         Framework::Networking::Replication::StateChangeHandle _stateBagEvents = Framework::Networking::Replication::kInvalidStateChangeHandle;
 
+        // The thread scripts run on. A tick has the world from its first line to its last, and so does
+        // the thread that runs Init() and Shutdown().
+        std::unique_ptr<ScriptThread> _scriptThread;
+        bool _worldHeld = false;
+        // The thread packets are handled on: RPC handlers, inbound entity state, connections opening
+        // and closing. It does not take the world; see Networking::PacketThread.
+        Framework::Networking::PacketThread _packetThread;
+        // What a tick owes scripts, once per tick interval, on their thread.
+        void ScriptRound();
+        // The scripting half of Init(), on the script thread. Empty on success.
+        std::string InitScripting(Framework::Networking::Replication::ReplicationManager *replication);
+
+        // Declared last, so they are stopped first: background work reads the asset pak builder above.
+        // The replication pass and the game's own per-tick loops share the workers; the tick thread
+        // is one of their lanes.
+        std::unique_ptr<Utils::ForkJoinPool> _tickWorkers;
+        std::unique_ptr<Utils::TaskScheduler> _scheduler;
+
       public:
         Instance();
         ~Instance();
 
         [[nodiscard]] Utils::Result<void, Error> Init(InstanceOptions &);
         void Shutdown() override;
+
+        // Client script events dropped by the rate limit since the server started.
+        uint64_t ClientEventsDropped() const {
+            return _clientEventsDropped.load(std::memory_order_relaxed);
+        }
 
         // Where the last tick's time went, by phase. The slow-tick warning prints it.
         const TickBreakdown &GetLastTickBreakdown() const {
@@ -331,25 +432,33 @@ namespace Framework::Integrations::Server {
         virtual void PostScriptInit() {}
         virtual void PostUpdate() {}
         virtual void PreShutdown() {}
+        // Called for every scripting runtime as it is set up: each resource's, when it starts, and
+        // the tick and packet threads' own. It declares bindings, and builds the mod's handle classes
+        // (T::GetClass(isolate)) so that wrapping an entity later is a lookup. It runs under the lock
+        // that keeps binding declarations apart (Scripting::CatalogWriteLock): it must not ask the
+        // world for a handle, and should run no script.
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
         }
 
-        virtual void OnPlayerConnect(const PlayerConnectionData &data) {
-            (void)data;
+        // The five below are called where the packet that caused them is handled, on the packet
+        // thread, with no entity held: an override reaches entities through `world`, by handle
+        // (networking/replication/world.h), and anything else it touches guards itself.
+        virtual void OnPlayerConnect(const PlayerConnectionData &data, Framework::Networking::Replication::World &world) {
+            (void)data, (void)world;
         }
-        virtual void OnPlayerReady(MafiaNet::PeerGuid guid) {
-            (void)guid;
+        virtual void OnPlayerReady(MafiaNet::PeerGuid guid, Framework::Networking::Replication::World &world) {
+            (void)guid, (void)world;
         }
-        virtual void OnPlayerDisconnect(MafiaNet::PeerGuid guid) {
-            (void)guid;
+        virtual void OnPlayerDisconnect(MafiaNet::PeerGuid guid, Framework::Networking::Replication::World &world) {
+            (void)guid, (void)world;
         }
         // Plain lines -> OnChatMessage; '/' lines -> OnChatCommand (command + whitespace-split args).
-        virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text) {
-            (void)senderNetworkId, (void)text;
+        virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text, Framework::Networking::Replication::World &world) {
+            (void)senderNetworkId, (void)text, (void)world;
         }
-        virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) {
-            (void)senderNetworkId, (void)text, (void)command, (void)args;
+        virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args, Framework::Networking::Replication::World &world) {
+            (void)senderNetworkId, (void)text, (void)command, (void)args, (void)world;
         }
         // A player started or stopped talking; also emitted as the "playerVoiceStart" /
         // "playerVoiceStop" events. Derived from relayed frames, so it tracks speech rather than
@@ -383,7 +492,7 @@ namespace Framework::Integrations::Server {
         void OnSignal(sig_signal_t);
 
         // Parse a received chat line and dispatch it to OnChatMessage / OnChatCommand.
-        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text);
+        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text, Framework::Networking::Replication::World &world);
 
         InstanceOptions &GetOptions() {
             return _opts;
@@ -409,6 +518,29 @@ namespace Framework::Integrations::Server {
 
         HTTP::Webserver *GetWebserver() const {
             return _webServer.get();
+        }
+
+        // Scripts run on a thread of their own. Code on the tick thread (PostUpdate) and on the packet
+        // thread (RPC handlers, the On* overrides above) raises events as it always did, and they are
+        // carried to that thread; for anything else that ends in script, this runs `task` there, with
+        // the world: it may open an EngineScope, call into resources and touch the world like tick
+        // code. Before Init() and after Shutdown() it runs at once.
+        void PostToScripts(Utils::TaskScheduler::Task task);
+        // The same, and waits for it. From the tick thread the world may have changed when it returns.
+        // Not from inside a handle's scope: the task may need the entity held, so the call logs and
+        // aborts, as EmitReservedSync does. Let go first (Ref::Reset), or use PostToScripts.
+        void RunOnScriptThread(Utils::TaskScheduler::Task task);
+
+        // Blocking work goes here instead of into the tick: RunInBackground for the work, with a
+        // completion that runs on the tick thread, at the top of a later tick.
+        Utils::TaskScheduler *GetScheduler() const {
+            return _scheduler.get();
+        }
+
+        // For a loop of independent iterations inside PostUpdate: Run() spreads it over the
+        // replication workers and returns when every iteration has run.
+        Utils::ForkJoinPool *GetTickWorkers() const {
+            return _tickWorkers.get();
         }
 
         // Register a custom command with the command processor

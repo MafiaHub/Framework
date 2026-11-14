@@ -99,10 +99,15 @@ clients so they re-sync and apply it in place:
 1. Any `StartResource` after the initial boot fires
    `ResourceManager::AddOnResourceStarted`; the server `Instance` reacts (boot
    starts are skipped — clients get the full list on connect).
-2. The server repackages and republishes the client files
-   (`PublishClientAssets`), so the refresh announces their new hashes.
-3. The server broadcasts a `ResourceRefresh` RPC (affected resource
-   names/versions), for resources with a client entry point.
+2. The server repackages the resource's client files on a background thread
+   (`RepublishClientResource`), beside the files clients are still being
+   served, so the tick is not held up by a large resource. A tick then puts
+   the new files in place and serves them. See `docs/server_threading.md`.
+3. In that same tick the server broadcasts a `ResourceRefresh` RPC (affected
+   resource names/versions and their new hashes), for resources with a client
+   entry point or asset paks: a resource that ships assets only hot-reloads
+   too. A resource changed again while it was being built is built
+   once more before anything is announced.
 4. The client re-runs a **targeted** HTTP download of the flagged resources
    (files whose cached hash still matches are skipped; unlike the connect-time
    download it does not stop all resources),

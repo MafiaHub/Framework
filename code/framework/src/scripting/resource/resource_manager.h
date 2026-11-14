@@ -262,6 +262,9 @@ namespace Framework::Scripting {
          * Calls and values between resources' runtimes, or null when every resource shares one.
          */
         FunctionReferences *GetFunctionReferences() const;
+        Engine *GetEngine() const {
+            return _jsEngine;
+        }
 
         /**
          * Get the Events instance owned by this manager.

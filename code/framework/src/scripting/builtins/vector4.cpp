@@ -13,7 +13,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector4>>> Vector4::_classes;
+    ClassCache<Vector4> Vector4::_classes;
 
     Vector4 &Vector4::normalize() {
         float len = glm::length(_vec);
@@ -29,13 +29,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Vector4> &Vector4::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
+        if (auto *found = _classes.Find(isolate)) {
+            return *found;
         }
+        const CatalogWriteLock building;
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector4>>(isolate, GetScriptingCatalog(isolate), "Vector4", "Mutable four-dimensional vector.");
+        auto cls = std::make_unique<v8pp::class_<Vector4>>(isolate, GetScriptingCatalog(isolate), "Vector4", "Mutable four-dimensional vector.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float, float>(v8pp::metadata::docs("void",
                                                   {
@@ -106,7 +105,7 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<decltype(&Vector4::zero)>("zero", v8pp::metadata::docs("Vector4", {}, "Creates a zero vector.", "New Vector4(0, 0, 0, 0)."), true));
         metadata.record(v8pp::metadata::function_of<decltype(&Vector4::one)>("one", v8pp::metadata::docs("Vector4", {}, "Creates a vector whose components are one.", "New Vector4(1, 1, 1, 1)."), true));
 
-        return *cls;
+        return _classes.Add(isolate, std::move(cls));
     }
 
     void Vector4::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -121,7 +120,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Vector4::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 
 } // namespace Framework::Scripting::Builtins

@@ -48,9 +48,11 @@ namespace Framework::Voice {
     // payloads, which is what keeps voice off the server's CPU budget.
     //
     // Frames are relayed on RakPeer's network thread, so a stalled tick does not break anyone's
-    // voice up. The router stays on the main thread: Update publishes each speaker's recipients
-    // as one immutable table the relay reads, and the relay queues arrivals back for Update.
-    // Everything public is main thread only.
+    // voice up. The router stays off it: Update publishes each speaker's recipients as one
+    // immutable table the relay reads, and the relay queues arrivals back for Update.
+    // Everything public is safe from any thread: the tick's, a script's, one handling packets.
+    // One mutex guards the router and the bookkeeping; it is taken last, so a caller may hold an
+    // entity, and nothing here asks for one while it is held.
     class VoiceServer final {
       public:
         VoiceServer() = default;
@@ -72,7 +74,7 @@ namespace Framework::Voice {
 
         // Feeds the router each player's avatar position and virtual world. Call once per tick,
         // before that tick's packets, so its voice frames route on current worlds.
-        void SyncAvatars(const Networking::Replication::ReplicationManager &replication);
+        void SyncAvatars(Networking::Replication::ReplicationManager &replication);
 
         // What the relay forwards `talker`'s frames to right now: the table Update last published.
         // Rebuilt every kRecipientRefreshMs, and on the next Update after anything that decides
@@ -82,8 +84,12 @@ namespace Framework::Voice {
         // The relay, on RakPeer's network thread, for every ID_RAKVOICE_RELAY_DATA packet.
         void OnVoiceFrame(MafiaNet::Packet *packet);
 
-        VoiceRouter &GetRouter() {
-            return _router;
+        // Runs fn on the routing rule, under the lock that guards it, and returns what it returns.
+        // fn asks and sets; it does not call back into this class's Set* or into the world.
+        template <typename Fn>
+        auto WithRouter(Fn &&fn) {
+            const std::lock_guard lock(_mutex);
+            return fn(_router);
         }
 
         // Server-wide audibility radius, mirrored to connected clients. <= 0 restores
@@ -91,6 +97,7 @@ namespace Framework::Voice {
         void SetProximityRange(float meters);
 
         float GetProximityRange() const {
+            const std::lock_guard lock(_mutex);
             return _router.GetDefaultRange();
         }
 
@@ -103,6 +110,7 @@ namespace Framework::Voice {
         void SetTierRange(VoiceTier tier, float meters);
 
         float GetTierRange(VoiceTier tier) const {
+            const std::lock_guard lock(_mutex);
             return _router.GetTierRange(tier);
         }
 
@@ -156,6 +164,8 @@ namespace Framework::Voice {
         // one player's change removes them from everyone else's.
         void InvalidateRecipients();
 
+        // Recursive: a tier request applies through SetPlayerTier.
+        mutable std::recursive_mutex _mutex;
         Networking::NetworkServer *_server = nullptr;
         bool _attached                     = false;
         MafiaNet::RakVoice _voice;
@@ -169,7 +179,7 @@ namespace Framework::Voice {
         int64_t _relayTableBuiltAtMs = 0;
 
         // Shared with the relay on the network thread. Held only to swap a pointer or note an
-        // arrival, never across a call into RakVoice.
+        // arrival, never across a call into RakVoice. Taken inside _mutex, never around it.
         mutable std::mutex _relayMutex;
         // Speaker -> recipients, as the relay sees them. Replaced whole, never edited in place.
         std::shared_ptr<const std::unordered_map<uint64_t, std::vector<MafiaNet::RakNetGUID>>> _relayTable;

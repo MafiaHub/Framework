@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "networking/replication/client_entities.h"
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_manager.h"
 
@@ -39,14 +41,14 @@ MODULE(replication_parallel, {
         server.GetPeer()->SetMaximumIncomingConnections(kClients);
 
         const uint32_t type = EntityRegistry::Get().Register<NetworkEntity>("Test::ParallelServe");
-        NetworkEntity *npc  = manager->CreateEntity(type);
+        NetworkEntity *npc  = TestWorld::Make(manager, type);
         npc->position       = glm::vec3(10.0f, 0.0f, 10.0f);
 
         server.SetOnPlayerConnectCallback([&](MafiaNet::Packet *packet) {
             server.PushReplicationConnection(packet->guid);
-            NetworkEntity *avatar = manager->CreateEntity(type);
+            NetworkEntity *avatar = TestWorld::Make(manager, type);
             avatar->ownerGUID     = MafiaNet::ToPeerGuid(packet->guid);
-            manager->SetViewer(avatar->ownerGUID, avatar);
+            manager->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
         });
 
         std::array<Framework::Networking::NetworkServer, kClients> clients;
@@ -65,8 +67,10 @@ MODULE(replication_parallel, {
         const auto pumpUntil = [&](const auto &done) {
             for (int i = 0; i < 2500; ++i) {
                 server.Update();
+                server.DrainPackets();
                 for (auto &client : clients) {
-                    client.Update();
+                    // A server peer standing in for a client: the client's update, which drains.
+                    client.NetworkPeer::Update();
                 }
                 if (done()) {
                     return true;
@@ -77,7 +81,7 @@ MODULE(replication_parallel, {
         };
         const auto everyClientHas = [&](const glm::vec3 &position) {
             for (auto &client : clients) {
-                const NetworkEntity *copy = client.GetReplicationManager()->GetEntityByNetworkID(npc->GetNetworkID());
+                const NetworkEntity *copy = Framework::Networking::Replication::ClientEntities(*client.GetReplicationManager()).GetEntityByNetworkID(npc->GetNetworkID());
                 if (!copy || glm::length(copy->position - position) > 0.01f) {
                     return false;
                 }
@@ -100,7 +104,7 @@ MODULE(replication_parallel, {
         }
 
         // Destruction is broadcast, so it goes before the peers shut down and free the connections.
-        manager->DestroyEntity(npc);
+        TestWorld::Destroy(manager, npc);
         for (auto &client : clients) {
             client.GetPeer()->Shutdown(0);
         }

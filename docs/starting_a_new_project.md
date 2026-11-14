@@ -310,11 +310,24 @@ The owner captures its native state upstream; remotes apply what arrives. Write 
 **The server half** creates a player entity per connection and registers it as that connection's viewer:
 
 ```cpp
-void Server::OnPlayerConnect(const Framework::Integrations::Server::PlayerConnectionData &data) {
-    _players.Add(data.guid, data.nickname);
+using Framework::Networking::Replication::World;
+
+void Server::OnPlayerConnect(const Framework::Integrations::Server::PlayerConnectionData &data, World &world) {
+    auto player = world.Create<Shared::Features::PlayerEntity>();   // held: nobody else sees it until this scope ends
+    if (!player) {
+        return;
+    }
+    player->nickname = data.nickname;
+    auto *replication = Framework::CoreModules::GetReplication();
+    replication->SetOwner(player, data.guid);
+    replication->SetViewer(data.guid, player);
 }
-void Server::OnPlayerDisconnect(MafiaNet::PeerGuid guid) { _players.Remove(guid); }
+void Server::OnPlayerDisconnect(MafiaNet::PeerGuid guid, World &world) {
+    // The avatar still resolves here; the framework destroys it after this returns.
+}
 ```
+
+Both run on the packet thread, not in the tick. On the server an entity is only ever reached through a handle of the `World`, which holds its lock; anything else these overrides touch is state registered with `World::RegisterState` or guards itself. `docs/server_threading.md` has the rules.
 
 The avatar is also the viewer: its position and stream range decide what that connection is told about. A player whose entity is not the registered viewer sees everything, everywhere.
 
@@ -341,10 +354,22 @@ Diffing a *replicated* value on apply is correct and is not polling. Reading *lo
 **RPC** is typed and lives on the peer:
 
 ```cpp
+// client
 peer->RegisterRPC<Shared::Features::PlayerDeath>([](const auto &msg, MafiaNet::Packet *p) { ... });
+// server: the sender and the world instead of the packet, on the packet thread
+server->RegisterRPC<Shared::Features::PlayerDeath>([](const auto &msg, Framework::Networking::Sender sender,
+                                                       Framework::Networking::Replication::World &world) {
+    auto player = world.Write<Shared::Features::PlayerEntity>(sender.Avatar());
+    if (!player) {
+        return;
+    }
+    ...
+});
 peer->BroadcastRPC(msg);
 peer->SendRPC(msg, guid);
 ```
+
+Server handlers are registered in `PostInit` or `PostScriptInit`, before the packet thread starts.
 
 **Scripting** is added per feature, in `<stem>_scripting.{h,cpp}` inside the feature folder, registered from that feature's `Install()`. A binding validates arguments and calls its service - it must not name an `SDK::` type, a replica or the peer. Register its metadata in the catalog at the same time, or it will not appear in the generated TypeScript contract.
 

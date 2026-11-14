@@ -34,6 +34,10 @@ namespace httplib {
     class Server;
 } // namespace httplib
 
+namespace Framework::Utils {
+    class TaskScheduler;
+} // namespace Framework::Utils
+
 namespace Framework::HTTP {
     using RequestCallback = fu2::function<void(const httplib::Request &, httplib::Response &) const>;
     using PostCallback    = fu2::function<void(const httplib::Request &, httplib::Response &, const httplib::ContentReader &) const>;
@@ -53,7 +57,18 @@ namespace Framework::HTTP {
         // wants more. Applies to every route.
         void SetWriteTimeout(std::chrono::seconds timeout);
 
+        // GET and HEAD. The callback runs on one of the web workers, several at once: it may read only
+        // what it guards itself, never the replicated world or anything else the tick thread owns.
         void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
+        // The same, with the callback run on the tick thread while the web worker waits for it: the
+        // route for a handler that reads or changes the world. Answers 503 with no scheduler, or when
+        // the tick thread has not run it within the scheduler's timeout; a handler that was given up
+        // on is never run afterwards. A handler that throws answers 500.
+        void RegisterTickThreadRequest(const std::string &path, const RequestCallback &callback) const;
+        // The scheduler whose owner runs tick-thread routes, and how long a request waits for it. It must
+        // outlive this server's workers: stop the server (Shutdown) before destroying the scheduler. Taking
+        // it back with null only keeps later requests off it, not one that already read it.
+        void SetTickThreadScheduler(Utils::TaskScheduler *scheduler, std::chrono::milliseconds timeout = std::chrono::seconds(5));
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 
         const std::string &GetServeDirectory() const noexcept {
@@ -66,6 +81,8 @@ namespace Framework::HTTP {
       private:
         std::shared_ptr<httplib::Server> _server;
         std::atomic_bool _running;
+        std::atomic<Utils::TaskScheduler *> _tickScheduler {nullptr};
+        std::atomic<int64_t> _tickTimeoutMs {5000};
         std::jthread _webThread;
         std::string _serveDir;
         // Dispatched before the served directory is looked at, so a declared route is never shadowed by a file.
