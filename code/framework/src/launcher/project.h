@@ -129,6 +129,19 @@ namespace Framework::Launcher {
         // present thread) and the mapped one through blt (PrepareWindowedBltPresent). See swap_chain_upgrade.h.
         bool upgradeSwapChainToFlipModel = false;
 
+        // PE loading only. The game runs the System32 dxgi, d3d11, d3d12, d3d9 and opengl32, never a DLL of
+        // that name from its own folder (ReShade, OptiScaler, DXVK).
+        //
+        // Why: started by Windows, the game's import binds to whichever dxgi.dll the loader finds, and the
+        // import keeps it mapped. Mapped here, the import is one LoadLibrary reference, and it lands on the
+        // System32 copy whenever that is in the process already. An engine that then loads the file in its
+        // folder by full path gets a second module. Unreal does, takes CreateDXGIFactory2 from it and frees
+        // it before the call, so the call ran unmapped memory. A stand-in also sits under the mod's hooks.
+        //
+        // How: the launcher maps the System32 copies before the game's folders join the search path, and
+        // gives the game LoadLibrary* that send those names there, whatever path the call names.
+        bool useSystemGraphicsLibraries = false;
+
         // Custom URL scheme deep link, so a Join button on a server's website reaches the game. When
         // set, every launch claims the scheme for the current user under
         // HKCU\Software\Classes\<urlProtocolScheme> and points it at this launcher - no elevation,
