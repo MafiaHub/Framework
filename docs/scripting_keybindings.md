@@ -152,5 +152,11 @@ its binds are removed automatically — you do not need to `unbind` them in a
   does not change bindings or gameplay input.
 - There is no user-facing rebinding UI yet: the key a resource asks for is the
   key it gets. A default-plus-rebind model (FiveM-style) may be added later.
+- A rebinding page in a focused web view records the next press from DOM
+  events, since binds are swallowed while it has focus. `MouseEvent.button`
+  `0`–`4` are `mouse1`, `mouse3`, `mouse2`, `mouse4` and `mouse5`. CEF takes no
+  side-button input, so `mouse4`/`mouse5` reach the page's main frame as
+  synthesized `pointerdown`/`pointerup` (`pointermove` while another button is
+  held), `mousedown`/`mouseup` and `auxclick` events, with `isTrusted` false.
 - Server-driven binds (a server telling a specific client to bind a key) are
   not yet available.
