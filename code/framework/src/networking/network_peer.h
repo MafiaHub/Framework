@@ -220,6 +220,12 @@ namespace Framework::Networking {
             return "";
         }
 
+        // Server-only; the connection's player ID (see PlayerIdAllocator), or 0 when it holds none:
+        // not joined yet, or its disconnect already handled.
+        virtual uint32_t GetPlayerId(MafiaNet::RakNetGUID) const {
+            return 0;
+        }
+
         // Handles packets not claimed by the peer or replication plugin. Return true when the
         // packet id is recognized; only packets declined by this handler are logged as unknown.
         void SetUnknownPacketHandler(fu2::function<bool(MafiaNet::Packet *) const> callback) {
