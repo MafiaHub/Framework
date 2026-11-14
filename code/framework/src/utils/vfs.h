@@ -8,8 +8,10 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -34,6 +36,9 @@ namespace Framework::Utils {
 
         // Virtual tree only; a real file on disk is not a match.
         bool Contains(const std::string &vpath) const;
+
+        // Virtual tree only: a regular file's size, without reading it.
+        std::optional<uint64_t> Size(const std::string &vpath) const;
 
         // Virtual tree first, then the real filesystem.
         bool Read(const std::string &path, std::string &outContents) const;

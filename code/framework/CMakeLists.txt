@@ -124,6 +124,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/discord.cpp
     src/integrations/client/scripting/builtins/voice.cpp
     src/integrations/client/scripting/builtins/nametags.cpp
+    src/integrations/client/scripting/builtins/fonts.cpp
 
     src/utils/key_names.cpp
 

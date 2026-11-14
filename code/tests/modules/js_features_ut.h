@@ -1092,13 +1092,18 @@ MODULE(js_features, {
             "{ hideFrom: [null] }",
             "{ hideFrom: [, 1] }",
             "{ hideForTarget: 1 }",
+            "{ font: 5 }",
+            "{ font: 'x'.repeat(65) }",
+            "{ minDrawDistance: -1 }",
+            "{ minFadeDistance: 'far' }",
         };
         for (const char *options : rejected) {
             STREQUALS(RunJSErrorName(engine, std::string("TextLabel.create(0, 0, 0, 'x', ") + options + ")").c_str(), "TypeError");
         }
 
         const std::string accepted = "TextLabel.create(0, 0, 0, 'x', { fontSize: 20, opacity: 0.5, outline: { width: 2 }, shadow: { blur: 4 }, background: true, sizeMode: 'world', "
-                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1), showTo: [], hideFrom: null, hideForTarget: true })";
+                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1), showTo: [], hideFrom: null, hideForTarget: true, "
+                                     "font: 'Inter', minDrawDistance: 2, minFadeDistance: 4 })";
         STREQUALS(RunJSErrorName(engine, accepted).c_str(), "Error");
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', 18, 40)").c_str(), "Error");
 
@@ -1136,6 +1141,18 @@ MODULE(js_features, {
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x'); l.update({ attachTo: l.id })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x', { maxSize: 10 }); l.update({ minSize: 20 })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const t = TextLabel.create(0, 0, 0, 't'); TextLabel.create(0, 0, 0, 'x', { attachTo: t, minSize: 4, maxSize: 10 })").c_str(), "");
+        // A near edge at or past the far one is allowed (the label never draws), and a value that is not finite changes nothing.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 20 }); l.setMinDrawDistance(25); l.update({ ...l.getOptions(), text: 'hi', drawDistance: 24 }); "
+                                      "l.setMinDrawDistance(NaN); l.setMinFadeDistance(Infinity); return [l.text, l.drawDistance, l.minDrawDistance, l.minFadeDistance].join(); })()")
+                      .c_str(),
+            "hi,24,25,0");
+
+        // The near edge and the font read back through getOptions(), the properties and the setters.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 5, minFadeDistance: 7, font: 'Inter' }); const o = l.getOptions(); "
+                                      "const copy = TextLabel.create(0, 0, 0, 'y', o).getOptions(); l.setMinDrawDistance(3); l.setMinFadeDistance(4); l.update({ font: null }); "
+                                      "return [o.minDrawDistance, o.minFadeDistance, o.font, copy.minDrawDistance, copy.font, l.minDrawDistance, l.minFadeDistance, JSON.stringify(l.font)].join(); })()")
+                      .c_str(),
+            "5,7,Inter,5,Inter,3,4,\"\"");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();

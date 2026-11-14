@@ -20,6 +20,7 @@
 #include "networking/rpc/server_resources.h"
 #include "networking/rpc/voice_settings.h"
 
+#include "integrations/client/scripting/builtins/fonts.h"
 #include "integrations/client/scripting/builtins/keybinds.h"
 
 #include "scripting/builtins/events.h"
@@ -415,6 +416,16 @@ namespace Framework::Integrations::Client {
                 if (auto imguiResult = _imguiApp->Init(imguiConfig); !imguiResult) {
                     Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init: {}", imguiResult.GetError().message);
                 }
+                else {
+                    auto *imgui = _imguiApp.get();
+                    Client::Scripting::Builtins::Fonts::SetTarget(
+                        [imgui](const std::string &family, External::ImGUI::FontFamilySource faces) {
+                            imgui->QueueFontFamily(family, std::move(faces));
+                        },
+                        [imgui]() {
+                            imgui->ClearFontFamilies();
+                        });
+                }
             }
         }
 
@@ -437,6 +448,7 @@ namespace Framework::Integrations::Client {
         // SRV callbacks, which read the heap and device off D3D12Backend. Shutdown()
         // nulls both, so freeing the atlas after it faults.
         if (_imguiApp && _imguiApp->IsInitialized()) {
+            Client::Scripting::Builtins::Fonts::SetTarget({}, {});
             _imguiApp->Shutdown();
             if (_imguiApp->IsInitialized()) {
                 // A failed GPU drain retains ImGui's resources. Keep their renderer

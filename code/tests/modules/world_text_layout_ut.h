@@ -10,7 +10,9 @@
 
 // Windows only: ImGui comes from a Windows-only vcpkg port.
 
+#include "external/imgui/font_fallback.h"
 #include "external/imgui/widgets/world_text_layout.h"
+#include "integrations/client/ui/text_label_imgui.h"
 
 #include <imgui.h>
 
@@ -35,6 +37,29 @@ namespace WorldTextLayoutTest {
         }
         ~Frame() {
             ImGui::EndFrame();
+            ImGui::DestroyContext(context);
+        }
+    };
+
+    // No fonts and no frame yet, so a test adds its own before the first NewFrame.
+    struct FontFrame {
+        ImGuiContext *context = nullptr;
+        bool started          = false;
+        FontFrame() {
+            context        = ImGui::CreateContext();
+            ImGuiIO &io    = ImGui::GetIO();
+            io.DisplaySize = ImVec2(1280.0f, 720.0f);
+            io.DeltaTime   = 1.0f / 60.0f;
+            io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+        }
+        void Start() {
+            ImGui::NewFrame();
+            started = true;
+        }
+        ~FontFrame() {
+            if (started) {
+                ImGui::EndFrame();
+            }
             ImGui::DestroyContext(context);
         }
     };
@@ -68,6 +93,37 @@ MODULE(world_text_layout, {
             previous = bake;
         }
         EQUALS((distinct < 40), true);
+    });
+
+    // A name up close and "Unknown" past it: the far label fades out across the band the near
+    // edge of the other fades in over, so the two always sum to one.
+    IT("a label's near edge culls, fades in and leaves the far fade to it", {
+        namespace Labels = Framework::Integrations::Client::UI::TextLabels;
+        Framework::Networking::Replication::Entities::TextLabelEntity name, unknown;
+        name.drawDistance       = 10.0f;
+        name.fadeDistance       = 8.0f;
+        unknown.minDrawDistance = 8.0f;
+        unknown.minFadeDistance = 10.0f;
+        unknown.drawDistance    = 50.0f;
+        unknown.fadeDistance    = 40.0f;
+        for (float d = 0.5f; d < 10.0f; d += 0.5f) {
+            EQUALS((std::abs(Labels::Alpha(name, d) + Labels::Alpha(unknown, d) - 1.0f) < 1e-5f), true);
+        }
+        UEQUALS(Labels::Alpha(unknown, 8.0f), 0.0f);
+        UEQUALS(Labels::Alpha(unknown, 9.0f), 0.5f);
+        UEQUALS(Labels::Alpha(unknown, 20.0f), 1.0f);
+        UEQUALS(Labels::Alpha(unknown, 45.0f), 0.5f);
+        UEQUALS(Labels::Alpha(unknown, 50.0f), 0.0f);
+
+        // A fade end at or below the near edge is a hard one; with no near edge the label fades in
+        // from the camera, and with neither nothing is culled.
+        unknown.minFadeDistance = 0.0f;
+        UEQUALS(Labels::Alpha(unknown, 8.0f), 0.0f);
+        UEQUALS(Labels::Alpha(unknown, 8.01f), 1.0f);
+        UEQUALS(W::WorldTextNearAlpha(2.5f, 0.0f, 5.0f), 0.5f);
+        UEQUALS(W::WorldTextNearAlpha(5.0f, 0.0f, 5.0f), 1.0f);
+        UEQUALS(W::WorldTextNearAlpha(0.0f, 0.0f, 0.0f), 1.0f);
+        UEQUALS(W::WorldTextNearAlpha(3.0f, std::nanf(""), 0.0f), 1.0f);
     });
 
     IT("layout breaks lines at newlines", {
@@ -125,5 +181,27 @@ MODULE(world_text_layout, {
         UEQUALS(coloured.spans.size(), 2u);
         UEQUALS(*coloured.spans[coloured.glyphs.front().span].color, 0xFFFF0000u);
         EQUALS((!coloured.spans[coloured.glyphs.back().span].color.has_value()), true);
+    });
+
+    IT("a family face draws what it lacks in the default font, and its own glyphs first", {
+        FontFrame frame;
+        ImGuiIO &io      = ImGui::GetIO();
+        ImFont *fallback = io.Fonts->AddFontDefaultBitmap();
+        // Faces without A-Z, standing in for a family file that lacks a character.
+        static const ImWchar kNoCapitals[] = {'A', 'Z', 0};
+        ImFontConfig cfg;
+        cfg.GlyphExcludeRanges = kNoCapitals;
+        ImFont *face           = io.Fonts->AddFontDefaultVector(&cfg);
+        ImFont *bare           = io.Fonts->AddFontDefaultVector(&cfg);
+        Framework::External::ImGUI::MergeFontFallback(*io.Fonts, face, fallback);
+        UEQUALS(face->Sources.Size, 1 + fallback->Sources.Size);
+        frame.Start();
+
+        ImFontBaked *baked          = face->GetFontBaked(26.0f);
+        const ImFontGlyph *own      = baked->FindGlyphNoFallback('a');
+        const ImFontGlyph *borrowed = baked->FindGlyphNoFallback('A');
+        EQUALS((own != nullptr && own->SourceIdx == 0), true);
+        EQUALS((borrowed != nullptr && borrowed->SourceIdx == 1), true);
+        EQUALS((bare->GetFontBaked(26.0f)->FindGlyphNoFallback('A') == nullptr), true);
     });
 });

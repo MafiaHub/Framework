@@ -8,10 +8,15 @@
 
 #include "wrapper.h"
 
+#include "font_fallback.h"
 #include "graphics/renderer.h"
 
 #include <cmath>
+#include <cstdio>
 #include <logging/logger.h>
+#include <utility>
+
+#include <imgui.h>
 
 #include <imgui_impl_dx11.h>
 #ifdef FW_IMGUI_DX12
@@ -171,6 +176,14 @@ namespace Framework::External::ImGUI {
 
         ImGui::DestroyContext();
         _fonts.clear(); // the atlas that owned them is gone
+        {
+            std::scoped_lock lock(_pendingMtx);
+            _pendingFamilies.clear();
+            _clearFamilies = false;
+        }
+        _families.clear();
+        _runtimeFaces.clear(); // only after the atlas that read them
+        _runtimeFontBytes = 0;
 
         isContextInitialized = false;
         Lifecycle::Shutdown();
@@ -178,6 +191,9 @@ namespace Framework::External::ImGUI {
 
     void Wrapper::Update() {
         std::scoped_lock _lock(_renderMtx);
+
+        // Between frames, so no draw list of this frame holds a face being added or removed.
+        LoadPendingFamilies();
 
         switch (_config.renderBackend) {
         case Graphics::RendererBackend::BACKEND_D3D_9: {
@@ -384,6 +400,117 @@ namespace Framework::External::ImGUI {
 
     bool Wrapper::WantsTextInput() {
         return isContextInitialized && ImGui::GetIO().WantTextInput;
+    }
+
+    static size_t FaceBytes(const FontFamilySource &faces) {
+        return faces.regular.size() + faces.bold.size() + faces.italic.size() + faces.boldItalic.size();
+    }
+
+    void Wrapper::QueueFontFamily(const std::string &family, FontFamilySource faces) {
+        std::scoped_lock lock(_pendingMtx);
+        // A script registering in a loop cannot grow the queue past the budget.
+        size_t queued = 0;
+        for (const PendingFamily &entry : _pendingFamilies) {
+            queued += entry.family == family ? 0 : FaceBytes(entry.faces);
+        }
+        if (FaceBytes(faces) > kMaxRuntimeFontBytes - queued) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' not loaded: more than {} MiB of fonts are waiting for the next frame", family, kMaxRuntimeFontBytes >> 20);
+            return;
+        }
+        std::erase_if(_pendingFamilies, [&](const PendingFamily &entry) {
+            return entry.family == family;
+        });
+        _pendingFamilies.push_back({family, std::move(faces)});
+    }
+
+    void Wrapper::ClearFontFamilies() {
+        std::scoped_lock lock(_pendingMtx);
+        _pendingFamilies.clear();
+        _clearFamilies = true;
+    }
+
+    Widgets::WorldTextFonts Wrapper::GetFontFamily(const std::string &family) const {
+        if (family.empty()) {
+            return {};
+        }
+        if (const auto it = _families.find(family); it != _families.end()) {
+            return it->second;
+        }
+        return {GetFont(family)};
+    }
+
+    void Wrapper::LoadPendingFamilies() {
+        std::vector<PendingFamily> pending;
+        bool clear = false;
+        {
+            std::scoped_lock lock(_pendingMtx);
+            pending.swap(_pendingFamilies);
+            clear = std::exchange(_clearFamilies, false);
+        }
+        if (clear) {
+            DropRuntimeFaces();
+        }
+        for (PendingFamily &entry : pending) {
+            _families[entry.family] = {LoadRuntimeFace(entry.family, "regular", std::move(entry.faces.regular)), LoadRuntimeFace(entry.family, "bold", std::move(entry.faces.bold)), LoadRuntimeFace(entry.family, "italic", std::move(entry.faces.italic)), LoadRuntimeFace(entry.family, "boldItalic", std::move(entry.faces.boldItalic))};
+        }
+        if (clear || !pending.empty()) {
+            ++_fontGeneration;
+        }
+    }
+
+    void Wrapper::DropRuntimeFaces() {
+        ImFontAtlas *atlas = ImGui::GetIO().Fonts;
+        for (const RuntimeFace &face : _runtimeFaces) {
+            if (face.font) {
+                atlas->RemoveFont(face.font);
+            }
+        }
+        _runtimeFaces.clear();
+        _runtimeFontBytes = 0;
+        _families.clear();
+    }
+
+    ImFont *Wrapper::LoadRuntimeFace(const std::string &family, const char *face, std::string bytes) {
+        if (bytes.empty()) {
+            return nullptr;
+        }
+        // The same file again; string equality compares sizes before bytes.
+        for (const RuntimeFace &loaded : _runtimeFaces) {
+            if (loaded.bytes == bytes) {
+                return loaded.font;
+            }
+        }
+        if (!IsFontFile(bytes)) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' {} face is not a TrueType or OpenType font; it draws with the default font", family, face);
+            return nullptr;
+        }
+        if (_runtimeFaces.size() >= kMaxRuntimeFaces || bytes.size() > kMaxRuntimeFontBytes - _runtimeFontBytes) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' {} face not loaded: a session's fonts are capped at {} faces and {} MiB", family, face, kMaxRuntimeFaces, kMaxRuntimeFontBytes >> 20);
+            return nullptr;
+        }
+
+        // The default font keeps the first slot (see Init), and is what a face falls back to.
+        ImGuiIO &io = ImGui::GetIO();
+        if (io.Fonts->Fonts.empty()) {
+            io.Fonts->AddFontDefault();
+        }
+        const ImFont *fallback = io.FontDefault ? io.FontDefault : io.Fonts->Fonts[0];
+
+        RuntimeFace &entry = _runtimeFaces.emplace_back(RuntimeFace {std::move(bytes)});
+        _runtimeFontBytes += entry.bytes.size();
+        ImFontConfig cfg;
+        cfg.Flags |= ImFontFlags_NoLoadError;
+        cfg.FontData             = entry.bytes.data();
+        cfg.FontDataSize         = static_cast<int>(entry.bytes.size());
+        cfg.FontDataOwnedByAtlas = false;
+        std::snprintf(cfg.Name, sizeof(cfg.Name), "%s %s", family.c_str(), face);
+        entry.font = io.Fonts->AddFont(&cfg);
+        if (!entry.font) {
+            Logging::GetLogger("ImGui")->warn("Font '{}' {} face failed to load; it draws with the default font", family, face);
+            return nullptr;
+        }
+        MergeFontFallback(*io.Fonts, entry.font, fallback);
+        return entry.font;
     }
 
 } // namespace Framework::External::ImGUI
