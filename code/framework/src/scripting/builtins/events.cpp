@@ -19,19 +19,27 @@
 #include <networking/network_peer.h>
 #include <utils/profiler.h>
 
+#include <algorithm>
+
 namespace Framework::Scripting::Builtins {
 
-    // Context for AllSettled callback - holds resolver, error message, and owner for cleanup
-    // Defined early so destructor can access it
-    struct Events::AllSettledCallbackData {
-        v8::Global<v8::Promise::Resolver> resolver;
-        v8::Isolate *isolate = nullptr; // Where the resolver lives; its runtime may go before the emission settles.
-        std::string errorMessage;
-        Events *owner;                       // For removing from pending set on completion
-        std::atomic<bool> cancelled {false}; // Set when Events is destroyed
+    struct Events::PendingEmission {
+        struct Watched {
+            size_t handler = 0;
+            std::string resource;
+        };
+        v8::Global<v8::Promise::Resolver> resolver; // Empty for an emission nobody waits on.
+        v8::Isolate *isolate     = nullptr;         // Where the resolver lives; its runtime may go before the emission settles.
+        Events *owner            = nullptr;
+        const char *errorMessage = "";
+        std::string eventName;
+        std::vector<Watched> watched; // The handlers whose promises it waits on, by the slot their reactions hold.
+        std::vector<std::pair<size_t, v8::Global<v8::Value>>> failures;
+        size_t unsettled = 1; // The dispatch itself counts, so a handler settling while later ones run cannot end it.
+        std::atomic<bool> cancelled {false};
     };
 
-    std::map<uint64_t, std::shared_ptr<Events::AllSettledCallbackData>> Events::_waitingEmissions;
+    std::map<uint64_t, std::shared_ptr<Events::PendingEmission>> Events::_waitingEmissions;
     std::mutex Events::_waitingEmissionsMutex;
     uint64_t Events::_nextWaitingEmission = 1;
 
@@ -497,8 +505,17 @@ namespace Framework::Scripting::Builtins {
         return result;
     }
 
-    v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName) {
-        v8::Local<v8::Array> promises = v8::Array::New(isolate, static_cast<int>(handlers.size()));
+    void Events::DispatchHandlers(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, v8::Local<v8::Promise::Resolver> resolver,
+        const char *aggregateErrorMessage) {
+        // Each failure is logged under its handler's resource; an emitter that does not await must not have it raised again as its own unhandled rejection.
+        resolver->GetPromise()->MarkAsHandled();
+
+        auto emission          = std::make_shared<PendingEmission>();
+        emission->isolate      = isolate;
+        emission->owner        = this;
+        emission->errorMessage = aggregateErrorMessage;
+        emission->resolver.Reset(isolate, resolver);
+        uint64_t key = 0;
         std::optional<std::vector<TransferredValue>> copied;
 
         for (size_t i = 0; i < handlers.size(); ++i) {
@@ -511,61 +528,130 @@ namespace Framework::Scripting::Builtins {
             v8::MaybeLocal<v8::Value> maybeResult = InvokeHandler(isolate, context, handlers[i], args, copied, eventName);
 
             if (tryCatch.HasCaught()) {
-                // FormatV8Exception pulls the JS stack trace when available and
-                // otherwise falls back to "<message>\n    at <file>:<line>:<col>",
-                // so the script author can see where the throw actually happened
-                // instead of just the bare error string.
+                // FormatV8Exception pulls the JS stack trace when available and otherwise falls back to
+                // "<message>\n    at <file>:<line>:<col>", so the script author sees where the throw happened.
                 std::string errorStr = FormatV8Exception(isolate, tryCatch, "Unknown error in event handler");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
-
-                // Create rejected promise for this handler
-                v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
-                errResolver->Reject(context, tryCatch.Exception()).Check();
-                promises->Set(context, static_cast<uint32_t>(i), errResolver->GetPromise()).Check();
+                emission->failures.emplace_back(i, v8::Global<v8::Value>(isolate, tryCatch.Exception()));
                 tryCatch.Reset();
+                continue;
             }
-            else if (!maybeResult.IsEmpty()) {
-                v8::Local<v8::Value> result = maybeResult.ToLocalChecked();
 
-                // Wrap non-promise values in resolved promise
-                if (result->IsPromise()) {
-                    ReportHandlerRejection(isolate, context, result.As<v8::Promise>(), logContext, eventName);
-                    promises->Set(context, static_cast<uint32_t>(i), result).Check();
-                }
-                else {
-                    v8::Local<v8::Promise::Resolver> valResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
-                    valResolver->Resolve(context, result).Check();
-                    promises->Set(context, static_cast<uint32_t>(i), valResolver->GetPromise()).Check();
-                }
-            }
-            else {
-                // Empty result - create resolved promise with undefined
-                v8::Local<v8::Promise::Resolver> valResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
-                valResolver->Resolve(context, v8::Undefined(isolate)).Check();
-                promises->Set(context, static_cast<uint32_t>(i), valResolver->GetPromise()).Check();
+            v8::Local<v8::Value> result;
+            if (maybeResult.ToLocal(&result) && result->IsPromise()) {
+                WatchHandler(isolate, context, emission, key, i, logContext, eventName, result.As<v8::Promise>());
             }
         }
 
-        return promises;
+        ReleaseEmission(isolate, context, emission, key);
     }
 
-    void Events::ReportHandlerRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, const std::string &resourceName, const std::string &eventName) {
-        // Built packed, so an indexed accessor a script put on Array.prototype cannot reach it.
-        v8::Local<v8::Value> parts[] = {v8pp::to_v8(isolate, resourceName), v8pp::to_v8(isolate, eventName)};
-        v8::Local<v8::Array> names   = v8::Array::New(isolate, parts, 2);
-        v8::Local<v8::Function> report;
-        if (v8::Function::New(context, LogHandlerRejection, names).ToLocal(&report)) {
-            (void)promise->Catch(context, report);
+    void Events::WatchHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::shared_ptr<PendingEmission> &emission, uint64_t &key, size_t handler, const std::string &resourceName, const std::string &eventName, v8::Local<v8::Promise> promise) {
+        if (key == 0) {
+            emission->eventName = eventName;
+            {
+                std::scoped_lock lock(_pendingCallbacksMutex);
+                _pendingCallbacks.insert(emission);
+            }
+            std::scoped_lock lock(_waitingEmissionsMutex);
+            key = _nextWaitingEmission++;
+            _waitingEmissions.emplace(key, emission);
         }
+
+        // Both reactions hold the emission's key and the handler's slot.
+        const uint64_t words[] = {key, emission->watched.size()};
+        v8::Local<v8::BigInt> data;
+        v8::Local<v8::Function> onFulfilled;
+        v8::Local<v8::Function> onRejected;
+        if (!v8::BigInt::NewFromWords(context, 0, 2, words).ToLocal(&data) || !v8::Function::New(context, OnHandlerFulfilled, data).ToLocal(&onFulfilled) || !v8::Function::New(context, OnHandlerRejected, data).ToLocal(&onRejected)
+            || promise->Then(context, onFulfilled, onRejected).IsEmpty()) {
+            return; // The isolate is terminating: nothing settles in it any more.
+        }
+        emission->watched.push_back({handler, resourceName});
+        ++emission->unsettled;
     }
 
-    void Events::LogHandlerRejection(const v8::FunctionCallbackInfo<v8::Value> &info) {
+    void Events::OnHandlerFulfilled(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        OnHandlerSettled(info, false);
+    }
+
+    void Events::OnHandlerRejected(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        OnHandlerSettled(info, true);
+    }
+
+    void Events::OnHandlerSettled(const v8::FunctionCallbackInfo<v8::Value> &info, bool rejected) {
         v8::Isolate *isolate = info.GetIsolate();
-        // A reason's stack getter or toString can throw; this reaction must not, or its own promise rejects.
-        v8::TryCatch tryCatch(isolate);
+        uint64_t words[2]    = {0, 0};
+        int signBit          = 0;
+        int wordCount        = 2;
+        info.Data().As<v8::BigInt>()->ToWordsArray(&signBit, &wordCount, words);
+
+        // Gone when the emitter's runtime was disposed.
+        std::shared_ptr<PendingEmission> emission;
+        {
+            std::scoped_lock lock(_waitingEmissionsMutex);
+            const auto waiting = _waitingEmissions.find(words[0]);
+            if (waiting == _waitingEmissions.end()) {
+                return;
+            }
+            emission = waiting->second;
+        }
+
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
-        v8::Local<v8::Array> names     = info.Data().As<v8::Array>();
-        v8::Local<v8::Value> reason    = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
+        if (rejected) {
+            const auto &watched         = emission->watched[words[1]];
+            v8::Local<v8::Value> reason = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
+            LogHandlerRejection(isolate, context, watched.resource, emission->eventName, reason);
+            emission->failures.emplace_back(watched.handler, v8::Global<v8::Value>(isolate, reason));
+        }
+        ReleaseEmission(isolate, context, emission, words[0]);
+    }
+
+    void Events::ReleaseEmission(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::shared_ptr<PendingEmission> &emission, uint64_t key) {
+        if (--emission->unsettled != 0) {
+            return;
+        }
+        if (key != 0) {
+            {
+                std::scoped_lock lock(_waitingEmissionsMutex);
+                _waitingEmissions.erase(key);
+            }
+            if (emission->cancelled.load(std::memory_order_acquire)) {
+                return; // Its Events is gone, or its caller stopped waiting.
+            }
+            emission->owner->RemovePendingCallback(emission.get());
+        }
+        if (emission->resolver.IsEmpty()) {
+            return;
+        }
+
+        v8::Local<v8::Promise::Resolver> resolver = emission->resolver.Get(isolate);
+        emission->resolver.Reset();
+        if (emission->failures.empty()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return;
+        }
+
+        std::ranges::sort(emission->failures, {}, &std::pair<size_t, v8::Global<v8::Value>>::first);
+        v8::Local<v8::Array> errors = v8::Array::New(isolate, static_cast<int>(emission->failures.size()));
+        for (size_t i = 0; i < emission->failures.size(); ++i) {
+            errors->Set(context, static_cast<uint32_t>(i), emission->failures[i].second.Get(isolate)).Check();
+        }
+
+        v8::Local<v8::Value> aggregateArgs[] = {errors, v8pp::to_v8(isolate, emission->errorMessage)};
+        v8::Local<v8::Value> aggregateCtor;
+        v8::Local<v8::Object> aggregate;
+        if (context->Global()->Get(context, v8pp::to_v8(isolate, "AggregateError")).ToLocal(&aggregateCtor) && aggregateCtor->IsFunction() && aggregateCtor.As<v8::Function>()->NewInstance(context, 2, aggregateArgs).ToLocal(&aggregate)) {
+            resolver->Reject(context, aggregate).Check();
+        }
+        else {
+            resolver->Reject(context, errors).Check();
+        }
+    }
+
+    void Events::LogHandlerRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &resourceName, const std::string &eventName, v8::Local<v8::Value> reason) {
+        // A reason's stack getter or toString can throw; contain it here.
+        v8::TryCatch tryCatch(isolate);
 
         // As the runtime's own unhandled-rejection report reads it: the stack of an error, else the value as text.
         std::string text;
@@ -576,15 +662,10 @@ namespace Framework::Scripting::Builtins {
         if (text.empty()) {
             text = ToUtf8(isolate, reason);
         }
-
-        v8::Local<v8::Value> resource;
-        v8::Local<v8::Value> event;
-        if (names->Get(context, 0).ToLocal(&resource) && names->Get(context, 1).ToLocal(&event)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", ToUtf8(isolate, resource), ToUtf8(isolate, event), text.empty() ? "Unknown error in event handler" : text);
-        }
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Event '{}' handler error: {}", resourceName, eventName, text.empty() ? "Unknown error in event handler" : text);
     }
 
-    void Events::RemovePendingCallback(AllSettledCallbackData *data) {
+    void Events::RemovePendingCallback(PendingEmission *data) {
         std::scoped_lock lock(_pendingCallbacksMutex);
         for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
             if (it->get() == data) {
@@ -614,185 +695,6 @@ namespace Framework::Scripting::Builtins {
                 _pendingCallbacks.erase(it);
                 return;
             }
-        }
-    }
-
-    void Events::AggregateWithAllSettled(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Array> promises, v8::Local<v8::Promise::Resolver> resolver, const std::string &aggregateErrorMessage) {
-        // Each handler's failure was logged under its own resource. An emitter that awaits still gets the
-        // AggregateError; one that does not must not have it raised as its own unhandled rejection.
-        resolver->GetPromise()->MarkAsHandled();
-
-        // Get Promise.allSettled
-        v8::MaybeLocal<v8::Value> maybePromiseCtor = context->Global()->Get(context, v8pp::to_v8(isolate, "Promise"));
-        if (maybePromiseCtor.IsEmpty() || !maybePromiseCtor.ToLocalChecked()->IsObject()) {
-            resolver->Resolve(context, v8::Undefined(isolate)).Check();
-            return;
-        }
-        v8::Local<v8::Object> promiseConstructor = maybePromiseCtor.ToLocalChecked().As<v8::Object>();
-
-        v8::MaybeLocal<v8::Value> maybeAllSettled = promiseConstructor->Get(context, v8pp::to_v8(isolate, "allSettled"));
-        if (maybeAllSettled.IsEmpty() || !maybeAllSettled.ToLocalChecked()->IsFunction()) {
-            resolver->Resolve(context, v8::Undefined(isolate)).Check();
-            return;
-        }
-        v8::Local<v8::Function> allSettled = maybeAllSettled.ToLocalChecked().As<v8::Function>();
-
-        v8::Local<v8::Value> allSettledArgs[]      = {promises};
-        v8::MaybeLocal<v8::Value> allSettledResult = allSettled->Call(context, promiseConstructor, 1, allSettledArgs);
-
-        if (allSettledResult.IsEmpty()) {
-            resolver->Resolve(context, v8::Undefined(isolate)).Check();
-            return;
-        }
-
-        // A script-replaced Promise.allSettled may return a non-Promise; guard before
-        // casting so we don't reach ->Then() on a bad handle. Soft-resolve like the siblings.
-        v8::Local<v8::Value> allSettledValue = allSettledResult.ToLocalChecked();
-        if (!allSettledValue->IsPromise()) {
-            resolver->Resolve(context, v8::Undefined(isolate)).Check();
-            return;
-        }
-
-        v8::Local<v8::Promise> allPromise = allSettledValue.As<v8::Promise>();
-
-        // Allocate callback data and track it for cleanup on Events destruction
-        // Use shared_ptr so the data survives until either:
-        // - The then-handler runs and releases its reference, or
-        // - Events is destroyed and releases its reference
-        auto callbackData = std::make_shared<AllSettledCallbackData>();
-        callbackData->resolver.Reset(isolate, resolver);
-        callbackData->isolate      = isolate;
-        callbackData->errorMessage = aggregateErrorMessage;
-        callbackData->owner        = this;
-
-        {
-            std::scoped_lock lock(_pendingCallbacksMutex);
-            _pendingCallbacks.insert(callbackData);
-        }
-
-        // The handler holds a key to its own strong reference, so ~Events() clearing _pendingCallbacks can't free the
-        // data out from under a still-pending microtask, and disposing the isolate can still free it.
-        uint64_t key = 0;
-        {
-            std::scoped_lock lock(_waitingEmissionsMutex);
-            key = _nextWaitingEmission++;
-            _waitingEmissions.emplace(key, callbackData);
-        }
-        auto forget = [key]() {
-            std::scoped_lock lock(_waitingEmissionsMutex);
-            _waitingEmissions.erase(key);
-        };
-        v8::Local<v8::Value> resolverData = v8::BigInt::NewFromUnsigned(isolate, key);
-
-        v8::MaybeLocal<v8::Function> maybeThenHandler = v8::Function::New(
-            context,
-            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                v8::Isolate *iso           = info.GetIsolate();
-                v8::Local<v8::Context> ctx = iso->GetCurrentContext();
-
-                // Take the data for this call (a then-handler runs once). Gone when the emitter's runtime was disposed.
-                std::shared_ptr<AllSettledCallbackData> data;
-                {
-                    std::scoped_lock lock(_waitingEmissionsMutex);
-                    const auto waiting = _waitingEmissions.find(info.Data().As<v8::BigInt>()->Uint64Value());
-                    if (waiting == _waitingEmissions.end()) {
-                        return;
-                    }
-                    data = std::move(waiting->second);
-                    _waitingEmissions.erase(waiting);
-                }
-
-                if (data->cancelled.load(std::memory_order_acquire)) {
-                    return; // Events destroyed, bail out safely
-                }
-
-                v8::Local<v8::Promise::Resolver> res = data->resolver.Get(iso);
-                std::string errorMsg                 = data->errorMessage;
-
-                std::vector<v8::Local<v8::Value>> rejections;
-
-                // Records come from the script-mutable global Promise.allSettled, so the shape is
-                // untrusted: validate each step and skip malformed records rather than aborting via
-                // an unchecked cast or an empty ToLocalChecked().
-                if (info.Length() > 0 && info[0]->IsArray()) {
-                    v8::Local<v8::Array> results = info[0].As<v8::Array>();
-                    for (uint32_t i = 0; i < results->Length(); ++i) {
-                        // Contain a throwing getter so it skips the record instead of poisoning
-                        // later MaybeLocals with a pending exception.
-                        v8::TryCatch tryCatch(iso);
-
-                        v8::Local<v8::Value> itemVal;
-                        if (!results->Get(ctx, i).ToLocal(&itemVal) || !itemVal->IsObject()) {
-                            continue;
-                        }
-                        v8::Local<v8::Object> item = itemVal.As<v8::Object>();
-
-                        v8::Local<v8::Value> status;
-                        if (!item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocal(&status)) {
-                            continue;
-                        }
-                        v8::String::Utf8Value statusStr(iso, status);
-                        if (!*statusStr || std::string(*statusStr) != "rejected") {
-                            continue;
-                        }
-
-                        v8::Local<v8::Value> reason;
-                        if (item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocal(&reason)) {
-                            rejections.push_back(reason);
-                        }
-                        else {
-                            rejections.push_back(v8::Undefined(iso));
-                        }
-                    }
-                }
-
-                if (!rejections.empty()) {
-                    // Create AggregateError
-                    v8::Local<v8::Array> errArray = v8::Array::New(iso, static_cast<int>(rejections.size()));
-                    for (size_t i = 0; i < rejections.size(); ++i) {
-                        errArray->Set(ctx, static_cast<uint32_t>(i), rejections[i]).Check();
-                    }
-
-                    v8::Local<v8::String> msg                 = v8pp::to_v8(iso, errorMsg);
-                    v8::Local<v8::Value> aggArgs[]            = {errArray, msg};
-                    v8::MaybeLocal<v8::Value> aggErrorCtorVal = ctx->Global()->Get(ctx, v8pp::to_v8(iso, "AggregateError"));
-
-                    if (!aggErrorCtorVal.IsEmpty() && aggErrorCtorVal.ToLocalChecked()->IsFunction()) {
-                        v8::Local<v8::Function> aggErrorCtor   = aggErrorCtorVal.ToLocalChecked().As<v8::Function>();
-                        v8::MaybeLocal<v8::Object> aggErrorObj = aggErrorCtor->NewInstance(ctx, 2, aggArgs);
-                        if (!aggErrorObj.IsEmpty()) {
-                            res->Reject(ctx, aggErrorObj.ToLocalChecked()).Check();
-                        }
-                        else {
-                            res->Reject(ctx, errArray).Check();
-                        }
-                    }
-                    else {
-                        // Fallback if AggregateError not available
-                        res->Reject(ctx, errArray).Check();
-                    }
-                }
-                else {
-                    res->Resolve(ctx, v8::Undefined(iso)).Check();
-                }
-
-                data->owner->RemovePendingCallback(data.get());
-            },
-            resolverData);
-
-        // Function::New / Promise::Then return empty on a terminating isolate; ToLocalChecked()
-        // would abort. Fail soft: the handler won't run, so forget its data and untrack here.
-        v8::Local<v8::Function> thenHandler;
-        if (!maybeThenHandler.ToLocal(&thenHandler)) {
-            forget();
-            RemovePendingCallback(callbackData.get());
-            return;
-        }
-
-        if (allPromise->Then(context, thenHandler).IsEmpty()) {
-            forget();
-            RemovePendingCallback(callbackData.get());
-            return;
         }
     }
 
@@ -845,11 +747,7 @@ namespace Framework::Scripting::Builtins {
             return handleScope.Escape(promise);
         }
 
-        // Invoke handlers and collect results as promises
-        v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(isolate, context, handlersToCall, args, eventName);
-
-        // Aggregate results using Promise.allSettled
-        AggregateWithAllSettled(isolate, context, promises, resolver, "One or more event handlers failed");
+        DispatchHandlers(isolate, context, handlersToCall, args, eventName, resolver, "One or more event handlers failed");
 
         return handleScope.Escape(promise);
     }
@@ -865,7 +763,14 @@ namespace Framework::Scripting::Builtins {
         bool proceed        = true;
         std::optional<std::vector<TransferredValue>> copied;
 
-        for (auto &handler : handlersToCall) {
+        // Nothing waits on an async handler here, so the emission has no resolver: it only logs their failures.
+        auto emission     = std::make_shared<PendingEmission>();
+        emission->isolate = isolate;
+        emission->owner   = this;
+        uint64_t key      = 0;
+
+        for (size_t i = 0; i < handlersToCall.size(); ++i) {
+            auto &handler                 = handlersToCall[i];
             const std::string &logContext = handler.resourceName;
             FW_PROFILE_SCOPE_N("Scripting::EventHandler");
             FW_PROFILE_TEXT(eventName.c_str(), eventName.size());
@@ -886,12 +791,12 @@ namespace Framework::Scripting::Builtins {
             if (maybeResult.ToLocal(&result) && result->IsBoolean() && !result->IsTrue()) {
                 proceed = false;
             }
-            // Nothing waits on an async handler here: its failure is still its own, not an unhandled rejection.
             else if (!result.IsEmpty() && result->IsPromise()) {
-                ReportHandlerRejection(isolate, context, result.As<v8::Promise>(), logContext, eventName);
+                WatchHandler(isolate, context, emission, key, i, logContext, eventName, result.As<v8::Promise>());
             }
         }
 
+        ReleaseEmission(isolate, context, emission, key);
         return proceed;
     }
 
@@ -1060,11 +965,7 @@ namespace Framework::Scripting::Builtins {
             eventArgs.push_back(args[i]);
         }
 
-        // Invoke handlers and collect results as promises
-        v8::Local<v8::Array> promises = events->InvokeHandlersToPromiseArray(isolate, context, handlersToCall, eventArgs, eventName);
-
-        // Aggregate results using Promise.allSettled
-        events->AggregateWithAllSettled(isolate, context, promises, resolver, "One or more local event handlers failed");
+        events->DispatchHandlers(isolate, context, handlersToCall, eventArgs, eventName, resolver, "One or more local event handlers failed");
 
         args.GetReturnValue().Set(resolver->GetPromise());
     }

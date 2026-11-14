@@ -213,29 +213,28 @@ namespace Framework::Scripting::Builtins {
         // Internal emit helper - returns Promise
         v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource = "", HandlerScope scope = HandlerScope::Global);
 
-        // Helper: invoke handlers and collect results as promises in the emitter's isolate. A handler's resource name
-        // is its log context.
-        v8::Local<v8::Array> InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName);
+        // Calls every handler and settles `resolver` once they all have: rejected with an AggregateError of the failures
+        // in handler order, else resolved. Each failure is logged under its handler's resource as it happens.
+        void DispatchHandlers(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, v8::Local<v8::Promise::Resolver> resolver, const char *aggregateErrorMessage);
 
         // Calls one handler and returns what it returned, or empty with the exception caught by the caller's TryCatch.
         // `copied` holds the arguments copied out of the emitter, made on the first handler in another isolate. A
         // handler running past the resource monitor's threshold is reported under `eventName`.
         v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied, std::string_view eventName);
 
-        // Logs a rejection of the promise a handler returned under the handler's resource, as a throw is logged.
-        static void ReportHandlerRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Promise> promise, const std::string &resourceName, const std::string &eventName);
-        static void LogHandlerRejection(const v8::FunctionCallbackInfo<v8::Value> &info);
+        // An emission's handlers that have not settled yet, and what they failed with so far.
+        struct PendingEmission;
 
-        // Forward declaration for callback data tracking
-        struct AllSettledCallbackData;
+        // Waits on the promise handler `handler` returned; `key` is the emission's, assigned on its first promise.
+        void WatchHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::shared_ptr<PendingEmission> &emission, uint64_t &key, size_t handler, const std::string &resourceName, const std::string &eventName, v8::Local<v8::Promise> promise);
+        static void OnHandlerFulfilled(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void OnHandlerRejected(const v8::FunctionCallbackInfo<v8::Value> &info);
+        static void OnHandlerSettled(const v8::FunctionCallbackInfo<v8::Value> &info, bool rejected);
+        // Counts one handler (or the dispatch itself) settled, and settles the emission after the last one.
+        static void ReleaseEmission(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::shared_ptr<PendingEmission> &emission, uint64_t key);
+        static void LogHandlerRejection(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &resourceName, const std::string &eventName, v8::Local<v8::Value> reason);
 
-        // Helper: aggregate promises using Promise.allSettled and resolve/reject the resolver
-        // Non-static to track pending callbacks for cleanup on destruction
-        void AggregateWithAllSettled(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Array> promises, v8::Local<v8::Promise::Resolver> resolver, const std::string &aggregateErrorMessage);
-
-        // Remove callback data from tracking (called when promise settles)
-        // Takes raw pointer and finds the corresponding shared_ptr to remove
-        void RemovePendingCallback(AllSettledCallbackData *data);
+        void RemovePendingCallback(PendingEmission *data);
         void CancelPendingCallbacks();
 
         // Global handlers: eventName -> handlers (FIFO order)
@@ -254,14 +253,14 @@ namespace Framework::Scripting::Builtins {
         // reallocated — its address outlives individual Register() calls. See Events::Register.
         std::unique_ptr<CallbackContext> _callbackContext;
 
-        // Track pending AllSettled callbacks for cleanup on destruction
-        std::set<std::shared_ptr<AllSettledCallbackData>> _pendingCallbacks;
+        // Emissions waiting on their handlers, cancelled on destruction
+        std::set<std::shared_ptr<PendingEmission>> _pendingCallbacks;
         std::mutex _pendingCallbacksMutex;
 
-        // Emissions waiting for their handlers to settle, by the key their then-handler holds. Static, because the
-        // then-handler can run after this Events is gone, and the disposal of a runtime must reach the emissions whose
-        // then-handlers will now never run.
-        static std::map<uint64_t, std::shared_ptr<AllSettledCallbackData>> _waitingEmissions;
+        // Emissions waiting for their handlers to settle, by the key their handlers' reactions hold. Static, because a
+        // reaction can run after this Events is gone, and the disposal of a runtime must reach the emissions whose
+        // reactions will now never run.
+        static std::map<uint64_t, std::shared_ptr<PendingEmission>> _waitingEmissions;
         static std::mutex _waitingEmissionsMutex;
         static uint64_t _nextWaitingEmission;
     };
