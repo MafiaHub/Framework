@@ -13,6 +13,7 @@
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
 #include "swap_chain_upgrade.h"
+#include "system_graphics.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 #include "utils/url_protocol.h"
@@ -300,6 +301,20 @@ namespace {
         fullPath.resize(length);
         return LoadLibraryExW(fullPath.c_str(), file, flags);
     }
+
+    // ProjectConfiguration::useSystemGraphicsLibraries of the project being launched
+    bool gUseSystemGraphicsLibraries = false;
+
+    HMODULE LoadSystemGraphics(LPCWSTR name, DWORD flags) {
+        return gUseSystemGraphicsLibraries ? static_cast<HMODULE>(Framework::Launcher::LoadSystemGraphicsLibrary(name, flags)) : nullptr;
+    }
+
+    HMODULE LoadGameLibraryExW(LPCWSTR name, HANDLE file, DWORD flags) {
+        if (const auto module = LoadSystemGraphics(name, flags)) {
+            return module;
+        }
+        return IsRunningUnderWine() ? LoadLibraryExWineCompatible(name, file, flags) : LoadLibraryExW(name, file, flags);
+    }
 } // namespace
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -370,12 +385,30 @@ BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *
     return GetModuleHandleExA(dwFlags, lpModuleName, phModule);
 }
 
-// Given to the game for kernel32/kernelbase LoadLibraryExW under Wine only
+// Given to the game for kernel32/kernelbase LoadLibraryExW, under Wine and with useSystemGraphicsLibraries
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
-    return LoadLibraryExWineCompatible(lpLibFileName, hFile, dwFlags);
+    return LoadGameLibraryExW(lpLibFileName, hFile, dwFlags);
 }
 
-// Given to the game for kernel32/kernelbase LoadLibraryExA under Wine only. The name is widened with
+// Given to the game for kernel32/kernelbase LoadLibraryW and LoadLibraryA with useSystemGraphicsLibraries
+HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR lpLibFileName) {
+    const auto module = LoadSystemGraphics(lpLibFileName, 0);
+    return module ? module : LoadLibraryW(lpLibFileName);
+}
+
+HMODULE WINAPI LoadLibraryA_Hook(LPCSTR lpLibFileName) {
+    const UINT codePage = AreFileApisANSI() ? CP_ACP : CP_OEMCP;
+    const int size      = lpLibFileName ? MultiByteToWideChar(codePage, 0, lpLibFileName, -1, nullptr, 0) : 0;
+    std::wstring wideName(size, L'\0');
+    if (size != 0 && MultiByteToWideChar(codePage, 0, lpLibFileName, -1, wideName.data(), size)) {
+        if (const auto module = LoadSystemGraphics(wideName.c_str(), 0)) {
+            return module;
+        }
+    }
+    return LoadLibraryA(lpLibFileName);
+}
+
+// Given to the game for kernel32/kernelbase LoadLibraryExA, as LoadLibraryExW above. The name is widened with
 // the file-API code page first, as kernelbase does, so a DBCS trail byte of 0x5C is not taken for a
 // backslash. Anything that cannot be widened goes to the real function unchanged.
 HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
@@ -389,7 +422,11 @@ HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR lpLibFileName, HANDLE hFile, DWORD dwF
     if (!MultiByteToWideChar(codePage, 0, lpLibFileName, -1, wideName.data(), size)) {
         return LoadLibraryExA(lpLibFileName, hFile, dwFlags);
     }
-    return LoadLibraryExWineCompatible(wideName.c_str(), hFile, dwFlags);
+    if (!IsRunningUnderWine()) {
+        const auto module = LoadSystemGraphics(wideName.c_str(), dwFlags);
+        return module ? module : LoadLibraryExA(lpLibFileName, hFile, dwFlags);
+    }
+    return LoadGameLibraryExW(wideName.c_str(), hFile, dwFlags);
 }
 
 namespace Framework::Launcher {
@@ -472,6 +509,12 @@ namespace Framework::Launcher {
 
         if (!_config.disablePersistentConfig) {
             SaveJSONConfig();
+        }
+
+        // Before the game's folders are searched: a load by name then finds these already mapped
+        gUseSystemGraphicsLibraries = _config.useSystemGraphicsLibraries;
+        if (gUseSystemGraphicsLibraries) {
+            PreloadSystemGraphicsLibraries();
         }
 
         // Add the required DLL directories to the current process
@@ -997,12 +1040,22 @@ namespace Framework::Launcher {
             if (exportName == "GetModuleHandleExW") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
             }
-            // Windows keeps the real imports; the hooks only work around Wine's loader
-            if (exportName == "LoadLibraryExW" && IsRunningUnderWine() && IsKernelModule(hmod)) {
-                return reinterpret_cast<LPVOID>(LoadLibraryExW_Hook);
-            }
-            if (exportName == "LoadLibraryExA" && IsRunningUnderWine() && IsKernelModule(hmod)) {
-                return reinterpret_cast<LPVOID>(LoadLibraryExA_Hook);
+            // Windows keeps the real imports unless the project asks for the System32 graphics
+            // libraries; under Wine the hooks also work around its loader
+            if (IsKernelModule(hmod)) {
+                const bool systemGraphics = _config.useSystemGraphicsLibraries;
+                if (exportName == "LoadLibraryExW" && (systemGraphics || IsRunningUnderWine())) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryExW_Hook);
+                }
+                if (exportName == "LoadLibraryExA" && (systemGraphics || IsRunningUnderWine())) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryExA_Hook);
+                }
+                if (exportName == "LoadLibraryW" && systemGraphics) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryW_Hook);
+                }
+                if (exportName == "LoadLibraryA" && systemGraphics) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryA_Hook);
+                }
             }
             if (_config.upgradeSwapChainToFlipModel) {
                 if (const auto stub = ResolveFlipModelFactoryExport(hmod, exportName)) {
