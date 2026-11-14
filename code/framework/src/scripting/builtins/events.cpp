@@ -37,6 +37,13 @@ namespace Framework::Scripting::Builtins {
         std::vector<std::pair<size_t, v8::Global<v8::Value>>> failures;
         size_t unsettled = 1; // The dispatch itself counts, so a handler settling while later ones run cannot end it.
         std::atomic<bool> cancelled {false};
+
+        // Nothing is aggregated any more: drop every handle into its isolate, which may be disposed before the handlers settle.
+        void Cancel() {
+            cancelled.store(true, std::memory_order_release);
+            resolver.Reset();
+            failures.clear();
+        }
     };
 
     std::map<uint64_t, std::shared_ptr<Events::PendingEmission>> Events::_waitingEmissions;
@@ -61,8 +68,7 @@ namespace Framework::Scripting::Builtins {
     void Events::CancelPendingCallbacks() {
         std::scoped_lock lock(_pendingCallbacksMutex);
         for (const auto &data : _pendingCallbacks) {
-            data->cancelled.store(true, std::memory_order_release);
-            data->resolver.Reset();
+            data->Cancel();
         }
         _pendingCallbacks.clear();
     }
@@ -602,7 +608,10 @@ namespace Framework::Scripting::Builtins {
             const auto &watched         = emission->watched[words[1]];
             v8::Local<v8::Value> reason = info.Length() > 0 ? info[0] : v8::Undefined(isolate).As<v8::Value>();
             LogHandlerRejection(isolate, context, watched.resource, emission->eventName, reason);
-            emission->failures.emplace_back(watched.handler, v8::Global<v8::Value>(isolate, reason));
+            // Kept only for an emitter still waiting: a cancelled emission or one nobody waits on aggregates nothing.
+            if (!emission->resolver.IsEmpty()) {
+                emission->failures.emplace_back(watched.handler, v8::Global<v8::Value>(isolate, reason));
+            }
         }
         ReleaseEmission(isolate, context, emission, words[0]);
     }
@@ -690,8 +699,7 @@ namespace Framework::Scripting::Builtins {
 
             auto resolver = data->resolver.Get(isolate);
             if (!resolver.IsEmpty() && resolver->GetPromise()->StrictEquals(promise)) {
-                data->cancelled.store(true, std::memory_order_release);
-                data->resolver.Reset();
+                data->Cancel();
                 _pendingCallbacks.erase(it);
                 return;
             }
@@ -1014,8 +1022,7 @@ namespace Framework::Scripting::Builtins {
             std::scoped_lock lock(_pendingCallbacksMutex);
             for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end();) {
                 if ((*it)->isolate == isolate) {
-                    (*it)->cancelled.store(true, std::memory_order_release);
-                    (*it)->resolver.Reset();
+                    (*it)->Cancel();
                     it = _pendingCallbacks.erase(it);
                 }
                 else {
