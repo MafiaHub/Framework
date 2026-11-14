@@ -116,8 +116,10 @@ error-stop, or the transient stop within a reload), the server broadcasts a
 mirrors as stop-then-start on the client.
 A failed start and a runtime error with `errorBehavior` `stop` or `restart` notify the same way as a clean stop.
 Such a runtime error is a stop like any other: its dependents stop first, every resource receives `resourceStop`,
-and they start again whenever the resource next starts, by its scheduled restart, an error listener or an operator.
-A dependent stopped again in the meantime stays stopped. With `continue` the resource keeps running.
+and they start again with it when an error listener starts it, or under `restart` when its scheduled restart or an
+operator starts it before that restart runs. A dependent stopped again in the meantime stays stopped. Otherwise, with
+`stop` or once the restart limit is reached, they stay stopped and an operator starts each one. With `continue` the
+resource keeps running.
 `restart` restarts a resource at most three times in five minutes, however long each start ran; then it and its
 dependents stay stopped. An `errorBehavior` other than `stop`, `restart` or `continue` is logged and read as `stop`.
 

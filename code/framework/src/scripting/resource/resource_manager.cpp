@@ -594,6 +594,15 @@ namespace Framework::Scripting {
         }
 
         const auto startLifecycle = AwaitLifecyclePromise(_jsEngine, _events, startPromise, _config.resourceStartTimeoutMs);
+        // The wait ticks the engine: an error listener may have refreshed this resource, freeing `resource` and leaving its runtime behind.
+        if (GetResourceMutable(name) != resource) {
+            CallResourceStop(name);
+            if (_jsEngine) {
+                _jsEngine->ClearResourceTimers(std::string(name));
+                _jsEngine->DestroyResourceRuntime(std::string(name));
+            }
+            return ResourceOperationResult("Resource was replaced while starting: " + std::string(name));
+        }
         if (startLifecycle.status != LifecyclePromiseStatus::Fulfilled) {
             error = startLifecycle.status == LifecyclePromiseStatus::TimedOut ? "resourceStart timed out after " + std::to_string(std::max(_config.resourceStartTimeoutMs, 1)) + "ms" : "resourceStart rejected: " + startLifecycle.error;
             CleanupResourceRuntime(*resource, name);
@@ -614,7 +623,10 @@ namespace Framework::Scripting {
 
         FireOnResourceStarted(std::string(name));
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started JS resource: {}", name);
-        StartDependentsAwaiting(name);
+        // A start listener can stop it again (an error it reports, say): then its dependents wait for the next start.
+        if (GetResourceMutable(name) == resource && resource->IsRunning()) {
+            StartDependentsAwaiting(name);
+        }
 
         return ResourceOperationResult::Ok({std::string(name)});
     }

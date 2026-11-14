@@ -760,6 +760,45 @@ MODULE(resource_isolation, {
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
+    IT("keeps the dependents waiting when a start listener stops the resource again", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("relapse", R"({"name":"relapse","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");
+        TestManagerHelper::CreateTestScript("relapse", "main.js", "__record('relapseLoads', __recorded('relapseLoads') + 1);");
+        TestManagerHelper::CreateTestResource("patient", R"({"name":"patient","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"relapse"}]}})");
+        TestManagerHelper::CreateTestScript("patient", "main.js", "__record('patientLoads', __recorded('patientLoads') + 1);");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        bool relapse = false;
+        manager.AddOnResourceStarted([&](const std::string &name) {
+            if (name == "relapse" && relapse) {
+                relapse = false;
+                manager.HandleResourceRuntimeError("relapse", "failed again as it started");
+            }
+        });
+        EQUALS(manager.DiscoverResources(), 2u);
+        EQUALS((bool)manager.StartResource("patient"), true);
+
+        manager.HandleResourceRuntimeError("relapse", "first failure");
+        EQUALS(manager.IsResourceRunning("patient"), false);
+
+        // Stopped again by its own start listener: its dependent is not started against it, and still waits.
+        relapse = true;
+        manager.StartResource("relapse");
+        EQUALS(manager.IsResourceRunning("relapse"), false);
+        EQUALS(manager.IsResourceRunning("patient"), false);
+
+        EQUALS((bool)manager.StartResource("relapse"), true);
+        EQUALS(manager.IsResourceRunning("patient"), true);
+        EQUALS(TestManagerHelper::RecordedValue("patientLoads"), 1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
     IT("only logs an error for a resource an earlier error already stopped", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("retired", "// empty script");
