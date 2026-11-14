@@ -899,7 +899,7 @@ namespace Framework::Scripting {
         auto *runtime = static_cast<ResourceRuntime *>(info.Data().As<v8::External>()->Value());
 
         // Queued for Tick()'s caller, like the engine's own errors.
-        runtime->engine->_pendingErrors.push_back({runtime->resourceName, ReadUncaughtError(info)});
+        runtime->engine->_pendingErrors.push_back({runtime->resourceName, ReadUncaughtError(info), runtime->serial});
     }
 
     void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -938,6 +938,14 @@ namespace Framework::Scripting {
         std::vector<PendingUncaughtError> errors;
         errors.swap(_pendingErrors);
         return errors;
+    }
+
+    bool NodeEngine::IsFromCurrentRuntime(const PendingUncaughtError &error) const {
+        if (error.serial == 0) {
+            return true;
+        }
+        const auto it = _resourceRuntimes.find(error.resourceName);
+        return it != _resourceRuntimes.end() && it->second->serial == error.serial;
     }
 
     bool NodeEngine::ApplySandbox(v8::Local<v8::Context> context) {

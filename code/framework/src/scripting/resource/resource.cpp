@@ -219,7 +219,7 @@ namespace Framework::Scripting {
 
     bool Resource::CanAutoRestart() const {
         const auto &config = _manifest.GetMafiaHubConfig();
-        if (config.errorBehavior != "restart") {
+        if (config.errorBehavior != ErrorBehavior::Restart) {
             return false;
         }
 
@@ -236,11 +236,6 @@ namespace Framework::Scripting {
         std::erase_if(_restartAttempts, [&cutoff](const auto &t) {
             return t < cutoff;
         });
-    }
-
-    void Resource::ClearRestartAttempts() {
-        std::scoped_lock lock(_restartAttemptsMutex);
-        _restartAttempts.clear();
     }
 
     int Resource::GetRestartBackoffMs() const {

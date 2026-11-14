@@ -156,12 +156,6 @@ namespace Framework::Scripting {
         void RecordRestartAttempt();
 
         /**
-         * Clear restart attempt history.
-         * Called after a successful sustained run or manual reset.
-         */
-        void ClearRestartAttempts();
-
-        /**
          * Get the backoff delay for the next restart attempt.
          * Uses exponential backoff based on attempt count and config.
          * @return Delay in milliseconds

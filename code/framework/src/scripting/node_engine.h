@@ -115,6 +115,7 @@ namespace Framework::Scripting {
         struct PendingUncaughtError {
             std::string resourceName;
             std::string errorMessage;
+            uint64_t serial = 0; // The resource's runtime that raised it; 0 when it was attributed by its stack.
         };
 
         /**
@@ -131,6 +132,12 @@ namespace Framework::Scripting {
          * Call after Tick() or RunUntil() to process errors outside of V8/libuv callbacks.
          */
         std::vector<PendingUncaughtError> DrainPendingErrors();
+
+        /**
+         * Whether the runtime that raised `error` still runs its resource. An error queued by a runtime that has since
+         * been stopped or replaced is about a resource that no longer exists, and is only to be logged.
+         */
+        bool IsFromCurrentRuntime(const PendingUncaughtError &error) const;
 
         /**
          * Check if this engine is running in sandboxed mode.

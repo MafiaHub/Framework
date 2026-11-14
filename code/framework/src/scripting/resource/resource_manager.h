@@ -354,7 +354,9 @@ namespace Framework::Scripting {
         size_t GetRunningResourceCount() const;
 
         /**
-         * Handle a runtime error in a resource.
+         * Handle a runtime error in a resource, by its manifest's errorBehavior: "stop" and "restart" stop it the way
+         * StopResource does, dependents first ("restart" brings them back with it); "continue" only logs it. An error
+         * for a resource that is not running, or already stopping, is only logged.
          * @param resourceName Name of the resource that encountered the error
          * @param error Error message
          */
@@ -387,15 +389,25 @@ namespace Framework::Scripting {
         // settle (or time out) before this is called.
         void CleanupResourceRuntime(Resource &resource, std::string_view resourceName);
 
-        // Tears down a resource that failed while running and tells its owners the way a clean
-        // stop does. Native state created on a resource's behalf (web views, key binds, the client
-        // half of the resource) is released from those callbacks, so a teardown that skipped them
-        // would leave it behind.
+        // Tears down a resource that failed before its start finished and tells its owners as a clean stop does:
+        // web views, key binds and the client half of a resource are released from those callbacks.
         void RetireFailedResource(Resource &resource, const std::string &resourceName);
         // The same notification for a start that failed after its runtime was already torn down.
         // An error callback may have recovered or replaced the resource in between; then there is
         // nothing stopped to announce.
         void NotifyStoppedIfStillFailed(const Resource *failed, const std::string &resourceName);
+
+        // Stops the running resources that depend on `name`, when stops cascade; returns every resource it stopped.
+        std::vector<std::string> StopDependents(std::string_view name);
+
+        // Emits resourceStop for `name`, waits for its handlers to settle or time out, then cleans up its runtime.
+        void ShutDownRuntime(Resource &resource, std::string_view name);
+
+        // The dependents an error stop of `name` took down start again when it next starts, however it is started.
+        void AwaitRestart(const std::string &name, std::vector<std::string> dependents);
+        void StartDependentsAwaiting(std::string_view name);
+        // It is not coming back: its dependents stay stopped.
+        void DropAwaitingRestart(const std::string &name);
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
@@ -430,6 +442,13 @@ namespace Framework::Scripting {
         // them is a cycle: a resource only becomes Loading after its dependencies have started, so
         // its state cannot stop the recursion.
         std::vector<std::string> _startChain;
+
+        // Resources whose error stop is stopping their dependents. They still run, so a second error from one must not
+        // start a stop of its own: it is only logged.
+        std::set<std::string, std::less<>> _errorStops;
+
+        // Per resource stopped by its own error, the dependents that went down with it. See AwaitRestart.
+        std::map<std::string, std::vector<std::string>, std::less<>> _dependentsAwaitingRestart;
 
         // Configuration
         ResourceManagerConfig _config;

@@ -704,14 +704,9 @@ MODULE(js_features, {
     });
 
     // ========================================
-    // ALLSETTLED AGGREGATION ROBUSTNESS
+    // EMISSION AGGREGATION
     // ========================================
-    // emit() aggregates via the script-mutable global Promise.allSettled, so its then-handler must
-    // not trust the record shape. These drive it with hostile shapes: pre-fix each aborts the
-    // process, post-fix each settles the emit() promise cleanly.
-
-    // Throwing `status` getter: pre-fix, Get("status").ToLocalChecked() aborts on the empty MaybeLocal.
-    IT("emit survives a Promise.allSettled whose records throw on access", {
+    IT("emit aggregates its handlers' failures without the script's Promise.allSettled", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
@@ -721,86 +716,25 @@ MODULE(js_features, {
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
-            globalThis.__done = 0;
-            Promise.allSettled = function () {
-                return Promise.resolve([{ get status() { throw new Error('boom'); } }]);
-            };
-            Events.on('hostile', () => 1);
-            Events.emit('hostile').then(() => { globalThis.__done = 1; },
-                                             () => { globalThis.__done = 2; });
+            globalThis.__failed = 0;
+            Promise.allSettled = function () { throw new Error('not to be used'); };
+            Events.on('mixed', () => { throw new Error('sync failure'); });
+            Events.on('mixed', () => 1);
+            Events.on('mixed', async () => { await null; throw new Error('async failure'); });
+            Events.emit('mixed').then(() => { globalThis.__failed = -1; }, (error) => { globalThis.__failed = error instanceof AggregateError && error.errors[0].message === 'sync failure' && error.errors[1].message === 'async failure' ? error.errors.length : -2; });
             0
         )");
 
-        // Drain microtasks so the then-handler and the emit() continuation run.
         for (int i = 0; i < 8; ++i) engine.Tick();
 
-        // No crash, and the emit() promise settled — resolved, since no well-formed rejection.
-        EQUALS(RunJS(engine, "globalThis.__done"), 1);
+        EQUALS(RunJS(engine, "globalThis.__failed"), 2);
 
         cleanupResource(engine, manager);
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });
 
-    // Non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
-    IT("emit survives a Promise.allSettled that resolves with a non-array", {
-        EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
-        config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
-        registerEvents(engine, manager);
-
-        RunJS(engine, R"(
-            globalThis.__done2 = 0;
-            Promise.allSettled = function () { return Promise.resolve("not-an-array"); };
-            Events.on('hostile2', () => 1);
-            Events.emit('hostile2').then(() => { globalThis.__done2 = 1; },
-                                              () => { globalThis.__done2 = 2; });
-            0
-        )");
-
-        for (int i = 0; i < 8; ++i) engine.Tick();
-
-        EQUALS(RunJS(engine, "globalThis.__done2"), 1);
-
-        cleanupResource(engine, manager);
-        engine.Shutdown();
-        EventsTestHelper::Cleanup();
-    });
-
-    // Non-Promise return: pre-fix, allSettledResult.ToLocalChecked().As<v8::Promise>()->Then()
-    // runs on a non-Promise handle and aborts. Post-fix the IsPromise() guard soft-resolves.
-    IT("emit survives a Promise.allSettled that returns a non-Promise", {
-        EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
-        config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
-        registerEvents(engine, manager);
-
-        RunJS(engine, R"(
-            globalThis.__done3 = 0;
-            Promise.allSettled = function () { return 42; };
-            Events.on('hostile3', () => 1);
-            Events.emit('hostile3').then(() => { globalThis.__done3 = 1; },
-                                              () => { globalThis.__done3 = 2; });
-            0
-        )");
-
-        for (int i = 0; i < 8; ++i) engine.Tick();
-
-        EQUALS(RunJS(engine, "globalThis.__done3"), 1);
-
-        cleanupResource(engine, manager);
-        engine.Shutdown();
-        EventsTestHelper::Cleanup();
-    });
-
-    // Sanity: the hardening must not swallow genuine, well-formed rejections.
-    IT("emit still rejects when a handler rejects (real allSettled)", {
+    IT("emit still rejects when a handler rejects", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
