@@ -717,6 +717,35 @@ MODULE(resource_isolation, {
         engine.Shutdown();
         TestManagerHelper::Cleanup();
     });
+    IT("tells an error from a runtime that has since been replaced from one of the runtime running now", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("replaced", "setTimeout(() => { throw new Error('old runtime fixture'); }, 1);");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("replaced"), true);
+
+        std::vector<NodeEngine::PendingUncaughtError> errors;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (errors.empty() && std::chrono::steady_clock::now() < deadline) {
+            engine.Tick();
+            errors = engine.DrainPendingErrors();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        EQUALS(errors.size(), 1u);
+        EQUALS(engine.IsFromCurrentRuntime(errors[0]), true);
+
+        EQUALS((bool)manager.RestartResource("replaced"), true);
+        EQUALS(engine.IsFromCurrentRuntime(errors[0]), false);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
     IT("starts a resource's dependents again when an error listener recovers it", {
         TestManagerHelper::Cleanup();
         ResourceIsolationTest::WriteResource("revived", "__record('revivedLoads', __recorded('revivedLoads') + 1);");

@@ -207,6 +207,11 @@ namespace Framework::Integrations::Server::Scripting {
 
     void ServerScriptingModule::HandleRuntimeErrors() {
         for (const auto &err : _nodeEngine->DrainPendingErrors()) {
+            // Raised before its resource was stopped or restarted, by a runtime that is gone: the resource running now did not fail.
+            if (!_nodeEngine->IsFromCurrentRuntime(err)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error from a run that has since ended: {}", err.resourceName, err.errorMessage);
+                continue;
+            }
             if (_resourceManager) {
                 _resourceManager->HandleResourceRuntimeError(err.resourceName, err.errorMessage);
             }
