@@ -39,6 +39,7 @@ namespace Framework::Scripting::Builtins {
         static constexpr float kMaxFontSize   = 512.0f;
         static constexpr float kDefaultMetres = 30.0f;
         static constexpr float kMaxDrawMetres = 1000.0f;
+        static constexpr size_t kMaxFontBytes = Networking::Replication::Entities::kTextLabelMaxFontBytes;
 
         TextLabel(uint64_t networkId): Entity(networkId) {}
 
@@ -65,6 +66,17 @@ namespace Framework::Scripting::Builtins {
 
         float GetFadeDistance() const;
         void SetFadeDistance(float distance);
+
+        // The near edge. Not the streaming radius: a label too close to draw is still sent, so
+        // another can take over at that distance without a gap.
+        float GetMinDrawDistance() const;
+        void SetMinDrawDistance(float distance);
+
+        float GetMinFadeDistance() const;
+        void SetMinFadeDistance(float distance);
+
+        std::string GetFont() const;
+        void SetFont(const std::string &family);
 
         uint32_t GetStyle() const;
         void SetStyle(uint32_t style);

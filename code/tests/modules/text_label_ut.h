@@ -121,6 +121,9 @@ MODULE(text_label, {
         sent.lineSpacing       = 1.5f;
         sent.maxWidth          = 240.0f;
         sent.occlusion         = false;
+        sent.minDrawDistance   = 600.0f;
+        sent.minFadeDistance   = 900.0f;
+        sent.font              = "Inter Display";
         sent.style             = NearestTextLabelStylePreset(sent);
 
         MafiaNet::BitStream bs;
@@ -153,6 +156,8 @@ MODULE(text_label, {
         EQUALS((got.align == TextLabelAlign::Right && got.anchor == TextLabelAnchor::Bottom), true);
         EQUALS((got.lineSpacing == 1.5f && got.maxWidth == 240.0f), true);
         EQUALS(got.occlusion, false);
+        EQUALS((got.minDrawDistance == 600.0f && got.minFadeDistance == 900.0f), true);
+        STREQUALS(got.font.c_str(), "Inter Display");
         EQUALS((got.style == TextLabelStyle::Box), true);
     });
 

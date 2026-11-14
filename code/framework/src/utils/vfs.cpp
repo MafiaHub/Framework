@@ -119,6 +119,15 @@ namespace Framework::Utils {
         return stat.filetype == PHYSFS_FILETYPE_REGULAR;
     }
 
+    std::optional<uint64_t> Vfs::Size(const std::string &vpath) const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        PHYSFS_Stat stat {};
+        if (!_initialized || PHYSFS_stat(vpath.c_str(), &stat) == 0 || stat.filetype != PHYSFS_FILETYPE_REGULAR || stat.filesize < 0) {
+            return std::nullopt;
+        }
+        return static_cast<uint64_t>(stat.filesize);
+    }
+
     bool Vfs::Read(const std::string &path, std::string &outContents) const {
         {
             std::lock_guard<std::mutex> lock(_mutex);

@@ -52,4 +52,10 @@ namespace Framework::Integrations::Client::UI::TextLabels {
         }
         return {::Framework::External::ImGUI::Widgets::WorldTextRun {label.text}};
     }
+
+    // Both distance fades at once; 0 is culled. `distance` is in world units, from wherever the
+    // game measures a label's draw distance.
+    inline float Alpha(const ::Framework::Networking::Replication::Entities::TextLabelEntity &label, float distance) {
+        return ::Framework::External::ImGUI::Widgets::WorldTextAlpha(distance, label.drawDistance, label.fadeDistance) * ::Framework::External::ImGUI::Widgets::WorldTextNearAlpha(distance, label.minDrawDistance, label.minFadeDistance);
+    }
 } // namespace Framework::Integrations::Client::UI::TextLabels

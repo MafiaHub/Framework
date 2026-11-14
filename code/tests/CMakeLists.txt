@@ -77,7 +77,9 @@ endif()
 
 # NodeEngine and V8Engine each initialize V8's process-wide platform, so exercise
 # the client runtime in its own process.
-add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp)
+add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp
+    # Fonts.register's checks, without the atlas it hands families to.
+    ../framework/src/integrations/client/scripting/builtins/fonts.cpp)
 target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/src)
 if(WIN32)
     # Key.bind dispatch, without linking the rest of FrameworkClient.
