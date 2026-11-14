@@ -360,6 +360,29 @@ MODULE(resource_package, {
         STREQUALS(manifest.GetMafiaHubConfig().files[0].c_str(), "ok.js");
     });
 
+    IT("reads errorBehavior strictly, as stop unless it names another policy", {
+        using Framework::Scripting::ErrorBehavior;
+        Framework::Scripting::PackageManifest manifest;
+        const auto parse = [&manifest](nlohmann::json behavior) -> std::optional<ErrorBehavior> {
+            nlohmann::json json = {{"name", "demo"}, {"mafiahub", {{"server", "s.js"}}}};
+            if (!behavior.is_null()) {
+                json["mafiahub"]["errorBehavior"] = std::move(behavior);
+            }
+            if (!manifest.ParseJson(json)) {
+                return std::nullopt;
+            }
+            return manifest.GetMafiaHubConfig().errorBehavior;
+        };
+        EQUALS(parse(nullptr) == ErrorBehavior::Stop, true);
+        EQUALS(parse("stop") == ErrorBehavior::Stop, true);
+        EQUALS(parse("restart") == ErrorBehavior::Restart, true);
+        EQUALS(parse("continue") == ErrorBehavior::Continue, true);
+        // A misspelt or mistyped policy must not leave a failing resource running.
+        EQUALS(parse("Continue") == ErrorBehavior::Stop, true);
+        EQUALS(parse("contine") == ErrorBehavior::Stop, true);
+        EQUALS(parse(1) == ErrorBehavior::Stop, true);
+    });
+
     IT("ships shared scripts but never server scripts", {
         const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_roles";
         std::filesystem::remove_all(root);

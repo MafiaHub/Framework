@@ -355,7 +355,8 @@ namespace Framework::Scripting {
 
         /**
          * Handle a runtime error in a resource, by its manifest's errorBehavior: "stop" and "restart" stop it the way
-         * StopResource does, dependents first ("restart" brings them back with it); "continue" only logs it.
+         * StopResource does, dependents first ("restart" brings them back with it); "continue" only logs it. An error
+         * for a resource that is not running, or already stopping, is only logged.
          * @param resourceName Name of the resource that encountered the error
          * @param error Error message
          */
@@ -364,10 +365,9 @@ namespace Framework::Scripting {
         /**
          * Schedule an auto-restart for a resource.
          * @param resourceName Name of the resource to restart
-         * @param dependents Resources its error stopped, started again once it runs
          * @return True if restart was scheduled
          */
-        bool ScheduleAutoRestart(const std::string &resourceName, std::vector<std::string> dependents = {});
+        bool ScheduleAutoRestart(const std::string &resourceName);
 
         /**
          * Process scheduled restart tasks.
@@ -403,8 +403,11 @@ namespace Framework::Scripting {
         // Emits resourceStop for `name`, waits for its handlers to settle or time out, then cleans up its runtime.
         void ShutDownRuntime(Resource &resource, std::string_view name);
 
-        // Starts again the dependents an error stop of `resourceName` took down, once it runs again.
-        void StartDependentsAfter(const std::string &resourceName, const std::vector<std::string> &dependents);
+        // The dependents an error stop of `name` took down start again when it next starts, however it is started.
+        void AwaitRestart(const std::string &name, std::vector<std::string> dependents);
+        void StartDependentsAwaiting(std::string_view name);
+        // It is not coming back: its dependents stay stopped.
+        void DropAwaitingRestart(const std::string &name);
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
@@ -440,9 +443,12 @@ namespace Framework::Scripting {
         // its state cannot stop the recursion.
         std::vector<std::string> _startChain;
 
-        // Resources whose error stop is waiting on their dependents. They still run, so a second error from one must
-        // not start a stop of its own: it is only logged.
+        // Resources whose error stop is stopping their dependents. They still run, so a second error from one must not
+        // start a stop of its own: it is only logged.
         std::set<std::string, std::less<>> _errorStops;
+
+        // Per resource stopped by its own error, the dependents that went down with it. See AwaitRestart.
+        std::map<std::string, std::vector<std::string>, std::less<>> _dependentsAwaitingRestart;
 
         // Configuration
         ResourceManagerConfig _config;
@@ -480,7 +486,6 @@ namespace Framework::Scripting {
         struct ScheduledRestart {
             std::string resourceName;
             std::chrono::system_clock::time_point scheduledTime;
-            std::vector<std::string> dependents;
         };
         std::vector<ScheduledRestart> _scheduledRestarts;
         mutable std::mutex _scheduledRestartsMutex;

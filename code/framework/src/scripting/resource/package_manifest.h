@@ -8,12 +8,20 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
 namespace Framework::Scripting {
+
+    // What a runtime error does to its resource: stop it (with its dependents), stop and restart it, or only log it.
+    enum class ErrorBehavior : uint8_t {
+        Stop,
+        Restart,
+        Continue
+    };
 
     struct ResourceDependency {
         std::string name;
@@ -63,7 +71,7 @@ namespace Framework::Scripting {
         std::vector<ResourceDependency> resourceDependencies;
         std::vector<std::string> exports;
         int priority              = 0;
-        std::string errorBehavior = "stop"; // stop, restart, continue
+        ErrorBehavior errorBehavior = ErrorBehavior::Stop;
     };
 
     /**

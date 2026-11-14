@@ -673,6 +673,8 @@ MODULE(resource_isolation, {
         EQUALS(manager.IsResourceRunning("rider"), true);
         EQUALS(TestManagerHelper::RecordedValue("flakyLoads"), 1);
         EQUALS(TestManagerHelper::RecordedValue("riderLoads"), 1);
+        // Still counted, so a resource that keeps failing soon after each start runs out of restarts.
+        EQUALS(manager.GetResource("flaky")->GetRestartAttemptCount(), 1);
 
         manager.StopAll();
         engine.Shutdown();
@@ -712,6 +714,73 @@ MODULE(resource_isolation, {
         }
         EQUALS(manager.IsResourceRunning("follower"), true);
         EQUALS(TestManagerHelper::RecordedValue("followerLoads"), 1);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+    IT("brings the dependents back with a resource started by hand before its scheduled restart, and does not restart it again", {
+        TestManagerHelper::Cleanup();
+        TestManagerHelper::CreateTestResource("early", R"({"name":"early","version":"1.0.0","mafiahub":{"server":"main.js","errorBehavior":"restart"}})");
+        TestManagerHelper::CreateTestScript("early", "main.js", "__record('earlyLoads', __recorded('earlyLoads') + 1);");
+        TestManagerHelper::CreateTestResource("kept", R"({"name":"kept","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"early"}]}})");
+        TestManagerHelper::CreateTestScript("kept", "main.js", "__record('keptLoads', __recorded('keptLoads') + 1);");
+        TestManagerHelper::CreateTestResource("dropped", R"({"name":"dropped","version":"1.0.0","mafiahub":{"server":"main.js","resourceDependencies":[{"name":"early"}]}})");
+        TestManagerHelper::CreateTestScript("dropped", "main.js", "__record('droppedLoads', __recorded('droppedLoads') + 1);");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        EQUALS(manager.DiscoverResources(), 3u);
+        EQUALS((bool)manager.StartResource("kept"), true);
+        EQUALS((bool)manager.StartResource("dropped"), true);
+
+        manager.HandleResourceRuntimeError("early", "early fixture");
+        EQUALS(manager.GetResourceState("early") == ResourceState::Error, true);
+        // Stopped again while it is down: it stays down when what it depends on comes back.
+        EQUALS((bool)manager.StopResource("dropped"), true);
+        EQUALS((bool)manager.StartResource("early"), true);
+        EQUALS(manager.IsResourceRunning("kept"), true);
+        EQUALS(manager.IsResourceRunning("dropped"), false);
+
+        // The restart it had scheduled finds it running and leaves it, and its dependents, alone.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+        while (std::chrono::steady_clock::now() < deadline) {
+            manager.ProcessScheduledRestarts();
+            engine.Tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        EQUALS(TestManagerHelper::RecordedValue("earlyLoads"), 1);
+        EQUALS(TestManagerHelper::RecordedValue("keptLoads"), 1);
+        EQUALS(manager.IsResourceRunning("dropped"), false);
+
+        manager.StopAll();
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+    IT("only logs an error for a resource an earlier error already stopped", {
+        TestManagerHelper::Cleanup();
+        ResourceIsolationTest::WriteResource("retired", "// empty script");
+        NodeEngine engine;
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+        ResourceManager manager(&engine, config);
+        TestManagerHelper::RegisterEvents(engine, manager);
+        int reported = 0;
+        manager.AddOnResourceError([&reported](const std::string &, const std::string &) {
+            ++reported;
+        });
+        EQUALS(manager.DiscoverResources(), 1u);
+        EQUALS((bool)manager.StartResource("retired"), true);
+
+        manager.HandleResourceRuntimeError("retired", "first error");
+        manager.HandleResourceRuntimeError("retired", "queued behind the first");
+        EQUALS(reported, 1);
+        EQUALS(manager.GetResourceState("retired") == ResourceState::Error, true);
+        STREQUALS(manager.GetResource("retired")->GetErrorMessage().c_str(), "first error");
 
         manager.StopAll();
         engine.Shutdown();

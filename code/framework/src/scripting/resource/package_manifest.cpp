@@ -98,7 +98,19 @@ namespace Framework::Scripting {
             }
             readList("clientFiles", _mafiahubConfig.files);
             _mafiahubConfig.priority      = mh.value("priority", 0);
-            _mafiahubConfig.errorBehavior = mh.value("errorBehavior", "stop");
+            // Read strictly: a misspelt policy must not quietly keep a failing resource running.
+            if (const auto behavior = mh.find("errorBehavior"); behavior != mh.end()) {
+                const std::string value = behavior->is_string() ? behavior->get<std::string>() : std::string();
+                if (value == "restart") {
+                    _mafiahubConfig.errorBehavior = ErrorBehavior::Restart;
+                }
+                else if (value == "continue") {
+                    _mafiahubConfig.errorBehavior = ErrorBehavior::Continue;
+                }
+                else if (value != "stop") {
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("'errorBehavior' must be \"stop\", \"restart\" or \"continue\", not {}; treating it as \"stop\"", behavior->dump());
+                }
+            }
 
             // Exports
             if (mh.contains("exports") && mh["exports"].is_array()) {

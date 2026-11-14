@@ -302,24 +302,6 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    IT("ClearRestartAttempts resets counter", {
-        TestResourceHelper::CreateTestResource("restart-test-2", R"({
-            "name": "restart-test-2",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-2");
-
-        resource.RecordRestartAttempt();
-        resource.RecordRestartAttempt();
-        EQUALS(resource.GetRestartAttemptCount(), 2);
-
-        resource.ClearRestartAttempts();
-        EQUALS(resource.GetRestartAttemptCount(), 0);
-
-        TestResourceHelper::Cleanup();
-    });
-
     IT("calculates exponential backoff correctly", {
         TestResourceHelper::CreateTestResource("backoff-test", R"({
             "name": "backoff-test",
