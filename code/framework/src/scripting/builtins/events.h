@@ -11,7 +11,12 @@
 #include <v8.h>
 #include <v8pp/convert.hpp>
 
+#include "../bind/callable.h"
+#include "../bind/namespace.h"
+#include "../bind/registrar.h"
 #include "../value_transfer.h"
+
+#include <function2/function2.hpp>
 
 #include <atomic>
 #include <map>
@@ -25,36 +30,47 @@
 
 namespace Framework::Scripting {
     class ResourceManager;
-}
+} // namespace Framework::Scripting
 
 namespace Framework::Scripting::Builtins {
+
+    // The JavaScript function of a handler, shared by its table entry and by the emissions that picked it: emptied
+    // when its isolate goes, whoever still holds it, so that no handle outlives the isolate it belongs to.
+    using EventFunction = std::shared_ptr<v8::Global<v8::Function>>;
 
     /**
      * Handler entry with metadata
      */
     struct EventHandler {
-        v8::Global<v8::Function> callback;
+        // The function, whatever its language: what tells two handlers apart, what a Lua emitter and a Lua handler
+        // are invoked through, and what says that the runtime of the handler has stopped.
+        std::shared_ptr<Bind::ScriptCallable> callable;
+
+        // A handler registered from JavaScript, as JavaScript emitters call it: by reference in its own isolate,
+        // through the engine's function references from another. Null for a Lua handler.
+        EventFunction callback;
         std::string resourceName;
-        bool once;
+        bool once = false;
 
         // The isolate the callback lives in. A handler in another isolate than the emitter's is called through the
-        // engine's function references, with the arguments copied across.
+        // engine's function references, with the arguments copied across. nullptr for a Lua handler.
         v8::Isolate *isolate = nullptr;
     };
 
     // A handler picked for one emission, held outside the table lock while it runs.
     struct CollectedHandler {
-        v8::Global<v8::Function> callback;
+        std::shared_ptr<Bind::ScriptCallable> callable;
+        EventFunction callback;
         std::string resourceName;
         v8::Isolate *isolate = nullptr;
 
-        explicit CollectedHandler(const EventHandler &handler): callback(handler.isolate, handler.callback), resourceName(handler.resourceName), isolate(handler.isolate) {}
+        explicit CollectedHandler(const EventHandler &handler): callable(handler.callable), callback(handler.callback), resourceName(handler.resourceName), isolate(handler.isolate) {}
     };
 
     /**
-     * JavaScript Events system - global event bus with async support.
+     * Events system - global event bus with async support, for JavaScript and Lua alike.
      *
-     * Provides Events global API:
+     * One definition (Definition) declares the Events global of both languages:
      * - on(eventName, handler) - Register listener, returns unsubscribe function
      * - once(eventName, handler) - One-time listener
      * - off(eventName, handler) - Remove listener
@@ -72,6 +88,14 @@ namespace Framework::Scripting::Builtins {
      * so a client-supplied event name can never resolve to a handler registered with on() — the
      * "server said this" vs "a client claims this" split is enforced by construction, not by a
      * naming convention. emit()/emitTo() from scripts likewise cannot reach the client table.
+     *
+     * Dispatch across languages:
+     * A JavaScript emitter calls a JavaScript handler as it always did: with the very arguments in its own isolate,
+     * through the engine's function references in another. Whatever involves Lua, a Lua handler or a Lua emitter,
+     * goes through the callable of the handler with the arguments copied once per emission, and the handler is
+     * called for its outcome only: a veto, a failure, and when it is done. A JavaScript emitter gets the Promise
+     * it always got. A Lua emit waits until every handler has settled, returns nothing, and raises the message
+     * the Promise would be rejected with followed by what each handler failed with.
      */
     class Events final {
       public:
@@ -82,11 +106,28 @@ namespace Framework::Scripting::Builtins {
         Events(const Events &)            = delete;
         Events &operator=(const Events &) = delete;
 
+        // What an emission made with copied arguments is told once every handler has settled: what each handler
+        // that failed threw, in the order the handlers were called. Empty when none failed. It must not throw.
+        using EmissionDone = fu2::unique_function<void(std::vector<std::string> &&errors)>;
+
+        // An emission made with copied arguments, for CancelPendingEmission. Null for one that found no handler to
+        // call. One whose handlers have all settled has a token too, and cancelling it does nothing.
+        struct CopiedEmission;
+        using EmissionToken = std::shared_ptr<CopiedEmission>;
+
+        // The Events global of both languages.
+        static const Bind::Namespace &Definition();
+
         /**
-         * Register the Events object on the target. isClient exposes emitServer (client -> onClient);
-         * otherwise exposes emitAllClients (server -> every client's on()).
+         * Publish Events as a global in the languages of `languages`. A client runtime gets emitServer
+         * (client -> onClient); a server one emitAllClients (server -> every client's on()).
+         *
+         * An isolate has one Events: the functions of the definition find theirs by the isolate they run in, so
+         * the last Register of an isolate wins, also for the Events objects earlier calls made there. In Lua the
+         * functions work on the Events of the resource manager the calls of the runtime answer with
+         * (Bind::SetCallResourceManager).
          */
-        void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager, bool isClient = false);
+        void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, ResourceManager *resourceManager = nullptr);
 
         /**
          * Emit an event from native code to all global handlers.
@@ -95,9 +136,24 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args);
 
         /**
+         * EmitReserved for a host that has no isolate to emit from, as a server without a JavaScript engine: the
+         * arguments are copies, every handler of either language is called through its callable, and `done` is
+         * told when they have all settled, which may be before this returns. A caller that stops waiting hands what
+         * this returns to CancelPendingEmission.
+         */
+        EmissionToken EmitReserved(const std::string &eventName, std::vector<TransferredValue> args, EmissionDone done);
+
+        // Lets go of the `done` of an emission made with copied arguments, which is then never told. Its handlers
+        // run on. Nothing for an emission that has settled.
+        static void CancelPendingEmission(const EmissionToken &emission);
+
+        // What a failed emission is described with: `message`, then what each handler failed with.
+        static std::string DescribeFailures(std::string_view message, const std::vector<std::string> &errors);
+
+        /**
          * Synchronous EmitReserved. Every handler runs; returning literal false vetoes, and this
          * returns false when any did. A returned Promise is ignored — the caller needs its answer
-         * before it returns, so async handlers cannot veto.
+         * before it returns, so async handlers cannot veto: neither can a Lua handler that waits.
          */
         bool EmitReservedSync(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args);
 
@@ -133,6 +189,11 @@ namespace Framework::Scripting::Builtins {
          */
         void ForgetIsolate(v8::Isolate *isolate);
 
+        // ForgetIsolate on the Events the isolate was registered with, if any. Builtins::UnregisterAll calls it for
+        // every isolate an engine disposes of, the engine's own included, which no runtime listener speaks for:
+        // nothing here then outlives the isolate it holds handles of.
+        static void UnregisterIsolate(v8::Isolate *isolate);
+
         // Emissions still waiting for their handlers to settle, across every Events. For diagnostics and tests.
         static size_t GetWaitingEmissionCount();
 
@@ -158,18 +219,6 @@ namespace Framework::Scripting::Builtins {
         size_t GetClientListenerCount(std::string_view eventName);
 
       private:
-        /**
-         * Context data passed to V8 callbacks via External.
-         * Contains both the Events instance and ResourceManager.
-         * The valid flag is set to false when Events is destroyed,
-         * allowing lambdas holding this context to safely bail out.
-         */
-        struct CallbackContext {
-            Events *events;
-            ResourceManager *resourceManager;
-            std::atomic<bool> valid {true};
-        };
-
         // Selects which handler table an operation targets. The client table backs onClient()
         // and EmitClient(); it is deliberately disjoint from the global table (on()/emit()) so
         // client-originated event names cannot reach native handlers.
@@ -178,27 +227,12 @@ namespace Framework::Scripting::Builtins {
             Client
         };
 
-        // V8 callbacks. on/once/off are shared by the global and client scopes via the *Impl
-        // helpers; the bound callbacks only pin the scope.
-        static void OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OnceCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OnClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OnceClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OffClientCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        // Script-level client<->server event bridge: emitServer (client), emitAllClients (server).
-        static void EmitServerCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void EmitAllClientsCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void EmitToCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OnLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void EmitLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        // What the functions of the definition run. Defined in events.cpp.
+        struct Script;
 
-        // Scope-aware bodies behind the on/once/off callbacks.
-        static void OnImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
-        static void OnceImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
-        static void OffImpl(const v8::FunctionCallbackInfo<v8::Value> &args, HandlerScope scope);
+        // The arguments of an emission copied for the handlers that are called through their callable, made on the
+        // first of them.
+        struct CallableArguments;
 
         // Returns the handler table backing the given scope.
         std::map<std::string, std::vector<EventHandler>, std::less<>> &HandlerTable(HandlerScope scope);
@@ -207,20 +241,36 @@ namespace Framework::Scripting::Builtins {
         // dispatch runs outside the table lock.
         std::vector<CollectedHandler> CollectHandlers(const std::string &eventName, const std::string &targetResource, HandlerScope scope);
 
-        // Internal registration helper
-        void RegisterHandler(v8::Isolate *isolate, ResourceManager *manager, std::string_view eventName, v8::Local<v8::Function> handler, bool once, HandlerScope scope);
+        // Snapshot of the local handlers of a resource for an event.
+        std::vector<CollectedHandler> CollectLocalHandlers(const std::string &resourceName, const std::string &eventName);
 
         // Internal emit helper - returns Promise
-        v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource = "", HandlerScope scope = HandlerScope::Global);
+        v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate, v8::Local<v8::Context> context, const std::string &eventName, const std::vector<v8::Local<v8::Value>> &args, const std::string &targetResource, HandlerScope scope, std::string_view api);
+
+        // Calls `handlers` from the isolate of the emitter and returns the Promise of the emission, rejected with an
+        // AggregateError carrying `aggregateErrorMessage` when a handler fails. `api` names the emitting function
+        // where an argument cannot be copied for a Lua handler.
+        v8::Local<v8::Promise> EmitToHandlers(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, const std::string &aggregateErrorMessage,
+            std::string_view api);
+
+        // Calls `handlers` for an emitter that has no isolate, a Lua script or a host without JavaScript, each
+        // through its callable, and tells `done` when all have settled. `manager` is the key of the share of the log
+        // a handler that fails gets (LogScriptError); it is not read through.
+        static EmissionToken EmitCopied(const void *manager, std::vector<CollectedHandler> handlers, const std::vector<TransferredValue> &args, const std::string &eventName, EmissionDone done);
 
         // Helper: invoke handlers and collect results as promises in the emitter's isolate. A handler's resource name
         // is its log context.
-        v8::Local<v8::Array> InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName);
+        v8::Local<v8::Array> InvokeHandlersToPromiseArray(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<CollectedHandler> &handlers, const std::vector<v8::Local<v8::Value>> &args, const std::string &eventName, std::string_view api);
 
-        // Calls one handler and returns what it returned, or empty with the exception caught by the caller's TryCatch.
-        // `copied` holds the arguments copied out of the emitter, made on the first handler in another isolate. A
-        // handler running past the resource monitor's threshold is reported under `eventName`.
+        // Calls one JavaScript handler and returns what it returned, or empty with the exception caught by the caller's
+        // TryCatch. `copied` holds the arguments copied out of the emitter, made on the first handler in another
+        // isolate. A handler running past the resource monitor's threshold is reported under `eventName`.
         v8::MaybeLocal<v8::Value> InvokeHandler(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, std::optional<std::vector<TransferredValue>> &copied, std::string_view eventName);
+
+        // Calls one Lua handler from the isolate of the emitter, through its callable, and returns a promise of that
+        // isolate that settles as the handler does: at once when it finished at once, when it stops waiting
+        // otherwise.
+        v8::Local<v8::Value> InvokeCallable(v8::Isolate *isolate, v8::Local<v8::Context> context, CollectedHandler &handler, const std::vector<v8::Local<v8::Value>> &args, CallableArguments &copied, const std::string &eventName, std::string_view api);
 
         // Forward declaration for callback data tracking
         struct AllSettledCallbackData;
@@ -244,11 +294,21 @@ namespace Framework::Scripting::Builtins {
         // Local handlers: resourceName -> eventName -> handlers
         std::map<std::string, std::map<std::string, std::vector<EventHandler>, std::less<>>, std::less<>> _localHandlers;
 
+        // The functions of the handlers that emissions in progress picked, by isolate: a handler may leave its table
+        // while an emission still holds it, and its isolate may go before that emission ends. Under _handlersMutex.
+        std::map<v8::Isolate *, std::vector<std::weak_ptr<v8::Global<v8::Function>>>> _dispatching;
+
+        // Notes what an emission picked. Call with _handlersMutex held.
+        void TrackDispatch(const std::vector<CollectedHandler> &handlers);
+
         mutable std::mutex _handlersMutex;
 
-        // Callback context passed to V8 via Externals. Allocated once and reused, never
-        // reallocated — its address outlives individual Register() calls. See Events::Register.
-        std::unique_ptr<CallbackContext> _callbackContext;
+        // The manager Register was last given: whose function references reach a handler in another isolate.
+        ResourceManager *_resourceManager = nullptr;
+
+        // What an unsubscribe function finds this Events through: it holds nullptr once the Events is gone, so a
+        // function a script kept beyond it does nothing.
+        std::shared_ptr<Events *> _self = std::make_shared<Events *>(this);
 
         // Track pending AllSettled callbacks for cleanup on destruction
         std::set<std::shared_ptr<AllSettledCallbackData>> _pendingCallbacks;

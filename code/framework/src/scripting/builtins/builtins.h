@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -14,6 +14,9 @@
 #include "vector3.h"
 #include "vector4.h"
 
+#include "../bind/descriptors.h"
+#include "../bind/doc.h"
+#include "../bind/registrar.h"
 #include "../value_transfer.h"
 
 #include <v8.h>
@@ -22,7 +25,13 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <initializer_list>
+#include <string>
 #include <vector>
+
+namespace Framework::Scripting {
+    class ResourceManager;
+} // namespace Framework::Scripting
 
 // Conventions every builtin here follows — namespace, throw idiom, registration
 // shape — are documented in README.md next to this file. Match them when adding
@@ -31,27 +40,48 @@
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Register the pure value types (Vector2/3/4, Quaternion, Color) on the target
-     * object. Handle types (Entity, Player, TextLabel) and service APIs register
-     * themselves — see README.md. Counterpart to UnregisterAll.
+     * Register the pure value types (Vector2/3/4, Quaternion, Color) as globals, in the languages of `languages`.
+     * Handle types (Entity, Player, TextLabel) and service APIs register themselves — see README.md. Counterpart
+     * to UnregisterAll.
      */
-    inline void RegisterValueTypes(v8::Isolate *isolate, v8::Local<v8::Object> target) {
-        Vector2::Register(isolate, target);
-        Vector3::Register(isolate, target);
-        Vector4::Register(isolate, target);
-        Quaternion::Register(isolate, target);
-        Color::Register(isolate, target);
+    inline void RegisterValueTypes(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All) {
+        Vector2::Register(registrar, languages);
+        Vector3::Register(registrar, languages);
+        Vector4::Register(registrar, languages);
+        Quaternion::Register(registrar, languages);
+        Color::Register(registrar, languages);
     }
 
+    /**
+     * Registers what a script has on both sides: the value types, Events, Messages, Imports, Exports, console and
+     * ExecutionEnvironment, each with the members of the side of its runtime, then, in Lua only, Entity, Player and
+     * TextLabel: in JavaScript a game publishes Player and TextLabel itself, while a Lua state is set up by its
+     * scripting module and nowhere else. `manager` owns the Events registered, and is what a JavaScript call
+     * answers GetResourceManager with (Bind::SetCallResourceManager); a Lua runtime is told its manager by the
+     * module that applies the registrar to it.
+     */
+    void RegisterShared(Bind::Registrar &registrar, Bind::Languages languages, ResourceManager &manager, const std::string &modVersion);
+
+    /**
+     * The definitions of what RegisterShared publishes in Lua, and of the bag `entity.state` answers, followed by
+     * `more`, the definitions of what a scripting module publishes itself: what the Lua definition file of its
+     * side is written from, in that order (Bind::WriteLuaDefinitions).
+     */
+    std::vector<const Bind::ClassDesc *> SharedDefinitions(std::initializer_list<const Bind::ClassDesc *> more = {});
+
     // Drops every builtin type's cached class wrapper for this isolate, then everything v8pp holds for it
-    // (class registries, the objects they wrap, bound functions' data). Call once, just before disposal:
+    // (class registries, the objects they wrap, bound functions' data), after telling the callables and the
+    // deferred results of the binding layer that the isolate goes (bind/callable.h). Call once, just before disposal:
     // a leftover entry leaks and, if the isolate address is later reused, resolves to a wrapper bound to
     // the dead isolate. Out-of-line so callers don't pull in the handle types' networking headers.
+    //
+    // Telling the callables completes the calls into the isolate that had not ended, each through its `done`,
+    // which is host code and may run script in other runtimes: call this where that is safe to happen.
     void UnregisterAll(v8::Isolate *isolate);
 
     // Teaches ValueTransfer the builtin value types and handles, so they cross between resources as themselves rather
-    // than as plain objects. Process-wide and idempotent; it must run before a project registers its own handle types,
-    // which the server scripting module's constructor sees to.
+    // than as plain objects, and LuaTransfer the same types, with the same names and the same bytes, so they cross between the two languages too. Process-wide and idempotent; it must run before a project registers its own
+    // handle types, which the constructor of the server scripting module sees to, and on a client that of its Lua host.
     void RegisterTransferTypes();
 
     /**

@@ -9,6 +9,8 @@
 #include "value_transfer.h"
 #include "engine_helpers.h"
 
+#include "bind/v8_callable.h"
+
 #include <utils/profiler.h>
 
 #include <v8pp/convert.hpp>
@@ -424,7 +426,7 @@ namespace Framework::Scripting {
                 case TransferredValue::Kind::TypedArray: return BuildView(value);
                 case TransferredValue::Kind::Error: return BuildError(value);
                 case TransferredValue::Kind::HostObject: return BuildHostObject(value);
-                case TransferredValue::Kind::Function: return BuildFunction(value.reference);
+                case TransferredValue::Kind::Function: return BuildFunction(value);
                 }
                 return Throw("Unknown value kind");
             }
@@ -579,12 +581,21 @@ namespace Framework::Scripting {
                 return Throw("Unknown host type " + value.text);
             }
 
-            v8::MaybeLocal<v8::Value> BuildFunction(uint64_t reference) {
-                if (!_functions.importFunction) {
+            // A function that was exported between JavaScript runtimes is the caller's to import, also when it
+            // carries a callable as well: its stand-in runs it on the object it was sent with. One that carries
+            // a callable alone is rebuilt from that, whatever the caller imports.
+            v8::MaybeLocal<v8::Value> BuildFunction(const TransferredValue &value) {
+                v8::Local<v8::Function> function;
+                if (_functions.importFunction && (value.reference != 0 || value.callable == nullptr)) {
+                    if (!_functions.importFunction(_isolate, _context, value.reference).ToLocal(&function)) {
+                        return {};
+                    }
+                    return function;
+                }
+                if (value.callable == nullptr) {
                     return Throw("A function cannot be rebuilt here");
                 }
-                v8::Local<v8::Function> function;
-                if (!_functions.importFunction(_isolate, _context, reference).ToLocal(&function)) {
+                if (!Bind::V8FunctionOf(_isolate, _context, value.callable).ToLocal(&function)) {
                     return {};
                 }
                 return function;
@@ -612,6 +623,12 @@ namespace Framework::Scripting {
             return type.name == name;
         });
         types.push_back({std::move(name), std::move(copy), std::move(rebuild)});
+    }
+
+    void ValueTransfer::UnregisterHostType(std::string_view name) {
+        std::erase_if(HostTypes(), [&](const HostType &type) {
+            return type.name == name;
+        });
     }
 
     Utils::Result<TransferredValue, std::string> ValueTransfer::Copy(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Value> value, const TransferFunctions &functions) {

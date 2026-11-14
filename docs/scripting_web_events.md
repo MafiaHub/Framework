@@ -137,6 +137,46 @@ const stop = Events.on("browserConsoleMessage", ({ severity, message }) => {
 stop();
 ```
 
+## Lua
+
+A Lua client script has the same `Web` and the same `browser*` events, with the
+same names, arguments and results:
+
+```lua
+local view = Web.createView("fw://resources/my-ui/index.html", { width = 0, height = 0 })
+
+Events.on("browserDocumentReady", function(p)
+    if p.viewId ~= view then return end
+    Web.emit(view, "state:init", { health = 100 })
+end)
+
+Web.on(view, "ui:close", function(payload)
+    Web.hideView(view)
+end)
+```
+
+What differs is the language's own. A payload sent with `Web.emit` is written
+as JSON by the rules of Lua tables: an empty table is `[]`, and a table holding
+a function or a string that is not UTF-8 is refused where JavaScript leaves the
+member out. A payload a page sends with `callEvent` arrives as a table, with
+`null` as `nil` and whole numbers as integers; each Lua handler gets its own
+copy, where the JavaScript handlers of one event share one object. A URL or an
+event name must be UTF-8 text.
+
+## Page event handlers that fail
+
+A `Web.on` handler that throws (JavaScript) or raises (Lua), now or after it
+waited, is an error of its resource, like a failing timer: it is logged as
+`Runtime error: Web view <id> event '<name>' handler error: ...` and the
+resource then follows its `errorBehavior` (`stop` by default, which destroys its
+views). This changed with Lua support: before, a JavaScript handler that threw
+was only logged and its resource ran on; a resource that relies on that needs
+`"errorBehavior": "continue"`. The handlers of other resources still run; the
+failing resource's own remaining handlers are skipped until the next scripting
+tick, whatever its pages send meanwhile, so a resource whose handlers all hang
+costs a frame one script deadline. A handler is not called either once its
+resource has stopped, even when an earlier handler of the same event stopped it.
+
 ## Native side
 
 The same events are available to a host mod in C++ through

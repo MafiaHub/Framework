@@ -1,9 +1,9 @@
 # Resource Hot-Reload
 
-The scripting layer can reload a JavaScript resource from disk without
+The scripting layer can reload a resource from disk without
 restarting the server, and propagate that reload to connected clients. This is
-a development aid: edit a resource's `.js`, and the running resource picks up
-the change.
+a development aid: edit a resource's `.js` or `.lua`, and the running resource
+picks up the change.
 
 ## Enabling
 
@@ -51,6 +51,19 @@ Events.on("resourceStop", async (resourceName) => {
 });
 ```
 
+A Lua handler waits the way Lua does: the transition is held until its
+coroutine ends, so a handler that sleeps or waits on a host call delays it as
+an awaited promise does, and one that raises fails it as a rejection does. The
+manager ticks the Lua engine as well while it waits, and a server without a
+JavaScript engine emits both events to its Lua handlers all the same.
+
+```lua
+Events.on("resourceStop", function(resourceName)
+    if resourceName ~= "my-resource" then return end
+    saveInventory() -- may wait
+end)
+```
+
 Startup does not transition the resource to `Running`, invoke its started
 callback, or start a dependent resource until every matching handler settles.
 If a start handler rejects or exceeds the timeout, startup fails and the
@@ -78,14 +91,17 @@ as a 1ms bounded timeout.
    in a Node environment of its own (see
    [scripting_resource_isolation.md](scripting_resource_isolation.md)), and
    stopping the resource destroys it: its timers, sockets, worker threads and
-   module cache go with it. The client shares one V8 isolate between resources,
+   module cache go with it. A resource's Lua state is destroyed with it, and
+   takes its timers, its sleeping coroutines and the modules it loaded with
+   `require`. The client shares one V8 isolate between resources,
    so there `Engine::ClearResourceTimers` cancels the resource's
    `setTimeout`/`setInterval` and `Engine::EvictModulesUnderPath` removes its
    modules from the V8 module cache.
 3. **Re-parses `package.json`** from disk (manifest edits — entry points,
    dependencies — take effect) and rebuilds the dependency graph.
 4. **Restarts** the resource and the dependents that were stopped. On the server
-   the restart is a fresh environment, so every file is read from disk again.
+   the restart is a fresh environment, and a fresh Lua state for a resource
+   with `.lua` scripts, so every file is read from disk again.
 
 `RefreshAll` additionally rescans the resources directory and registers
 newly-added resource directories (left stopped — `start` them explicitly).

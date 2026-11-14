@@ -10,6 +10,8 @@
 
 #include "package_manifest.h"
 
+#include "../transferred_value.h"
+
 #include <v8.h>
 
 #include <chrono>
@@ -177,6 +179,15 @@ namespace Framework::Scripting {
         bool RegisterExport(std::string_view name, v8::Local<v8::Value> value);
 
         /**
+         * Register an export that is not a JavaScript value of this resource's isolate: a copy of what a Lua script
+         * of the resource registered, its functions as callables (TransferredValue::callable). It replaces a
+         * JavaScript export of the same name, as a JavaScript one replaces it.
+         * @param name Export name (must be declared in manifest)
+         * @param value The copy every importer is given a rebuild of
+         */
+        bool RegisterExport(std::string_view name, TransferredValue value);
+
+        /**
          * Unregister an export.
          */
         void UnregisterExport(std::string_view name);
@@ -200,6 +211,19 @@ namespace Framework::Scripting {
          * Get an export value by name.
          */
         v8::Local<v8::Value> GetExportValue(std::string_view name) const;
+
+        /**
+         * Get an export that was registered as a copy, or nullptr: for a name that is not registered, and for one
+         * whose value is a JavaScript value (GetExportValue).
+         */
+        std::shared_ptr<const TransferredValue> GetExportCopy(std::string_view name) const;
+
+        /**
+         * The context the JavaScript exports were registered in, for entering the isolate they live in from outside
+         * its JavaScript. Empty when none was registered from inside a context. The caller holds a handle scope
+         * of GetIsolate().
+         */
+        v8::Local<v8::Context> GetExportContext() const;
 
         // Context access
         v8::Isolate *GetIsolate() const {
@@ -249,6 +273,9 @@ namespace Framework::Scripting {
 
         // Exports registered by this resource
         std::map<std::string, v8::Global<v8::Value>, std::less<>> _exports;
+        v8::Global<v8::Context> _exportContext;
+        // Those registered as copies, from Lua. A name is in one of the two maps.
+        std::map<std::string, std::shared_ptr<const TransferredValue>, std::less<>> _copiedExports;
         mutable std::mutex _exportsMutex;
 
         std::vector<std::chrono::system_clock::time_point> _restartAttempts;

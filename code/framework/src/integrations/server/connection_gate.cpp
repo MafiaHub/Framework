@@ -17,6 +17,7 @@
 #include <scripting/engine_scope.h>
 #include <scripting/node_engine.h>
 #include <scripting/resource/resource_manager.h>
+#include <scripting/script_log.h>
 
 #include <v8pp/convert.hpp>
 
@@ -173,7 +174,7 @@ namespace Framework::Integrations::Server {
             AdmissionDecision decision {pending.guid, false, {}};
             if (pending.refusal.has_value()) {
                 decision.reason = *pending.refusal;
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} refused: {}", pending.nickname, it->first, decision.reason);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} refused: {}", pending.nickname, it->first, Framework::Scripting::BlankedLine(decision.reason));
             }
             else if (state == v8::Promise::PromiseState::kFulfilled) {
                 decision.admitted = true;
@@ -181,7 +182,7 @@ namespace Framework::Integrations::Server {
             }
             else if (state == v8::Promise::PromiseState::kRejected) {
                 decision.reason = kHandlerFailedReason;
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Player {} guid {} refused: a {} handler failed:\n{}", pending.nickname, it->first, kEventName, DescribeRejection(isolate, context, verdict->Result()));
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Player {} guid {} refused: a {} handler failed:\n{}", pending.nickname, it->first, kEventName, Framework::Scripting::SanitisedScriptText(DescribeRejection(isolate, context, verdict->Result()), "    "));
             }
             else if (now >= pending.deadline) {
                 decision.reason = kTimedOutReason;

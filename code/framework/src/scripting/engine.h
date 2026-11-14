@@ -16,6 +16,7 @@
 #include <v8.h>
 
 #include "errors.h"
+#include "script_engine.h"
 
 #include <function2/function2.hpp>
 
@@ -24,11 +25,8 @@
 #include <string_view>
 #include <vector>
 
-#include <utils/lifecycle.h>
-
 namespace Framework::Scripting {
 
-    class ResourceManager; // Forward declaration for resource context tracking
     class FunctionReferences;
 
     /**
@@ -36,9 +34,18 @@ namespace Framework::Scripting {
      * Two implementations exist: NodeEngine (server, full Node.js) and
      * V8Engine (client, standalone V8). Shared logic lives here.
      */
-    class Engine: public Framework::Lifecycle {
+    class Engine: public ScriptEngine {
       public:
         using SDKRegisterCallback = fu2::function<void(Engine *) const>;
+
+        Language GetLanguage() const override {
+            return Language::JavaScript;
+        }
+
+        // Every file but a Lua script, which is LuaEngine's.
+        bool HandlesFile(std::string_view path) const override {
+            return !path.ends_with(".lua");
+        }
 
         /**
          * Initialize the JavaScript engine.
@@ -68,7 +75,7 @@ namespace Framework::Scripting {
 
         // Advance microtasks, timers, and host I/O without blocking. Resource lifecycle barriers use
         // this while awaiting async resourceStart/resourceStop handlers.
-        virtual void Tick() = 0;
+        void Tick() override = 0;
 
         // Evict cached modules under a resource dir so hot-reload re-reads
         // edited files. No-op without a module cache; call only after stop.
@@ -85,16 +92,16 @@ namespace Framework::Scripting {
          * Create the runtime a resource's scripts run in, with the runtime setup callback already run inside it.
          * @return false with the reason in GetLastError().
          */
-        virtual bool CreateResourceRuntime(const std::string &resourceName) {
+        bool CreateResourceRuntime(const std::string &resourceName) override {
             return true;
         }
 
         // Destroy it, and with it everything the resource left running there. A runtime that is executing is destroyed
         // at the next tick instead.
-        virtual void DestroyResourceRuntime(const std::string &resourceName) {}
+        void DestroyResourceRuntime(const std::string &resourceName) override {}
 
         // Run one of a resource's script files in its runtime.
-        virtual bool ExecuteResourceFile(const std::string &resourceName, std::string_view filepath) {
+        bool ExecuteResourceFile(const std::string &resourceName, std::string_view filepath) override {
             return ExecuteFile(filepath);
         }
 
@@ -128,6 +135,18 @@ namespace Framework::Scripting {
         }
 
         /**
+         * Hear about a resource's runtime that has stopped ahead of its disposal: its resource stopped while script
+         * was running, so the runtime is disposed at a later tick, or it called process.exit(). Its isolate is alive
+         * and may be the one executing, but the engine runs nothing more in it: the place to fail what is still
+         * owed by it. A runtime that is disposed on the spot is told to the disposing listeners alone. Listeners
+         * live as long as the engine. An engine whose resources share one runtime never calls them.
+         */
+        using RuntimeStoppedCallback = fu2::function<void(v8::Isolate *) const>;
+        void AddRuntimeStoppedListener(RuntimeStoppedCallback callback) {
+            _runtimeStoppedListeners.push_back(std::move(callback));
+        }
+
+        /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
          */
@@ -141,13 +160,6 @@ namespace Framework::Scripting {
             _sdkRegisterCallback = std::move(callback);
         }
 
-        /**
-         * Get the last error message.
-         */
-        const std::string &GetLastError() const {
-            return _lastError;
-        }
-
         // Escape hatch: raw V8 handles. The caller owns the v8::Locker / Isolate::Scope / HandleScope /
         // Context::Scope setup before touching these — prefer Execute() and the SDK-register callback,
         // which establish the scopes for you. An engine that isolates resources names the runtime the
@@ -155,27 +167,11 @@ namespace Framework::Scripting {
         virtual v8::Isolate *GetIsolate() const           = 0;
         virtual v8::Local<v8::Context> GetContext() const = 0;
 
-        /**
-         * Set the owning ResourceManager for resource context tracking.
-         * Called by ResourceManager during construction.
-         */
-        void SetResourceManager(ResourceManager *mgr) {
-            _resourceManager = mgr;
-        }
-
-        /**
-         * Get the owning ResourceManager.
-         */
-        ResourceManager *GetResourceManager() const {
-            return _resourceManager;
-        }
-
       protected:
-        std::string _lastError;
         SDKRegisterCallback _sdkRegisterCallback;
         RuntimeSetupCallback _runtimeSetupCallback;
         std::vector<RuntimeDisposingCallback> _runtimeDisposingListeners;
-        ResourceManager *_resourceManager = nullptr;
+        std::vector<RuntimeStoppedCallback> _runtimeStoppedListeners;
     };
 
 } // namespace Framework::Scripting

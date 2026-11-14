@@ -10,10 +10,15 @@
 
 #include <gui/view_events.h>
 
+#include <scripting/bind/callable.h>
+#include <scripting/bind/namespace.h>
+#include <scripting/bind/registrar.h>
+
 #include <v8.h>
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -32,7 +37,7 @@ namespace Framework::GUI {
 
 namespace Framework::Integrations::Client::Scripting::Builtins {
 
-    // Client-side web view API, exposed as the global Web:
+    // Client-side web view API, exposed as the global Web to JavaScript and Lua:
     //   createView(url, {width, height, x, y, zIndex, visible, focus}?) -> id
     //   destroyView / showView / hideView / focusView / isViewVisible
     //   loadURL(id, url) / resizeView(id, w, h) / setViewPosition(id, x, y)
@@ -47,24 +52,44 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
     // Browser-reported events go to the owning resource as reserved "browser*" Events instead
     // of through on(), which carries page-authored names a page could otherwise forge.
     // See docs/scripting_web_events.md.
+    //
+    // The views, their owners and their handlers are one table for both languages, and belong to the
+    // resource manager Register was given: a call of a runtime of another manager finds none.
     class Web final {
       public:
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager);
+        // Web, declared once for both languages.
+        static const Framework::Scripting::Bind::Namespace &Definition();
+
+        // Publishes Web as a global in the languages of `languages`, in the runtimes of a client.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All, Framework::Scripting::ResourceManager *resourceManager = nullptr);
 
         // Drains queued browser events into script. Once per scripting tick.
         static void Update();
 
+        // Destroys the views of a resource and drops its handlers, in either language.
         static void CleanupResource(const std::string &resourceName);
 
         // Reserved browser events have no Web method to hang catalog docs off.
         static void RegisterViewEventMetadata(v8::Isolate *isolate);
 
-        // Must run before the isolate is disposed.
+        // Must run before the isolate is disposed, and before the resource manager goes.
         static void Shutdown();
 
+        // Diagnostics and tests: the views scripts own, the handlers they keep on them.
+        static size_t ViewCount();
+        static size_t HandlerCount();
+        // And the browser events queued for the next Update.
+        static size_t PendingEventCount();
+
       private:
+        // The manager a failed handler is reported to. Shared with the calls still running when Shutdown
+        // clears it, which then report to nobody.
+        struct ManagerLink {
+            Framework::Scripting::ResourceManager *manager = nullptr;
+        };
+
         struct Handler {
-            v8::Global<v8::Function> callback;
+            std::shared_ptr<Framework::Scripting::Bind::ScriptCallable> callback;
             std::string resourceName;
         };
 
@@ -73,28 +98,30 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             Framework::GUI::ViewEventData data;
         };
 
-        static void CreateViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void DestroyViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ShowViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void HideViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void FocusViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void IsViewVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void SetViewOffscreenCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void IsViewOffscreenCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void LoadURLCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ResizeViewCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void SetViewPositionCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void GetScreenSizeCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void CreateView(Framework::Scripting::Bind::Call &call);
+        static void DestroyView(Framework::Scripting::Bind::Call &call);
+        static void ShowView(Framework::Scripting::Bind::Call &call);
+        static void HideView(Framework::Scripting::Bind::Call &call);
+        static void FocusView(Framework::Scripting::Bind::Call &call);
+        static void IsViewVisible(Framework::Scripting::Bind::Call &call);
+        static void SetViewOffscreen(Framework::Scripting::Bind::Call &call);
+        static void IsViewOffscreen(Framework::Scripting::Bind::Call &call);
+        static void LoadURL(Framework::Scripting::Bind::Call &call);
+        static void ResizeView(Framework::Scripting::Bind::Call &call);
+        static void SetViewPosition(Framework::Scripting::Bind::Call &call);
+        static void On(Framework::Scripting::Bind::Call &call);
+        static void Off(Framework::Scripting::Bind::Call &call);
+        static void Emit(Framework::Scripting::Bind::Call &call);
+        static void GetScreenSize(Framework::Scripting::Bind::Call &call);
 
         static bool DestroyViewInternal(int viewId);
         static void DispatchPageEvent(int viewId, std::string eventName, std::string payload);
         static Framework::GUI::View *GetOwnedView(int viewId);
         // The view, if the calling resource is the one that created it. Script-facing calls use this;
         // GetOwnedView is for teardown, which acts whoever the owner was.
-        static Framework::GUI::View *GetCallerView(v8::Isolate *isolate, int viewId);
+        static Framework::GUI::View *GetCallerView(const Framework::Scripting::Bind::Call &call, int viewId);
+        // The manager the views belong to, when the call comes from one of its runtimes. Null otherwise.
+        static Framework::Scripting::ResourceManager *ManagerOf(const Framework::Scripting::Bind::Call &call);
 
         static void AttachViewEvents(Framework::GUI::View *view, int viewId);
         static void QueueViewEvent(int viewId, const Framework::GUI::ViewEventData &data);
@@ -109,6 +136,15 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         static std::mutex _mutex;
 
         static Framework::Scripting::ResourceManager *_resourceManager;
+        // Of _resourceManager, from Register until Shutdown.
+        static std::shared_ptr<ManagerLink> _managerLink;
+
+        // The resources a page-event handler of which failed since the last Update. Their other handlers wait
+        // for the next one: a resource that runs every handler into its deadline costs a frame one deadline,
+        // however many handlers it has and however many events its page sends. Shared with the calls that end
+        // later, which add to it in vain.
+        static std::shared_ptr<std::vector<std::string>> _failedOwners;
+        static void ForgetFailedOwners();
     };
 
 } // namespace Framework::Integrations::Client::Scripting::Builtins

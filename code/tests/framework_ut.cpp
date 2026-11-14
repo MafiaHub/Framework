@@ -98,11 +98,36 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/value_transfer_ut.h"
 #include "modules/function_references_ut.h"
 #include "modules/js_features_ut.h"
+#include "modules/lua_smoke_ut.h"
+#include "modules/bind_types_ut.h"
+#include "modules/lua_convert_ut.h"
+#include "modules/bind_class_lua_ut.h"
+#include "modules/bind_class_v8_ut.h"
+#include "modules/lua_runtime_ut.h"
+#include "modules/lua_scheduler_ut.h"
+#include "modules/lua_engine_ut.h"
+#include "modules/value_types_parity_ut.h"
+#include "modules/bind_call_ut.h"
+#include "modules/lua_transfer_ut.h"
+#include "modules/lua_json_ut.h"
+#include "modules/script_callable_ut.h"
 #include "modules/resource_manager_ut.h"
 #include "modules/resource_isolation_ut.h"
+#include "modules/lua_events_ut.h"
+#include "modules/lua_exports_ut.h"
+#include "modules/lua_messages_ut.h"
+#include "modules/lua_resources_ut.h"
+#include "modules/lua_builtins_chat_ut.h"
+#include "modules/lua_builtins_core_ut.h"
+#include "modules/lua_builtins_entity_ut.h"
+#include "modules/lua_builtins_player_ut.h"
+#include "modules/lua_builtins_server_ut.h"
+#include "modules/lua_interop_ut.h"
+#include "modules/lua_parity_ut.h"
 #include "modules/resource_monitor_ut.h"
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
+#include "modules/scripting_catalog_golden_ut.h"
 #include "modules/timer_context_ut.h"
 
 int main() {
@@ -177,10 +202,35 @@ int main() {
     UNIT_MODULE(resource_monitor);
     UNIT_MODULE(run_until);
     UNIT_MODULE(js_features);
+    UNIT_MODULE(lua_smoke);
+    UNIT_MODULE(bind_types);
+    UNIT_MODULE(lua_convert);
+    UNIT_MODULE(bind_class_lua);
+    UNIT_MODULE(bind_class_v8);
+    UNIT_MODULE(lua_runtime);
+    UNIT_MODULE(lua_scheduler);
+    UNIT_MODULE(lua_engine);
+    UNIT_MODULE(value_types_parity);
+    UNIT_MODULE(bind_call);
+    UNIT_MODULE(lua_transfer);
+    UNIT_MODULE(lua_json);
+    UNIT_MODULE(script_callable);
+    UNIT_MODULE(lua_resources);
+    UNIT_MODULE(lua_events);
+    UNIT_MODULE(lua_exports);
+    UNIT_MODULE(lua_messages);
+    UNIT_MODULE(lua_builtins_chat);
+    UNIT_MODULE(lua_builtins_core);
+    UNIT_MODULE(lua_builtins_entity);
+    UNIT_MODULE(lua_builtins_player);
+    UNIT_MODULE(lua_builtins_server);
+    UNIT_MODULE(lua_interop);
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(scripting_catalog_golden);
+    UNIT_MODULE(lua_parity);
 
     return UNIT_RUN();
 }

@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include "../bind/namespace.h"
+#include "../bind/registrar.h"
+
 #include <v8pp/convert.hpp>
 
 #include <v8.h>
@@ -21,14 +24,19 @@ namespace Framework::Scripting {
 
 namespace Framework::Scripting::Builtins {
 
-    // Global Imports: get(resourceName) -> every export registered by another running resource.
+    // Global Imports: get(resourceName) -> every export registered by another running resource, declared once for
+    // JavaScript and Lua. Each export arrives as Exports.get gives it (exports.h).
     class Imports final {
       public:
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, ResourceManager *resourceManager);
+        static const Bind::Namespace &Definition();
+
+        // Publishes Imports as a global in the languages of `languages`. In JavaScript the calls of the isolate answer
+        // with `resourceManager` (Bind::SetCallResourceManager) when it is not null.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All, ResourceManager *resourceManager = nullptr);
 
         /**
-         * Build an object mapping every registered export name of a resource to its
-         * real value. Assumes the caller has already validated that the resource's
+         * Build an object mapping every export name a resource registered from JavaScript to its
+         * real value. Exports registered as copies (Resource::GetExportCopy) are left out. Assumes the caller has already validated that the resource's
          * values live in `isolate` (V8 values cannot cross isolates).
          * @param isolate V8 isolate owning the target resource's export values
          * @param context Context to build the result object in
@@ -38,8 +46,8 @@ namespace Framework::Scripting::Builtins {
         static v8::Local<v8::Object> BuildImportsObject(v8::Isolate *isolate, v8::Local<v8::Context> context, const Resource *resource);
 
       private:
-        // V8 callback implementations
-        static void GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        // The functions of the definition.
+        struct Script;
     };
 
 } // namespace Framework::Scripting::Builtins

@@ -56,6 +56,13 @@ target_include_directories(FrameworkValueTransferBench PRIVATE ../framework/src)
 target_link_libraries(FrameworkValueTransferBench Framework FrameworkServer libnode)
 target_compile_definitions(FrameworkValueTransferBench PRIVATE NODE_WANT_INTERNALS=1)
 
+# Not a test: what a bound call and an event cost a script in JavaScript and in Lua (see the file).
+# Build it in RelWithDebInfo or Release.
+add_executable(FrameworkBindingBench bench/binding_bench.cpp)
+target_include_directories(FrameworkBindingBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkBindingBench Framework FrameworkServer libnode)
+target_compile_definitions(FrameworkBindingBench PRIVATE NODE_WANT_INTERNALS=1)
+
 # Not a test: what a log call costs its caller while the outputs keep up, fall behind and stall (see the
 # file). Build it in RelWithDebInfo or Release.
 add_executable(FrameworkLoggingBench bench/logging_bench.cpp)
@@ -65,6 +72,12 @@ target_link_libraries(FrameworkLoggingBench Framework)
 
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
+
+# Committed files a test compares against, read from the source tree so that a test asked to
+# regenerate one rewrites the tracked copy.
+target_compile_definitions(FrameworkTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+# The Lua definition files the types package ships, which a test regenerates and compares.
+target_compile_definitions(FrameworkTests PRIVATE FW_TEST_LUA_TYPES_DIR="${CMAKE_SOURCE_DIR}/types/lua")
 
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
@@ -79,13 +92,61 @@ endif()
 # the client runtime in its own process.
 add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp)
 target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/src)
-if(WIN32)
-    # Key.bind dispatch, without linking the rest of FrameworkClient.
-    target_sources(FrameworkClientScriptingTests PRIVATE
-        ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
-        ../framework/src/utils/key_names.cpp)
+# The Key and Voice builtins of a client and what they stand on, without linking the rest of
+# FrameworkClient: key names, and a voice client that is never attached to a peer and so opens no device.
+target_sources(FrameworkClientScriptingTests PRIVATE
+    ../framework/src/integrations/client/scripting/builtins/builtins.cpp
+    ../framework/src/integrations/client/scripting/builtins/keybinds.cpp
+    ../framework/src/integrations/client/scripting/builtins/nametags.cpp
+    ../framework/src/integrations/client/scripting/builtins/voice.cpp
+    ../framework/src/utils/key_names.cpp
+    ../framework/src/voice/client/mixer.cpp
+    ../framework/src/voice/client/audio_device.cpp
+    ../framework/src/voice/client/noise_suppressor.cpp
+    ../framework/src/voice/client/voice_client.cpp
+    ../framework/src/networking/network_client.cpp)
+# The vendors build miniaudio for the client, which is Windows; the voice client needs it wherever it links.
+if(NOT TARGET miniaudio)
+    add_subdirectory(../../vendors/miniaudio "${CMAKE_BINARY_DIR}/vendors/miniaudio" EXCLUDE_FROM_ALL)
 endif()
-target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode)
+target_link_libraries(FrameworkClientScriptingTests Framework FrameworkServer libnode miniaudio)
+target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+target_compile_definitions(FrameworkClientScriptingTests PRIVATE FW_TEST_LUA_TYPES_DIR="${CMAKE_SOURCE_DIR}/types/lua")
+
+# The Chat and Discord builtins of a client reach their services through the client instance, which builds
+# on Windows only and with the whole of FrameworkClient. client_doubles has a stand-in for it, ahead of the
+# framework on the include path, and the functions of the chat box and of the Discord wrapper that the
+# builtins call. The activity type of Discord is plain data and is built from the vendored source.
+# The Web builtin reaches the web views through the GUI manager, which needs CEF and Direct3D: client_doubles
+# has a stand-in for the manager and for a view too (gui/manager.h, gui/view.h), which keep what they are told.
+target_include_directories(FrameworkClientScriptingTests BEFORE PRIVATE client_doubles)
+target_include_directories(FrameworkClientScriptingTests PRIVATE ../../vendors/discord/src)
+target_sources(FrameworkClientScriptingTests PRIVATE
+    client_doubles/client_doubles.cpp
+    ../framework/src/integrations/client/scripting/builtins/chat.cpp
+    ../framework/src/integrations/client/scripting/builtins/discord.cpp
+    ../framework/src/integrations/client/scripting/builtins/web.cpp
+    ../../vendors/discord/src/types.cpp)
+# The Discord SDK sources use the fixed-width integers without including <cstdint>, which only the Windows
+# headers they include elsewhere bring in.
+if(NOT MSVC)
+    set_source_files_properties(../../vendors/discord/src/types.cpp ../framework/src/integrations/client/scripting/builtins/discord.cpp
+        TARGET_DIRECTORY FrameworkClientScriptingTests PROPERTIES COMPILE_OPTIONS "-include;cstdint")
+endif()
+# Each stand-in is another class under the name of the real one. That is sound only while the real ones are
+# not in this binary: checked once everything in this directory has had its say.
+function(_fw_refuse_client_in_scripting_tests)
+    get_target_property(_linked FrameworkClientScriptingTests LINK_LIBRARIES)
+    foreach(_library FrameworkClient Framework::Client)
+        if(_library IN_LIST _linked)
+            message(FATAL_ERROR "FrameworkClientScriptingTests links ${_library}, and builds its client builtins against "
+                "the stand-ins of code/tests/client_doubles for Integrations::Client::Instance, GUI::Manager and GUI::View: "
+                "two definitions of one class. Remove client_doubles from the target, and test against the real classes, "
+                "before linking it.")
+        endif()
+    endforeach()
+endfunction()
+cmake_language(DEFER CALL _fw_refuse_client_in_scripting_tests)
 
 # The SDK smoke test: install this build into a prefix, then configure and build a consumer project
 # against that prefix alone (code/tests/sdk-consumer), the way a mod does through

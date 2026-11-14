@@ -72,12 +72,16 @@ namespace Framework::Scripting::Builtins {
 
         std::string ToString() const override;
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Player> &Definition();
+
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
 
-        // Publish the Player constructor on a target object, like Entity::Register /
-        // TextLabel::Register. Games opt in; the framework itself exposes Player lazily
-        // through GetClass (see integrations/server/instance.cpp).
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Publishes the Player constructor in the languages of `languages`, like Entity::Register /
+        // TextLabel::Register. In JavaScript games opt in; the framework itself exposes Player lazily
+        // through GetClass (see integrations/server/instance.cpp). In Lua Entity, which it inherits, is
+        // published with it.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 
         static void UnregisterIsolate(v8::Isolate *isolate);
 
@@ -92,3 +96,5 @@ namespace Framework::Scripting::Builtins {
         inline static ClassCache<Player> _classes;
     };
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Player, "Player");

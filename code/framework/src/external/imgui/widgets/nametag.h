@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "nametag_view.h"
 #include "world_text.h"
 
 #include <imgui.h>
@@ -18,20 +19,6 @@
 #include <cstring>
 
 namespace Framework::External::ImGUI::Widgets {
-    // Wire values are shared with Networking::Replication::NametagComponent; keep in sync.
-    enum class NameTagComponent : uint8_t {
-        Name   = 1 << 0,
-        Health = 1 << 1,
-    };
-
-    // The viewer's own switches over every tag they see, driven by the client Nametags builtin.
-    // showSelf is read by the mod's draw pass, which owns the choice of which avatars get a tag.
-    struct NameTagView {
-        inline static bool showTags   = true;
-        inline static bool showHealth = true;
-        inline static bool showSelf   = false;
-    };
-
     // Distance behaviour of a world-anchored tag.
     struct NameTagLayout {
         float drawDistance = 50.0f; // hard cull

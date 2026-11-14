@@ -7,8 +7,18 @@
  */
 
 #include "alloc_counter.h"
+#include "core_modules.h"
 #include "logging/logger.h"
+#include "networking/network_server.h"
+#include "networking/replication/entity_registry.h"
+#include "networking/replication/replication_manager.h"
+#include "scripting/bind/call.h"
+#include "scripting/builtins/builtins.h"
+#include "scripting/builtins/entity.h"
+#include "scripting/builtins/state_bag.h"
+#include "scripting/engine_scope.h"
 #include "scripting/resource/resource_manager.h"
+#include "scripting/scripting_catalog.h"
 #include "scripting/v8_engine.h"
 #include "unit.h"
 #include "utils/package/package.h"
@@ -19,6 +29,13 @@
 #include <new>
 #include <thread>
 
+#include "modules/client_callable_ut.h"
+#include "modules/client_catalog_golden_ut.h"
+#include "modules/lua_client_builtins_ut.h"
+#include "modules/lua_client_services_ut.h"
+#include "modules/lua_client_ut.h"
+#include "modules/lua_client_web_ut.h"
+#include "modules/lua_client_parity_ut.h"
 #ifdef _WIN32
 #include "modules/keybinds_ut.h"
 #endif
@@ -163,6 +180,85 @@ MODULE(client_scripting, {
         vfs.Unmount("promise-failure.zip");
         vfs.Unmount("healthy.zip");
     });
+    // One isolate runs every resource of a client, so the owner of a function a builtin keeps is told by the
+    // function: the resource whose script made it, whoever registers it.
+    IT("drops the state change handlers of the resource that owns them, in the one isolate of a client", {
+        auto &vfs = Framework::Utils::Vfs::Get();
+        EQUALS(vfs.Init(nullptr), true);
+        const auto mount = [&](const std::string &name, const std::string &script) {
+            Framework::Utils::Package::Writer writer;
+            writer.Add("package.json", "{\"name\":\"" + name + "\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
+            writer.Add("client.js", script);
+            std::string blob, zip, error;
+            if (!writer.Build(nullptr, blob) || !Framework::Utils::Package::Open(blob, nullptr, zip, error)) {
+                return false;
+            }
+            return vfs.MountMemory(std::move(zip), name + ".zip", Framework::Utils::Vfs::ResourcePath(name), error);
+        };
+
+        // A replication manager on an unstarted peer, with one entity for the scripts to watch.
+        Framework::Networking::NetworkServer peer;
+        auto *replication = peer.GetReplicationManager();
+        replication->Init(&peer, true);
+        replication->ConfigureGrid(100, -4096, 4096);
+        auto *entity = replication->CreateEntity(Framework::Networking::Replication::EntityRegistry::Get().Register<Framework::Networking::Replication::NetworkEntity>("Test::ClientWatched"));
+        Framework::CoreModules::SetReplication(replication);
+        const std::string id = std::to_string(entity->GetNetworkID());
+        const auto write     = [entity](double number) {
+            Framework::Networking::Replication::StateValue value;
+            value.type   = Framework::Networking::Replication::StateValue::Type::Number;
+            value.number = number;
+            entity->state.Set("job", value);
+        };
+
+        EQUALS(mount("owner-a", "globalThis.aCalls = 0; globalThis.aHandler = () => ++aCalls; new Entity(" + id + ").state.onChange(null, () => ++aCalls);"), true);
+        EQUALS(mount("owner-b", "globalThis.bCalls = 0; new Entity(" + id + ").state.onChange(null, () => ++bCalls); globalThis.bRegisters = (handler) => new Entity(" + id + ").state.onChange(null, handler);"), true);
+
+        Framework::Scripting::V8Engine engine;
+        engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
+        {
+            Framework::Scripting::ResourceManagerConfig config;
+            config.resourcesPath = Framework::Utils::Vfs::kResourceMountRoot;
+            config.isClient      = true;
+            Framework::Scripting::ResourceManager manager(&engine, config);
+            {
+                Framework::Scripting::EngineScope scope(&engine);
+                Framework::Scripting::SetScriptingEnvironment(scope.Isolate(), true);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), scope.Isolate()->GetCurrentContext(), scope.Context()->Global());
+                    Framework::Scripting::Builtins::RegisterValueTypes(registrar);
+                    Framework::Scripting::Builtins::Entity::Register(registrar);
+                }
+                Framework::Scripting::Bind::SetCallResourceManager(scope.Isolate(), &manager);
+            }
+            EQUALS(manager.DiscoverResources(), 2u);
+            EQUALS(static_cast<bool>(manager.StartAll()), true);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 2u);
+
+            // A function of owner-a that owner-b registers is owner-a's: the function is asked before the caller.
+            EQUALS(engine.Execute("bRegisters(aHandler);", "/resources/owner-b/client.js"), true);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 3u);
+            write(1);
+            EQUALS(engine.Execute("if (aCalls !== 2 || bCalls !== 1) throw Error('first write: ' + aCalls + ' ' + bCalls);"), true);
+
+            EQUALS(static_cast<bool>(manager.StopResource("owner-a")), true);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 1u);
+            write(2);
+            EQUALS(engine.Execute("if (aCalls !== 2 || bCalls !== 2) throw Error('after the stop: ' + aCalls + ' ' + bCalls);"), true);
+
+            EQUALS(static_cast<bool>(manager.StopResource("owner-b")), true);
+            EQUALS(Framework::Scripting::Builtins::StateBag::SubscriptionCount(), 0u);
+            write(3);
+            EQUALS(engine.Execute("if (aCalls !== 2 || bCalls !== 2) throw Error('after both stopped: ' + aCalls + ' ' + bCalls);"), true);
+            manager.StopAll();
+        }
+        engine.Shutdown();
+        Framework::CoreModules::SetReplication(nullptr);
+        replication->Clear();
+        vfs.Unmount("owner-a.zip");
+        vfs.Unmount("owner-b.zip");
+    });
     IT("keeps a module's require valid after its resource is restarted", {
         auto &vfs = Framework::Utils::Vfs::Get();
         EQUALS(vfs.Init(nullptr), true);
@@ -257,6 +353,13 @@ int main() {
     UNIT_CREATE("FrameworkClientScriptingTests");
     Framework::Logging::GetInstance()->PauseLogging(true);
     UNIT_MODULE(client_scripting);
+    UNIT_MODULE(client_callable);
+    UNIT_MODULE(lua_client);
+    UNIT_MODULE(client_catalog_golden);
+    UNIT_MODULE(lua_client_builtins);
+    UNIT_MODULE(lua_client_services);
+    UNIT_MODULE(lua_client_web);
+    UNIT_MODULE(lua_client_parity);
 #ifdef _WIN32
     UNIT_MODULE(keybinds);
 #endif

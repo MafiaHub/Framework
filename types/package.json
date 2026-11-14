@@ -1,12 +1,13 @@
 {
     "name": "@mafiahub/types",
     "version": "0.1.12",
-    "description": "TypeScript type definitions for the MafiaHub Framework scripting API",
+    "description": "TypeScript and Lua (LuaLS) type definitions for the MafiaHub Framework scripting API",
     "types": "index.d.ts",
     "files": [
         "index.d.ts",
         "core/*.d.ts",
-        "framework/*.d.ts"
+        "framework/*.d.ts",
+        "lua/*.d.lua"
     ],
     "repository": {
         "type": "git",

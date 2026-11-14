@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "transferred_value.h"
+
 #include <v8.h>
 
 #include <function2/function2.hpp>
@@ -17,77 +19,24 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace Framework::Scripting {
 
     /**
-     * A JavaScript value copied out of one isolate, ready to be rebuilt in another.
-     *
-     * Server resources run in isolates of their own, so nothing passes between them by reference:
-     * event arguments, export values and call results are copied into one of these on one side and
-     * rebuilt on the other. docs/scripting_resource_isolation.md lists what each kind of value
-     * arrives as.
-     */
-    struct TransferredValue {
-        enum class Kind : uint8_t {
-            Undefined,
-            Null,
-            Boolean,
-            Number,
-            BigInt,
-            String,
-            Array,
-            Object,
-            Date,
-            RegExp,
-            Map,
-            Set,
-            ArrayBuffer,
-            TypedArray,
-            Error,
-            HostObject,
-            Function,
-        };
-
-        Kind kind = Kind::Undefined;
-
-        // Boolean; whether a BigInt is negative.
-        bool boolean = false;
-
-        // Number; Date as milliseconds since the epoch; RegExp flags.
-        double number = 0;
-
-        // String; RegExp source; the view type of a TypedArray; the registered name of a HostObject; the message of an
-        // Error.
-        std::string text;
-
-        // ArrayBuffer and TypedArray contents; a HostObject's payload; a BigInt's magnitude as 64-bit words, least
-        // significant first.
-        std::vector<uint8_t> bytes;
-
-        // Array elements; Map keys and values interleaved; Set members.
-        std::vector<TransferredValue> items;
-
-        // Own enumerable string-keyed properties of an Object, and of an Error beyond its name, message and stack (which
-        // ride in `properties` too, under those names).
-        std::vector<std::pair<std::string, TransferredValue>> properties;
-
-        // Function: the id the exporting side handed out for it, and what keeps it exported while this copy exists.
-        uint64_t reference = 0;
-        std::shared_ptr<void> retainer;
-    };
-
-    /**
-     * How functions cross. Without these, copying a function fails.
+     * How functions cross. Without these, copying a function fails, and one is rebuilt only from the callable it
+     * carries (TransferredValue::callable).
      */
     struct TransferFunctions {
-        // Source side: keep the function reachable and fill in `reference` and `retainer`. `holder` is the object or
-        // array the function was found in, empty for a function sent on its own: what it is called on later.
+        // Source side: keep the function reachable and fill in what it crosses as, `reference` and `retainer` or
+        // `callable`. `holder` is the object or array the function was found in, empty for a function sent on its
+        // own: what it is called on later.
         fu2::function<void(v8::Isolate *, v8::Local<v8::Function>, v8::Local<v8::Object> holder, TransferredValue &) const> exportFunction;
 
-        // Target side: make the callable stand-in for an exported function.
+        // Target side: make the callable stand-in for an exported function. A function that carries no reference is
+        // not this hook's: it is rebuilt from its callable, as it is without the hook.
         fu2::function<v8::MaybeLocal<v8::Function>(v8::Isolate *, v8::Local<v8::Context>, uint64_t) const> importFunction;
     };
 
@@ -108,6 +57,9 @@ namespace Framework::Scripting {
          */
         static void RegisterHostType(std::string name, HostCopy copy, HostRebuild rebuild);
 
+        // Forgets a host type: for a test that registered one of its own, which no later copy should be asked about.
+        static void UnregisterHostType(std::string_view name);
+
         // A copy holds at most this many values and this many bytes of strings and binary data. An object reached twice
         // is copied twice, so without a bound a few kilobytes of nested references would expand without end.
         static constexpr size_t kMaxValues = 1u << 20;
@@ -123,6 +75,9 @@ namespace Framework::Scripting {
         /**
          * Build a copied value in the target isolate. The caller holds its scopes and the context. On failure a
          * JavaScript exception is pending and the result is empty.
+         *
+         * A function that carries a callable and no reference `functions` imports arrives as a function that
+         * invokes the callable (bind/v8_callable.h), or as the function itself in the isolate that owns it.
          */
         static v8::MaybeLocal<v8::Value> Rebuild(v8::Isolate *isolate, v8::Local<v8::Context> context, const TransferredValue &value, const TransferFunctions &functions = {});
     };

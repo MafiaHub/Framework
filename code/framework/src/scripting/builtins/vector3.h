@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,17 +8,19 @@
 
 #pragma once
 
+#include "../bind/class.h"
+#include "../bind/registrar.h"
+#include "../class_cache.h"
+
 #include <glm/glm.hpp>
-#include <memory>
 #include <string>
-#include <unordered_map>
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
 
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Vector3 wrapper class for V8 bindings using v8pp.
+     * Vector3 wrapper class for the script bindings, JavaScript (through v8pp) and Lua.
      * Provides a clean C++ interface that wraps glm::vec3.
      */
     class Vector3 final {
@@ -120,15 +122,20 @@ namespace Framework::Scripting::Builtins {
             return _vec;
         }
 
-        // V8 Registration
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Vector3> &Definition();
+
+        // Publishes the class as a global in the languages of `languages`.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
         static v8pp::class_<Vector3> &GetClass(v8::Isolate *isolate);
         static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec3 &value);
         static void UnregisterIsolate(v8::Isolate *isolate);
 
       private:
         glm::vec3 _vec;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector3>>> _classes;
+        inline static ClassCache<Vector3> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Vector3, "Vector3");

@@ -127,6 +127,18 @@ jobs:
             echo "VCPKG_BINARY_SOURCES=clear;files,${dir},readwrite" >> "$GITHUB_ENV"
           fi
 
+      # www.lua.org drops TLS handshakes from runners now and then, and vcpkg does not retry an
+      # SSL error. Fetch the Lua source with retries into vcpkg's download directory first: vcpkg
+      # uses a file already there when its SHA512 matches, and downloads it itself otherwise.
+      - name: Prefetch the Lua source
+        shell: bash
+        run: |
+          dir="${GITHUB_WORKSPACE}/.vcpkg-downloads"
+          mkdir -p "$dir"
+          curl -fsSL --retry 8 --retry-all-errors --retry-delay 5 -o "$dir/lua-5.5.1.tar.gz" https://www.lua.org/ftp/lua-5.5.1.tar.gz || rm -f "$dir/lua-5.5.1.tar.gz"
+          if command -v cygpath >/dev/null 2>&1; then dir="$(cygpath -m "$dir")"; fi
+          echo "VCPKG_DOWNLOADS=${dir}" >> "$GITHUB_ENV"
+
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         run: |

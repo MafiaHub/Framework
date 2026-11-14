@@ -11,25 +11,44 @@
 #include <logging/logger.h>
 #include <utils/profiler.h>
 
+#include <scripting/bind/call.h>
+#include <scripting/bind/callable.h>
+#include <scripting/bind/lua_definitions.h>
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
 
 #include "builtins/pending_connection.h"
 #include "builtins/voice.h"
+#include "event_metadata.h"
 #include <scripting/builtins/console.h>
+#include <scripting/builtins/entity.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/execution_environment.h>
 #include <scripting/builtins/exports.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/messages.h>
+#include <scripting/builtins/player.h>
+#include <scripting/builtins/state_bag.h>
+#include <scripting/builtins/text_label.h>
 #include <scripting/engine_scope.h>
 #include <scripting/event_metadata.h>
+#include <scripting/lua/lua_builtins.h>
+#include <scripting/lua/lua_runtime.h>
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
 
+#include <algorithm>
+#include <optional>
 #include <thread>
 
 namespace Framework::Integrations::Server::Scripting {
+
+    namespace {
+        // The least time between two Lua ticks while the server waits for its next tick. Node has the wait in
+        // between, and NodeEngine::RunUntil starts no script in its last millisecond: a Lua timer due every
+        // millisecond would otherwise leave Node nothing of the wait.
+        constexpr std::chrono::milliseconds kLuaWaitGranularity {4};
+    } // namespace
 
     ServerScriptingModule::ServerScriptingModule() {
         // Create Node.js engine without sandbox for full server capabilities
@@ -41,6 +60,23 @@ namespace Framework::Integrations::Server::Scripting {
         // inspectorPort keeps its NodeEngine default (the standard Node debug port).
 #endif
         _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
+
+        // Lua scripts are sandboxed on the server too, with room for server-sized state and no limit on how long
+        // an entry may run.
+        Framework::Scripting::LuaEngineOptions luaOptions;
+        luaOptions.side             = Framework::Scripting::Bind::Side::Server;
+        luaOptions.memoryLimitBytes = 512u << 20;
+        luaOptions.entryDeadline    = std::chrono::milliseconds(0);
+        _luaEngine                  = std::make_unique<Framework::Scripting::LuaEngine>(luaOptions);
+
+        // A function a builtin kept, and a result it still owes, hear of the runtime they belong to going. So
+        // does what the shared builtins keep for a Lua runtime.
+        Framework::Scripting::Bind::WatchRuntimes(*_nodeEngine);
+        Framework::Scripting::Builtins::WatchLuaRuntimes(*_luaEngine);
+
+        // A connection asking to join crosses as itself too. Ahead of the rest, so that it is asked last: the newest
+        // registration is tried first, and values and entities cross far more often than a connection does.
+        Builtins::PendingConnection::RegisterTransfer();
 
         // Before any project registers its own handle types (PostInit runs ahead of Init): the newest is tried first,
         // so the framework's bases must come first.
@@ -64,6 +100,15 @@ namespace Framework::Integrations::Server::Scripting {
             return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
+        // The Lua engine is up before the resource manager can start a resource in it.
+        _luaEngine->SetRuntimeSetupCallback([this](Framework::Scripting::LuaRuntime &runtime) {
+            RegisterLuaBindings(runtime);
+        });
+        if (_luaEngine->Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize Lua engine: {}", _luaEngine->GetLastError());
+            return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
+        }
+
         // Initialize ResourceManager with server-side config
         Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath         = _resourcesPath;
@@ -72,6 +117,7 @@ namespace Framework::Integrations::Server::Scripting {
         config.devMode               = _devMode;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_nodeEngine.get(), config);
+        _resourceManager->SetLuaEngine(_luaEngine.get());
 
         // Register Framework SDK bindings
         RegisterFrameworkBindings();
@@ -89,6 +135,9 @@ namespace Framework::Integrations::Server::Scripting {
         if (!v8pp::metadata::export_catalog_from_environment("framework-server", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework server scripting API metadata");
         }
+        if (!Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(LuaBuiltinDefinitions(), Framework::Scripting::Bind::Side::Server, "FRAMEWORK_SCRIPTING_LUA_DEFINITIONS")) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export the Framework server Lua definitions");
+        }
 
         // Install uncaught exception handler to prevent async errors from
         // crashing the server process and route them to the resource system
@@ -98,7 +147,7 @@ namespace Framework::Integrations::Server::Scripting {
             _nodeEngine->InstallUncaughtExceptionHandler(_resourcesPath);
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("JS Server scripting module initialized with Node.js engine");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Server scripting module initialized with the Node.js and Lua engines");
 
         _initialized = true;
         return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
@@ -119,29 +168,44 @@ namespace Framework::Integrations::Server::Scripting {
 
         // The events the framework raises; a mod's catalog blends them into its own EventMap.
         Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
-        Framework::Scripting::GetScriptingCatalog(isolate)
-            .data_type("EventMap")
-            .add_property("consoleCommand", "[command: string, args: string[]]",
-                "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the "
-                "place for commands no player may run.");
+        RegisterServerEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
 
         // The engine installs the timers without a binding; declare them for it.
         Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ false);
 
-        // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
-        Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
-
-        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Messages::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, false, _modVersion);
-        Framework::Scripting::Builtins::Chat::Register(isolate, global);
-        Builtins::Voice::Register(isolate, global);
-        Builtins::PendingConnection::Register(isolate);
+        // Each builtin registers in the isolate and records what every Lua state is given. Every builtin registers
+        // at the global root (new Vector3, not new Core.Vector3).
+        Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+        Framework::Scripting::Builtins::RegisterShared(registrar, Framework::Scripting::Bind::Languages::All, *_resourceManager, _modVersion);
+        Framework::Scripting::Builtins::Chat::Register(registrar);
+        Builtins::Voice::Register(registrar);
+        Builtins::PendingConnection::Register(registrar);
+        _luaBindings = registrar.Lua();
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
+    }
+
+    void ServerScriptingModule::RegisterLuaBindings(Framework::Scripting::LuaRuntime &runtime) {
+        // As the isolates are told through the console. Forgotten when the runtime goes (WatchLuaRuntimes), and
+        // when the manager does.
+        Framework::Scripting::Bind::SetCallResourceManager(&runtime, _resourceManager.get());
+        _luaBindings.Apply(runtime);
+
+        // What a project added, after the builtins it may build on.
+        // Each one is called through a copy: a setup may add another, which moves the ones in the list. The one it
+        // adds runs in this state too.
+        for (size_t i = 0; i < _luaRuntimeSetups.size(); ++i) {
+            const auto setup = _luaRuntimeSetups[i];
+            setup(runtime);
+        }
+    }
+
+    void ServerScriptingModule::AddLuaRuntimeSetup(fu2::function<void(Framework::Scripting::LuaRuntime &) const> setup) {
+        _luaRuntimeSetups.push_back(std::move(setup));
+    }
+
+    std::vector<const Framework::Scripting::Bind::ClassDesc *> ServerScriptingModule::LuaBuiltinDefinitions() {
+        return Framework::Scripting::Builtins::SharedDefinitions({&Framework::Scripting::Builtins::Chat::Definition().Describe(), &Builtins::Voice::Definition().Describe(), &Builtins::PendingConnection::Definition().Describe()});
     }
 
     bool ServerScriptingModule::PreShutdown() {
@@ -153,6 +217,12 @@ namespace Framework::Integrations::Server::Scripting {
 
     void ServerScriptingModule::Shutdown() {
         _resourceManager.reset();
+
+        // After the resources, whose Lua states it owns, and before the Node engine.
+        if (_luaEngine) {
+            _luaEngine->Shutdown();
+            _luaEngine.reset();
+        }
 
         if (_nodeEngine) {
             Framework::Scripting::ClearScriptingCatalog(_nodeEngine->GetIsolate());
@@ -174,8 +244,12 @@ namespace Framework::Integrations::Server::Scripting {
             HandleRuntimeErrors();
         }
 
+        TickLua();
+
         if (_resourceManager) {
             FW_PROFILE_SCOPE_N("Scripting::ResourceUpkeep");
+            // What the handlers the builtins keep failed with since the last update: here, outside any script.
+            _resourceManager->ProcessHandlerFailures();
             // Process scheduled restarts
             _resourceManager->ProcessScheduledRestarts();
             // Dev-mode: poll resource files and hot-reload on change
@@ -191,6 +265,10 @@ namespace Framework::Integrations::Server::Scripting {
 
             Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
         }
+        else {
+            // Without JavaScript the replies owed to Lua are delivered all the same.
+            Framework::Scripting::Builtins::Messages::ProcessPendingResponses();
+        }
     }
 
     void ServerScriptingModule::WaitUntil(std::chrono::steady_clock::time_point deadline) {
@@ -200,13 +278,48 @@ namespace Framework::Integrations::Server::Scripting {
         }
         // RunUntil comes back early with an error waiting, so the resource is stopped or restarted before it runs on.
         while (std::chrono::steady_clock::now() < deadline) {
-            _nodeEngine->RunUntil(deadline);
+            ++_waitRounds;
+
+            // Node has the wait, up to when Lua next has a timer to fire or a coroutine to wake. Only what comes
+            // due after the last Lua tick counts: what that tick left due, as a sleep or a timer of no delay is,
+            // goes on at the next Update, once for each tick of the server. So does what is due at the deadline
+            // or later.
+            std::optional<std::chrono::steady_clock::time_point> luaWake;
+            if (const auto due = _luaEngine->NextDue(_lastLuaTick)) {
+                const auto wake = std::max(*due, _lastLuaTick + kLuaWaitGranularity);
+                if (wake < deadline) {
+                    luaWake = wake;
+                }
+            }
+
+            _nodeEngine->RunUntil(luaWake.value_or(deadline));
             HandleRuntimeErrors();
+            if (luaWake && std::chrono::steady_clock::now() >= *luaWake) {
+                TickLua(_lastLuaTick);
+            }
         }
+    }
+
+    void ServerScriptingModule::TickLua(std::chrono::steady_clock::time_point after) {
+        if (!_luaEngine || !_luaEngine->IsInitialized()) {
+            return;
+        }
+        FW_PROFILE_SCOPE_N("Scripting::Lua");
+        const auto now = std::chrono::steady_clock::now();
+        _luaEngine->Tick(now, after);
+        _lastLuaTick = now;
+
+        // Queued, not handled where they were raised, so that a resource is stopped or restarted outside its script.
+        HandleRuntimeErrors();
     }
 
     void ServerScriptingModule::HandleRuntimeErrors() {
         for (const auto &err : _nodeEngine->DrainPendingErrors()) {
+            if (_resourceManager) {
+                _resourceManager->HandleResourceRuntimeError(err.resourceName, err.errorMessage);
+            }
+        }
+        for (const auto &err : _luaEngine->DrainPendingErrors()) {
             if (_resourceManager) {
                 _resourceManager->HandleResourceRuntimeError(err.resourceName, err.errorMessage);
             }
@@ -268,18 +381,18 @@ namespace Framework::Integrations::Server::Scripting {
         // Discover all resources in the resources path
         size_t discovered = _resourceManager->DiscoverResources();
         if (discovered == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourcesPath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No resources discovered in: {}", _resourcesPath);
             return true; // Not an error, just no resources
         }
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resources: {}", result.GetError());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resources: {}", result.GetError());
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} JS resource(s)", result.GetValue().size());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} resource(s)", result.GetValue().size());
         return true;
     }
 

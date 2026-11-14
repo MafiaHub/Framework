@@ -91,21 +91,19 @@ namespace Framework::Scripting::Builtins {
 
         void Destroy();
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<TextLabel> &Definition();
+
         static v8pp::class_<TextLabel> &GetClass(v8::Isolate *isolate);
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Publishes the class as a global in the languages of `languages`. In Lua Entity, which it inherits, is
+        // published with it, and Color, which an option reads a colour from, is made to exist in the state.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 
         static void UnregisterIsolate(v8::Isolate *isolate);
 
       private:
-        // JS: TextLabel.create(x, y, z, text, fontSize? | options?, drawDistance?, virtualWorld?) -> TextLabel
-        static void JS_Create(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_Update(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_AttachTo(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetOptions(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetAudience(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetVisibleFor(const v8::FunctionCallbackInfo<v8::Value> &info);
-
+        // Describes TextLabelOptions in the catalog of the isolate, for the generated declarations.
         static void RegisterOptionsType(v8::Isolate *isolate);
 
         inline static float _unitsPerMetre = 1.0f;
@@ -114,3 +112,5 @@ namespace Framework::Scripting::Builtins {
         inline static std::unordered_set<uint64_t> _attached;
     };
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::TextLabel, "TextLabel");

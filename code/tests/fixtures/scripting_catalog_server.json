@@ -1,0 +1,6098 @@
+{
+  "functions": [
+    {
+      "deprecated": "",
+      "description": "Cancels a setInterval.",
+      "examples": [],
+      "name": "clearInterval",
+      "parameters": [
+        {
+          "description": "Handle returned when the timer was scheduled; anything else is ignored.",
+          "name": "handle",
+          "type": {
+            "cppName": "",
+            "name": "Timeout",
+            "optional": true
+          }
+        }
+      ],
+      "returns": {
+        "description": "",
+        "type": {
+          "cppName": "",
+          "name": "void",
+          "optional": false
+        }
+      },
+      "since": "",
+      "static": false
+    },
+    {
+      "deprecated": "",
+      "description": "Cancels a pending setTimeout.",
+      "examples": [],
+      "name": "clearTimeout",
+      "parameters": [
+        {
+          "description": "Handle returned when the timer was scheduled; anything else is ignored.",
+          "name": "handle",
+          "type": {
+            "cppName": "",
+            "name": "Timeout",
+            "optional": true
+          }
+        }
+      ],
+      "returns": {
+        "description": "",
+        "type": {
+          "cppName": "",
+          "name": "void",
+          "optional": false
+        }
+      },
+      "since": "",
+      "static": false
+    },
+    {
+      "deprecated": "",
+      "description": "Queues a function on the microtask queue.",
+      "examples": [],
+      "name": "queueMicrotask",
+      "parameters": [
+        {
+          "description": "Function to run once the current task completes.",
+          "name": "callback",
+          "type": {
+            "cppName": "",
+            "name": "() => void",
+            "optional": false
+          }
+        }
+      ],
+      "returns": {
+        "description": "",
+        "type": {
+          "cppName": "",
+          "name": "void",
+          "optional": false
+        }
+      },
+      "since": "",
+      "static": false
+    },
+    {
+      "deprecated": "",
+      "description": "Calls a function repeatedly, waiting the delay between calls.",
+      "examples": [],
+      "name": "setInterval",
+      "parameters": [
+        {
+          "description": "Function to call.",
+          "name": "handler",
+          "type": {
+            "cppName": "",
+            "name": "(...args: any[]) => void",
+            "optional": false
+          }
+        },
+        {
+          "description": "Delay before the call.",
+          "name": "milliseconds",
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Arguments passed to the handler.",
+          "name": "args",
+          "type": {
+            "cppName": "",
+            "name": "unknown[]",
+            "optional": false
+          },
+          "variadic": true
+        }
+      ],
+      "returns": {
+        "description": "Handle to pass to the matching clear function.",
+        "type": {
+          "cppName": "",
+          "name": "Timeout",
+          "optional": false
+        }
+      },
+      "since": "",
+      "static": false
+    },
+    {
+      "deprecated": "",
+      "description": "Calls a function once after a delay.",
+      "examples": [],
+      "name": "setTimeout",
+      "parameters": [
+        {
+          "description": "Function to call.",
+          "name": "handler",
+          "type": {
+            "cppName": "",
+            "name": "(...args: any[]) => void",
+            "optional": false
+          }
+        },
+        {
+          "description": "Delay before the call.",
+          "name": "milliseconds",
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Arguments passed to the handler.",
+          "name": "args",
+          "type": {
+            "cppName": "",
+            "name": "unknown[]",
+            "optional": false
+          },
+          "variadic": true
+        }
+      ],
+      "returns": {
+        "description": "Handle to pass to the matching clear function.",
+        "type": {
+          "cppName": "",
+          "name": "Timeout",
+          "optional": false
+        }
+      },
+      "since": "",
+      "static": false
+    }
+  ],
+  "schemaVersion": 2,
+  "symbols": [
+    {
+      "bases": [],
+      "description": "Server-side delivery of structured chat messages to connected clients.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Broadcasts a structured chat message to all clients.",
+          "examples": [],
+          "name": "sendToAll",
+          "parameters": [
+            {
+              "description": "Message body broadcast to every connected client.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional author label and color: a Color or a packed 0xRRGGBBAA integer.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "{ author?: string; color?: number | Color }",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sends a structured chat message to one player's owning connection.",
+          "examples": [],
+          "name": "sendToPlayer",
+          "parameters": [
+            {
+              "description": "Player-owned entity identifying the destination connection.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "Message body sent to the player.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional author label and color: a Color or a packed 0xRRGGBBAA integer.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "{ author?: string; color?: number | Color }",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Chat",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a color from normalized RGBA components.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Initial red component from 0 to 1.",
+            "name": "r",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial green component from 0 to 1.",
+            "name": "g",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial blue component from 0 to 1.",
+            "name": "b",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Optional alpha component from 0 to 1; defaults to 1.",
+            "name": "a",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": true
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Mutable RGBA color, with components stored from 0 to 1.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Creates an independent copy of this color.",
+          "examples": [],
+          "name": "clone",
+          "parameters": [],
+          "returns": {
+            "description": "New color with the same components.",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Linearly interpolates every component toward a target in place.",
+          "examples": [],
+          "name": "lerp",
+          "parameters": [
+            {
+              "description": "Destination color.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Color",
+                "optional": false
+              }
+            },
+            {
+              "description": "Interpolation factor; 0 keeps this color and 1 reaches target.",
+              "name": "t",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated color for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Replaces this color's normalized components in place.",
+          "examples": [],
+          "name": "set",
+          "parameters": [
+            {
+              "description": "Replacement red component from 0 to 1.",
+              "name": "r",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement green component from 0 to 1.",
+              "name": "g",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement blue component from 0 to 1.",
+              "name": "b",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional replacement alpha; defaults to 1 when omitted.",
+              "name": "a",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated color for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts normalized components to a hexadecimal CSS-style string.",
+          "examples": [],
+          "name": "toHex",
+          "parameters": [
+            {
+              "description": "Whether to append the alpha byte; defaults to false.",
+              "name": "includeAlpha",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "Lowercase #rrggbb or #rrggbbaa string.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts this color to a plain object for JSON.stringify.",
+          "examples": [],
+          "name": "toJSON",
+          "parameters": [],
+          "returns": {
+            "description": "Object containing the current normalized components.",
+            "type": {
+              "cppName": "",
+              "name": "{ r: number; g: number; b: number; a: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this color for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text in Color(r, g, b, a) form.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque black.",
+          "examples": [],
+          "name": "black",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(0, 0, 0, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque blue.",
+          "examples": [],
+          "name": "blue",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(0, 0, 1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque cyan.",
+          "examples": [],
+          "name": "cyan",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(0, 1, 1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Parses a hexadecimal color string.",
+          "examples": [],
+          "name": "fromHex",
+          "parameters": [
+            {
+              "description": "Hexadecimal color in #RRGGBB or #RRGGBBAA form; the leading # is optional. Three- and four-digit shorthands are not supported.",
+              "name": "hex",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Parsed color, or opaque white when the input is invalid.",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a normalized color from byte components.",
+          "examples": [],
+          "name": "fromRGB",
+          "parameters": [
+            {
+              "description": "Red byte from 0 to 255.",
+              "name": "r",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Green byte from 0 to 255.",
+              "name": "g",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Blue byte from 0 to 255.",
+              "name": "b",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional alpha byte from 0 to 255; defaults to 255.",
+              "name": "a",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "New normalized color.",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque green.",
+          "examples": [],
+          "name": "green",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(0, 1, 0, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque magenta.",
+          "examples": [],
+          "name": "magenta",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(1, 0, 1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque red.",
+          "examples": [],
+          "name": "red",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(1, 0, 0, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates fully transparent black.",
+          "examples": [],
+          "name": "transparent",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(0, 0, 0, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque white.",
+          "examples": [],
+          "name": "white",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(1, 1, 1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates opaque yellow.",
+          "examples": [],
+          "name": "yellow",
+          "parameters": [],
+          "returns": {
+            "description": "New Color(1, 1, 0, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Color",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        }
+      ],
+      "kind": "constructor",
+      "name": "Color",
+      "properties": [
+        {
+          "description": "Mutable normalized alpha component.",
+          "name": "a",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable normalized blue component.",
+          "name": "b",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable normalized green component.",
+          "name": "g",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable normalized red component.",
+          "name": "r",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a script wrapper for an existing entity with this ID; it does not spawn an entity.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Network entity identifier.",
+            "name": "id",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Base handle for a live replicated network entity.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Moves this entity into another virtual world.",
+          "examples": [],
+          "name": "setVirtualWorld",
+          "parameters": [
+            {
+              "description": "Virtual-world identifier used to partition replication and visibility.",
+              "name": "world",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Restricts replication of this entity to one owning connection while preserving normal range and visibility checks.",
+          "examples": [],
+          "name": "setVisibleTo",
+          "parameters": [
+            {
+              "description": "Player-owned entity whose connection should exclusively receive this entity, or null to clear the restriction.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity | null",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this entity handle for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text containing the network entity ID.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "constructor",
+      "name": "Entity",
+      "properties": [
+        {
+          "description": "Immutable network entity identifier.",
+          "name": "id",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Authoritative world-space position; assignment forces replicated state.",
+          "name": "position",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "Vector3",
+            "optional": false
+          }
+        },
+        {
+          "description": "Authoritative rotation; reads return a quaternion and assignments accept a quaternion or Euler angles in degrees.",
+          "name": "rotation",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "Quaternion | Vector3",
+            "optional": false
+          }
+        },
+        {
+          "description": "Arbitrary key/value state carried by this entity. The server writes it and every client that can see the entity receives it; see StateBag.",
+          "name": "state",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "StateBag",
+            "optional": false
+          }
+        },
+        {
+          "description": "Current virtual-world identifier.",
+          "name": "virtualWorld",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Native events dispatched through `Events.on`. Each property is the exact callback argument tuple for that event.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "EventMap",
+      "properties": [
+        {
+          "description": "Dispatched for a line typed into the server console that no built-in command (help, ensure, refresh, ...) claimed. `args` is the rest of the line, split on whitespace. The console is the operator's, so this is the place for commands no player may run.",
+          "name": "consoleCommand",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[command: string, args: string[]]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when one key of an entity's state changes: on the server when a script writes it, on a client when the write arrives. `value` is undefined when the key was removed and `previous` is undefined when it held nothing before, so a stored null stays distinguishable from an absent key. The entity is whatever the game's WrapScriptEntity answers, and the base Entity handle by default.",
+          "name": "entityStateChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[entity: Entity, key: string, value: any, previous: any]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when a player asks to join, before the connection exists: they hold no player slot, are not counted as online, and are sent nothing -- no resource list, no download, no body. The request waits until every handler has returned and every Promise a handler returned has settled, then it is let in if a player slot is free (otherwise it is refused as full). `connection.reject()` turns it away instead, and so does a handler that throws or rejects, or handlers that have not settled within the server's admission timeout (30 seconds by default, restarted by every `connection.update()`). With no handler at all, every request is let in at once.",
+          "name": "playerConnecting",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[connection: PendingConnection]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when a player starts speaking, as isPlayerTalking turns true.",
+          "name": "playerVoiceStart",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[player: Player]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched shortly after a player's last voice frame, as isPlayerTalking turns false. A player who disconnects while talking gets no stop, so clear them on disconnect too.",
+          "name": "playerVoiceStop",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[player: Player]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when a player switches voice tier themselves: 0 whisper, 1 normal, 2 shout. setPlayerTier does not raise it.",
+          "name": "playerVoiceTierChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[player: Player, tier: number]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched after a resource entry point has run and immediately before the resource becomes running.",
+          "name": "resourceStart",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[resourceName: string]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched while a resource is stopping, before its stop callback, timers, exports and event handlers are cleaned up.",
+          "name": "resourceStop",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[resourceName: string]",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Asynchronous resource event bus.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Invokes every shared handler and waits for all synchronous and asynchronous results.",
+          "examples": [],
+          "name": "emit",
+          "parameters": [
+            {
+              "description": "Shared event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Arguments delivered to every matching handler.",
+              "name": "args",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "Promise rejected with an AggregateError when one or more handlers fail.",
+            "type": {
+              "cppName": "",
+              "name": "Promise<void>",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Broadcasts a named event to every connected client's shared Events handlers.",
+          "examples": [],
+          "name": "emitAllClients",
+          "parameters": [
+            {
+              "description": "Client shared-event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional payload. A string is sent as is and must already be JSON text: each client parses it and drops an event that does not parse. Other values are JSON-serialized.",
+              "name": "payload",
+              "type": {
+                "cppName": "",
+                "name": "unknown",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Emits an event only within the calling resource.",
+          "examples": [],
+          "name": "emitLocal",
+          "parameters": [
+            {
+              "description": "Private local event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Arguments delivered only to handlers owned by the calling resource.",
+              "name": "args",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "Promise rejected when one or more local handlers fail.",
+            "type": {
+              "cppName": "",
+              "name": "Promise<void>",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Invokes matching handlers belonging only to one resource.",
+          "examples": [],
+          "name": "emitTo",
+          "parameters": [
+            {
+              "description": "Destination running resource.",
+              "name": "resourceName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Shared event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Arguments delivered to matching handlers owned by the destination.",
+              "name": "args",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "Promise rejected when one or more destination handlers fail.",
+            "type": {
+              "cppName": "",
+              "name": "Promise<void>",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Counts persistent and one-shot shared handlers across resources.",
+          "examples": [],
+          "name": "listenerCount",
+          "parameters": [
+            {
+              "description": "Shared event name to inspect.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Number of matching handlers.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes a matching handler owned by the calling resource.",
+          "examples": [],
+          "name": "off",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the emitted arguments.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "EventHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes a matching client-originated event handler owned by the calling resource.",
+          "examples": [],
+          "name": "offClient",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the sending player and the parsed payload, which is absent when the client sent none. The payload is untrusted.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "(player: Player, payload?: unknown) => unknown | Promise<unknown>",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a persistent handler in the shared event namespace.",
+          "examples": [],
+          "name": "on",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the emitted arguments.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "EventHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Function that removes this exact subscription.",
+            "type": {
+              "cppName": "",
+              "name": "Unsubscribe",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.",
+          "examples": [],
+          "name": "onClient",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the sending player and the parsed payload, which is absent when the client sent none. The payload is untrusted.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "(player: Player, payload?: unknown) => unknown | Promise<unknown>",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Function that removes this exact subscription.",
+            "type": {
+              "cppName": "",
+              "name": "Unsubscribe",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a handler in the calling resource's private local-event namespace.",
+          "examples": [],
+          "name": "onLocal",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the emitted arguments.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "EventHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a handler that is removed before its first invocation.",
+          "examples": [],
+          "name": "once",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the emitted arguments.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "EventHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a one-shot server handler for a client-originated event.",
+          "examples": [],
+          "name": "onceClient",
+          "parameters": [
+            {
+              "description": "Case-sensitive event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked with the sending player and the parsed payload, which is absent when the client sent none. The payload is untrusted.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "(player: Player, payload?: unknown) => unknown | Promise<unknown>",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Events",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Runtime-side flags exposed as the global ExecutionEnvironment.",
+      "functions": [],
+      "kind": "globalObject",
+      "name": "ExecutionEnvironment",
+      "properties": [
+        {
+          "description": "Local Framework release version.",
+          "name": "frameworkVersion",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "True in the sandboxed client scripting runtime.",
+          "name": "isClient",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "True in the authoritative server scripting runtime.",
+          "name": "isServer",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "Local mod version from InstanceOptions.modVersion; empty when unset.",
+          "name": "modVersion",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Registration and lookup of cross-resource values through the global Exports object.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Reads one registered export from another running resource; undeclared dependencies produce a warning.",
+          "examples": [],
+          "name": "get",
+          "parameters": [
+            {
+              "description": "Name of the running resource that owns the export.",
+              "name": "resourceName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Registered export name.",
+              "name": "exportName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "The exported value.",
+            "type": {
+              "cppName": "",
+              "name": "unknown",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a value from the calling resource for use by dependent resources.",
+          "examples": [],
+          "name": "register",
+          "parameters": [
+            {
+              "description": "Export name, preferably declared in the current resource manifest.",
+              "name": "name",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "JavaScript value or function retained by the current resource.",
+              "name": "value",
+              "type": {
+                "cppName": "",
+                "name": "unknown",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the value was registered.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Exports",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Bulk access to values exported by another running resource through the global Imports object.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Builds an object containing every currently registered export from another resource; undeclared dependencies produce a warning.",
+          "examples": [],
+          "name": "get",
+          "parameters": [
+            {
+              "description": "Name of the running resource whose exports should be read.",
+              "name": "resourceName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Object keyed by export name, or an empty object when the resource has no exports.",
+            "type": {
+              "cppName": "",
+              "name": "Record<string, unknown>",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Imports",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Typed request and notification channel between local resources through the global Messages object.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Registers or replaces a message handler owned by the calling resource.",
+          "examples": [],
+          "name": "handle",
+          "parameters": [
+            {
+              "description": "Message type unique within the receiving resource.",
+              "name": "messageType",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Handler invoked with the payload and a reply callback; the reply is ignored for notifications.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "MessageHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sends a request to another local resource and waits for its handler to call reply.",
+          "examples": [],
+          "name": "request",
+          "parameters": [
+            {
+              "description": "Destination running resource.",
+              "name": "resourceName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Handler type registered by the destination.",
+              "name": "messageType",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional payload delivered to the handler.",
+              "name": "payload",
+              "type": {
+                "cppName": "",
+                "name": "unknown",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "Promise resolved with the reply value or rejected when delivery or handling fails.",
+            "type": {
+              "cppName": "",
+              "name": "Promise<unknown>",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sends a fire-and-forget notification to another local resource.",
+          "examples": [],
+          "name": "send",
+          "parameters": [
+            {
+              "description": "Destination running resource.",
+              "name": "resourceName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Handler type registered by the destination.",
+              "name": "messageType",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional payload delivered to the handler.",
+              "name": "payload",
+              "type": {
+                "cppName": "",
+                "name": "unknown",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Messages",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Checks whether this connection is still waiting on a decision.",
+          "examples": [],
+          "name": "isPending",
+          "parameters": [],
+          "returns": {
+            "description": "False once it was let in or turned away, or the player gave up and left; a queue drops such entries.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Turns the player away before they receive anything. Takes effect on the next server tick, whatever other handlers are still doing. Does nothing once the connection is decided or the player has left.",
+          "examples": [],
+          "name": "reject",
+          "parameters": [
+            {
+              "description": "Shown to the player as written, up to 512 bytes. Omitted, they read that the server refused the connection.",
+              "name": "reason",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows the waiting player a line of status and restarts the admission timeout, so a queue that keeps updating its players is never timed out. Does nothing once the connection is decided or the player has left.",
+          "examples": [],
+          "name": "update",
+          "parameters": [
+            {
+              "description": "One line for the player's connecting screen, up to 256 bytes: 'Checking the whitelist', 'You are 4th in the queue'.",
+              "name": "message",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "dataType",
+      "name": "PendingConnection",
+      "properties": [
+        {
+          "description": "Discord identifier the client reported, or an empty string when it had none.",
+          "name": "discordId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Discord username the client reported, or an empty string when it had none.",
+          "name": "discordName",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Epic Games account identifier the client reported, or an empty string when it had none.",
+          "name": "epicId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Framework hardware identifier the client reported, or an empty string when it had none.",
+          "name": "hardwareId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "The remote address the connection comes from, without its port.",
+          "name": "ip",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "The name the player asked to join under.",
+          "name": "nickname",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Steam identifier the client reported, or an empty string when it had none.",
+          "name": "steamId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "The string the client was launched with, as the `ticket` of its launch link, or an empty string. The framework passes it through untouched; checking it -- against a one-time join ticket your own launcher or website issued, typically -- is the script's job.",
+          "name": "ticket",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [
+        "Entity"
+      ],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a wrapper for an existing connected player with this ID; it does not connect or spawn a player.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Network entity identifier.",
+            "name": "id",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Framework-owned base handle for a connected player, extended by each game or mod.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Emits a named script event to this player's client connection.",
+          "examples": [],
+          "name": "emit",
+          "parameters": [
+            {
+              "description": "Client event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional JSON payload forwarded verbatim to the owning client.",
+              "name": "payloadJson",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns this player's current remote network address.",
+          "examples": [],
+          "name": "getIP",
+          "parameters": [],
+          "returns": {
+            "description": "Address string, or an empty string when the player or peer is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads this player's nametag color.",
+          "examples": [],
+          "name": "getNametagColor",
+          "parameters": [],
+          "returns": {
+            "description": "Packed 0xAARRGGBB color; opaque white when untinted.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads this player's nametag text override.",
+          "examples": [],
+          "name": "getNametagText",
+          "parameters": [],
+          "returns": {
+            "description": "The override, or an empty string when the player's own name is drawn.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the health bar under this player's nametag is shown.",
+          "examples": [],
+          "name": "isNametagHealthVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True unless the health bar was hidden; false also when this game has no nametags.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player's nametag is shown to other players.",
+          "examples": [],
+          "name": "isNametagVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True unless the nametag was hidden; false also when this game has no nametags.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Disconnects this player from the server.",
+          "examples": [],
+          "name": "kick",
+          "parameters": [
+            {
+              "description": "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason.",
+              "name": "reason",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Tints the text on this player's nametag.",
+          "examples": [],
+          "name": "setNametagColor",
+          "parameters": [
+            {
+              "description": "Packed 0xAARRGGBB color.",
+              "name": "color",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides the health bar under this player's nametag, leaving the name itself alone.",
+          "examples": [],
+          "name": "setNametagHealthVisible",
+          "parameters": [
+            {
+              "description": "True to show the health bar under this player's name, false to hide it.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Overrides the text drawn on this player's nametag.",
+          "examples": [],
+          "name": "setNametagText",
+          "parameters": [
+            {
+              "description": "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides the name over this player's head for every other player. The health bar has its own switch, and each player can still hide all nametags locally.",
+          "examples": [],
+          "name": "setNametagVisible",
+          "parameters": [
+            {
+              "description": "True to show this player's nametag to everyone, false to hide it.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this player handle for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text containing the player's network entity ID.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "constructor",
+      "name": "Player",
+      "properties": [
+        {
+          "description": "Authenticated Discord identifier, or an empty string when unavailable.",
+          "name": "discordId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Discord username the client reported, not verified by the server, or an empty string when unavailable.",
+          "name": "discordName",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable.",
+          "name": "epicId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Framework hardware identifier, or an empty string when unavailable.",
+          "name": "hardwareId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Current remote network address, or an empty string when unavailable.",
+          "name": "ip",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Current round-trip latency in milliseconds, or -1 when unavailable.",
+          "name": "ping",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Authenticated Steam identifier, or an empty string when unavailable.",
+          "name": "steamId",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a quaternion in scalar-first w, x, y, z component order. Watch the trap: the scalar w is the first argument, unlike the x, y, z, w order used by some other libraries.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Initial scalar component (comes first — this is not x, y, z, w order).",
+            "name": "w",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial X imaginary component.",
+            "name": "x",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Y imaginary component.",
+            "name": "y",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Z imaginary component.",
+            "name": "z",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Mutable quaternion for three-dimensional rotations. Components are scalar-first (w, x, y, z), matching GLM — not the x, y, z, w order some libraries use.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Creates an independent copy of this quaternion.",
+          "examples": [],
+          "name": "clone",
+          "parameters": [],
+          "returns": {
+            "description": "New quaternion with the same components.",
+            "type": {
+              "cppName": "",
+              "name": "Quaternion",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes the conjugate without changing this quaternion.",
+          "examples": [],
+          "name": "conjugate",
+          "parameters": [],
+          "returns": {
+            "description": "New conjugated quaternion.",
+            "type": {
+              "cppName": "",
+              "name": "Quaternion",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes the quaternion dot product.",
+          "examples": [],
+          "name": "dot",
+          "parameters": [
+            {
+              "description": "Quaternion used for the dot product.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Quaternion",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Scalar dot product.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes the inverse rotation without changing this quaternion.",
+          "examples": [],
+          "name": "inverse",
+          "parameters": [],
+          "returns": {
+            "description": "New inverse quaternion.",
+            "type": {
+              "cppName": "",
+              "name": "Quaternion",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Composes this rotation with another quaternion in place.",
+          "examples": [],
+          "name": "mul",
+          "parameters": [
+            {
+              "description": "Rotation composed after this quaternion.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Quaternion",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated quaternion for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Normalizes this quaternion in place; a zero quaternion becomes the identity rotation instead of NaN.",
+          "examples": [],
+          "name": "normalize",
+          "parameters": [],
+          "returns": {
+            "description": "This unit quaternion for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Applies this rotation to a vector without mutating either value.",
+          "examples": [],
+          "name": "rotateVector",
+          "parameters": [
+            {
+              "description": "Vector to rotate.",
+              "name": "vector",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "New rotated vector.",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Replaces all quaternion components in place.",
+          "examples": [],
+          "name": "set",
+          "parameters": [
+            {
+              "description": "Replacement scalar component.",
+              "name": "w",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement X imaginary component.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Y imaginary component.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Z imaginary component.",
+              "name": "z",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated quaternion for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Spherically interpolates this quaternion toward a target in place.",
+          "examples": [],
+          "name": "slerp",
+          "parameters": [
+            {
+              "description": "Destination rotation.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Quaternion",
+                "optional": false
+              }
+            },
+            {
+              "description": "Interpolation factor; 0 keeps the current rotation and 1 reaches target.",
+              "name": "t",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated quaternion for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts this rotation to Euler angles in radians.",
+          "examples": [],
+          "name": "toEuler",
+          "parameters": [],
+          "returns": {
+            "description": "Pitch, yaw, and roll as a Vector3.",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts this quaternion to a plain object for JSON.stringify.",
+          "examples": [],
+          "name": "toJSON",
+          "parameters": [],
+          "returns": {
+            "description": "Object containing the current components.",
+            "type": {
+              "cppName": "",
+              "name": "{ w: number; x: number; y: number; z: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this quaternion for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text in Quaternion(w, x, y, z) form.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a rotation around an axis.",
+          "examples": [],
+          "name": "fromAxisAngle",
+          "parameters": [
+            {
+              "description": "Rotation axis; it is normalized internally.",
+              "name": "axis",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            },
+            {
+              "description": "Rotation angle in radians.",
+              "name": "angle",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "New axis-angle rotation quaternion.",
+            "type": {
+              "cppName": "",
+              "name": "Quaternion",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a rotation from Euler angles.",
+          "examples": [],
+          "name": "fromEuler",
+          "parameters": [
+            {
+              "description": "Pitch angle in radians.",
+              "name": "pitch",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Yaw angle in radians.",
+              "name": "yaw",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Roll angle in radians.",
+              "name": "roll",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "New rotation quaternion.",
+            "type": {
+              "cppName": "",
+              "name": "Quaternion",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates the identity rotation.",
+          "examples": [],
+          "name": "identity",
+          "parameters": [],
+          "returns": {
+            "description": "New Quaternion(1, 0, 0, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Quaternion",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        }
+      ],
+      "kind": "constructor",
+      "name": "Quaternion",
+      "properties": [
+        {
+          "description": "Read-only magnitude (norm) of this quaternion; 1 for a unit rotation.",
+          "name": "length",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Read-only squared magnitude, avoiding a square-root calculation.",
+          "name": "lengthSquared",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable scalar component.",
+          "name": "w",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable X imaginary component.",
+          "name": "x",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Y imaginary component.",
+          "name": "y",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Z imaginary component.",
+          "name": "z",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "constructor": null,
+      "description": "Arbitrary key/value state attached to one replicated entity, reached as `entity.state`. Keys set on the server replicate to every client that can currently see the entity.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Reads one key from this entity's state.",
+          "examples": [],
+          "name": "get",
+          "parameters": [
+            {
+              "description": "Key to read.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "The stored value, or undefined when the key is not set.",
+            "type": {
+              "cppName": "",
+              "name": "any",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this entity's state holds a key.",
+          "examples": [],
+          "name": "has",
+          "parameters": [
+            {
+              "description": "Key to test.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the key is set.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Lists the keys this entity's state holds, sorted.",
+          "examples": [],
+          "name": "keys",
+          "parameters": [],
+          "returns": {
+            "description": "Every key currently set, in ascending order.",
+            "type": {
+              "cppName": "",
+              "name": "string[]",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Watches this entity's state. The filter is applied before the handler runs, so a listener watching one key of one entity is not woken by unrelated changes. The subscription is dropped when the registering resource stops.",
+          "examples": [],
+          "name": "onChange",
+          "parameters": [
+            {
+              "description": "Only report this key, or null to report every key of this entity.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string | null",
+                "optional": false
+              }
+            },
+            {
+              "description": "Called as (key: string, value: any, previous: any) with the changed key, its new value and the value before it. `value` is undefined when the key was removed and `previous` is undefined when it held nothing.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "Function",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "A zero-argument function that cancels this subscription.",
+            "type": {
+              "cppName": "",
+              "name": "Function",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes one key from this entity's state, telling every client that held it.",
+          "examples": [],
+          "name": "remove",
+          "parameters": [
+            {
+              "description": "Key to drop.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the key was set and has been removed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Writes one key of this entity's state and replicates it to whoever the scope names. Throws when a limit is reached.",
+          "examples": [],
+          "name": "set",
+          "parameters": [
+            {
+              "description": "Key to write; at most 64 UTF-8 bytes.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Value to store. Booleans, numbers and strings travel as themselves; anything else is serialized as JSON. At most 4096 bytes.",
+              "name": "value",
+              "type": {
+                "cppName": "",
+                "name": "any",
+                "optional": false
+              }
+            },
+            {
+              "description": "Who the key reaches: every client that can see the entity (the default), only its owning client, or nobody -- server-side storage that never goes on the wire.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "{ scope?: 'broadcast' | 'owner' | 'server' }",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the value changed, false when it was already stored.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Copies this entity's whole state into a plain object.",
+          "examples": [],
+          "name": "toObject",
+          "parameters": [],
+          "returns": {
+            "description": "Every key and value currently set. The copy does not track later changes.",
+            "type": {
+              "cppName": "",
+              "name": "Record<string, any>",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "constructor",
+      "name": "StateBag",
+      "properties": []
+    },
+    {
+      "bases": [
+        "Entity"
+      ],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a wrapper for an existing text label; use TextLabel.create to spawn one.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Existing text-label network entity identifier.",
+            "name": "id",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Server-created replicated world-space text label.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it.",
+          "examples": [],
+          "name": "attachTo",
+          "parameters": [
+            {
+              "description": "The entity to follow, or its network id.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Entity | number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Where to draw relative to it; the game decides the reference point (a player's head, say).",
+              "name": "offset",
+              "type": {
+                "cppName": "",
+                "name": "Vector3 | { x: number; y: number; z: number }",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Destroys this replicated label; stale wrappers no longer resolve afterward.",
+          "examples": [],
+          "name": "destroy",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stops following an entity; the label returns to its own position.",
+          "examples": [],
+          "name": "detach",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Who the label is for, with players as network ids. For reading: a connected player with no avatar right now has no id and is left out, though the label stays as set for them, so passing this to update() would drop them.",
+          "examples": [],
+          "name": "getAudience",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "{ showTo: number[] | null; hideFrom: number[]; hideForTarget: boolean }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience().",
+          "examples": [],
+          "name": "getOptions",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "TextLabelOptions",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes the label's packed ARGB color from a Color or byte components.",
+          "examples": [],
+          "name": "setColor",
+          "parameters": [
+            {
+              "description": "A Color, or the red byte (0-255) when passing components.",
+              "name": "colorOrR",
+              "type": {
+                "cppName": "",
+                "name": "Color | number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Green byte (0-255) when passing components.",
+              "name": "g",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            },
+            {
+              "description": "Blue byte (0-255) when passing components.",
+              "name": "b",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            },
+            {
+              "description": "Alpha byte (0-255) when passing components; defaults to 255.",
+              "name": "a",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes how far away clients can render the label.",
+          "examples": [],
+          "name": "setDrawDistance",
+          "parameters": [
+            {
+              "description": "Maximum rendering distance in world units, clamped from 1 to 1000 metres' worth.",
+              "name": "distance",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes where the label starts fading out.",
+          "examples": [],
+          "name": "setFadeDistance",
+          "parameters": [
+            {
+              "description": "Distance in world units where fading starts; 0 starts it at 75% of the draw distance.",
+              "name": "distance",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes the rendered font size.",
+          "examples": [],
+          "name": "setFontSize",
+          "parameters": [
+            {
+              "description": "Font size in pixels, clamped from 1 to 512.",
+              "name": "size",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Resets the outline, shadow and background to a preset.",
+          "examples": [],
+          "name": "setStyle",
+          "parameters": [
+            {
+              "description": "0 none, 1 shadow, 2 outline, 3 box; unsupported values are ignored.",
+              "name": "style",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes the label's displayed text.",
+          "examples": [],
+          "name": "setText",
+          "parameters": [
+            {
+              "description": "Replacement text replicated to clients; at most 1024 bytes.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides the label for one player. A hidden player's client is never sent it; hideForTarget still applies.",
+          "examples": [],
+          "name": "setVisibleFor",
+          "parameters": [
+            {
+              "description": "A connected player, or their network id.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Player | number",
+                "optional": false
+              }
+            },
+            {
+              "description": "false adds them to hideFrom and takes them off showTo; true undoes both, adding them to showTo while it is set.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this label for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text containing the label ID and current text.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes any part of the label at once. A bad key throws and changes nothing.",
+          "examples": [],
+          "name": "update",
+          "parameters": [
+            {
+              "description": "Only the keys given change; outline, shadow, background, showTo and hideFrom are replaced whole.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "TextLabelOptions",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates and replicates a world-space text label, up to the server-wide limit of 512. A bad option throws and creates nothing.",
+          "examples": [],
+          "name": "create",
+          "parameters": [
+            {
+              "description": "World-space X coordinate.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "World-space Y coordinate.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "World-space Z coordinate.",
+              "name": "z",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Initial displayed text.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Look and placement, or (the older form) the font size from 1 to 512.",
+              "name": "fontSizeOrOptions",
+              "type": {
+                "cppName": "",
+                "name": "number | TextLabelOptions",
+                "optional": true
+              }
+            },
+            {
+              "description": "Older form only: the draw distance in world units.",
+              "name": "drawDistance",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            },
+            {
+              "description": "Older form only: the virtual-world identifier.",
+              "name": "virtualWorld",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "Handle for the newly created label.",
+            "type": {
+              "cppName": "",
+              "name": "TextLabel",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        }
+      ],
+      "kind": "constructor",
+      "name": "TextLabel",
+      "properties": [
+        {
+          "description": "Current packed ARGB color.",
+          "name": "color",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Current maximum rendering distance in world units.",
+          "name": "drawDistance",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Distance in world units where fading starts.",
+          "name": "fadeDistance",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Current font size.",
+          "name": "fontSize",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box.",
+          "name": "style",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Current replicated label text.",
+          "name": "text",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A text label's look, placement and audience. Every key is optional; colours are 0xAARRGGBB numbers, \"#RRGGBB[AA]\" strings or Colors.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "TextLabelOptions",
+      "properties": [
+        {
+          "description": "How lines align with each other. Default \"center\".",
+          "name": "align",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"left\" | \"center\" | \"right\"",
+            "optional": true
+          }
+        },
+        {
+          "description": "Which part of the text block sits on the point. \"bottom\" grows upward, as a tag over a head.",
+          "name": "anchor",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"center\" | \"bottom\" | \"top\"",
+            "optional": true
+          }
+        },
+        {
+          "description": "Another live entity to follow, or its network id; null or 0 detaches. The label is destroyed with it.",
+          "name": "attachTo",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "Entity | number | null",
+            "optional": true
+          }
+        },
+        {
+          "description": "A plate behind the text; true is translucent black, 4 px padding and radius.",
+          "name": "background",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean | null | { color?: number | string | Color; padding?: number; radius?: number }",
+            "optional": true
+          }
+        },
+        {
+          "description": "Text colour. Default white.",
+          "name": "color",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number | string | Color",
+            "optional": true
+          }
+        },
+        {
+          "description": "World units; the label neither draws nor streams past it. Default 30 metres' worth.",
+          "name": "drawDistance",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "World units where fading starts; 0 starts at 75% of drawDistance.",
+          "name": "fadeDistance",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Pixels, 1-512. Default 16.",
+          "name": "fontSize",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Not sent to the player it is attached to, as for their own name tag. Default false.",
+          "name": "hideForTarget",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": true
+          }
+        },
+        {
+          "description": "These players are not sent it; null or [] clears. Lasts for the connection: a player who reconnects sees it again until hidden again. Read back through getAudience().",
+          "name": "hideFrom",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "(Player | number)[] | null",
+            "optional": true
+          }
+        },
+        {
+          "description": "Line height as a multiple of the size. Default 1.",
+          "name": "lineSpacing",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Parse inline tags: {#RRGGBB} / {#RRGGBBAA} colour, {#} back to `color`, {b}{/b}, {i}{/i}, {{ for a brace. Default false.",
+          "name": "markup",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": true
+          }
+        },
+        {
+          "description": "World mode: never larger than this many pixels; 0 = no cap.",
+          "name": "maxSize",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Wraps at spaces past this width, in fontSize pixels. 0 (default) never wraps.",
+          "name": "maxWidth",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "World mode: never smaller than this many pixels.",
+          "name": "minSize",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "Hidden behind world geometry. Default true.",
+          "name": "occlusion",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": true
+          }
+        },
+        {
+          "description": "Relative to the attached entity; the game decides the reference point (a player's head, say).",
+          "name": "offset",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "Vector3 | { x: number; y: number; z: number }",
+            "optional": true
+          }
+        },
+        {
+          "description": "0-1, multiplies every colour. Default 1.",
+          "name": "opacity",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        },
+        {
+          "description": "true is 1 px black; width is at most 4.",
+          "name": "outline",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean | null | { color?: number | string | Color; width?: number }",
+            "optional": true
+          }
+        },
+        {
+          "description": "Where the label stands while it is not attached, and returns to when detached.",
+          "name": "position",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "Vector3 | { x: number; y: number; z: number }",
+            "optional": true
+          }
+        },
+        {
+          "description": "A drop shadow; blur (at most 8) is approximated. Default a 1 px shadow.",
+          "name": "shadow",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean | null | { color?: number | string | Color; offsetX?: number; offsetY?: number; blur?: number }",
+            "optional": true
+          }
+        },
+        {
+          "description": "Only these players are sent it; [] is nobody, null (default) everyone. hideFrom wins over it. Lasts for the connection: a player who reconnects is off it until added again. Read back through getAudience().",
+          "name": "showTo",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "(Player | number)[] | null",
+            "optional": true
+          }
+        },
+        {
+          "description": "\"screen\" (default): fontSize pixels at any distance. \"world\": fontSize pixels at one metre on a 1080p view, shrinking with distance.",
+          "name": "sizeMode",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"screen\" | \"world\"",
+            "optional": true
+          }
+        },
+        {
+          "description": "A preset for outline, shadow and background; blocks in the same call refine it.",
+          "name": "style",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"none\" | \"shadow\" | \"outline\" | \"box\" | number",
+            "optional": true
+          }
+        },
+        {
+          "description": "UTF-8 text, at most 1024 bytes; '\\n' breaks lines.",
+          "name": "text",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": true
+          }
+        },
+        {
+          "description": "The virtual world it lives in while it is not attached, and returns to when detached.",
+          "name": "virtualWorld",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": true
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Node.js timer handle returned by setTimeout and setInterval.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Whether this timer keeps the event loop alive.",
+          "examples": [],
+          "name": "hasRef",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Keeps the event loop alive while this timer is pending.",
+          "examples": [],
+          "name": "ref",
+          "parameters": [],
+          "returns": {
+            "description": "This timer.",
+            "type": {
+              "cppName": "",
+              "name": "Timeout",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Restarts this timer's countdown from now, with its original delay.",
+          "examples": [],
+          "name": "refresh",
+          "parameters": [],
+          "returns": {
+            "description": "This timer.",
+            "type": {
+              "cppName": "",
+              "name": "Timeout",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Lets the event loop exit while this timer is still pending.",
+          "examples": [],
+          "name": "unref",
+          "parameters": [],
+          "returns": {
+            "description": "This timer.",
+            "type": {
+              "cppName": "",
+              "name": "Timeout",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "dataType",
+      "name": "Timeout",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a vector from two numeric components.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Initial X component.",
+            "name": "x",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Y component.",
+            "name": "y",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Mutable two-dimensional vector.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Adds another vector to this vector in place.",
+          "examples": [],
+          "name": "add",
+          "parameters": [
+            {
+              "description": "Vector to add component-wise.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector2",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates an independent copy of this vector.",
+          "examples": [],
+          "name": "clone",
+          "parameters": [],
+          "returns": {
+            "description": "New vector with the same components.",
+            "type": {
+              "cppName": "",
+              "name": "Vector2",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes Euclidean distance to another vector.",
+          "examples": [],
+          "name": "distance",
+          "parameters": [
+            {
+              "description": "Vector to measure from this vector.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector2",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Distance between the two vectors.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Divides this vector by a scalar in place.",
+          "examples": [],
+          "name": "div",
+          "parameters": [
+            {
+              "description": "Divisor applied to both components; must be non-zero.",
+              "name": "scalar",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes the dot product without changing either vector.",
+          "examples": [],
+          "name": "dot",
+          "parameters": [
+            {
+              "description": "Vector used for the dot product.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector2",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Scalar dot product.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Linearly interpolates this vector toward a target in place.",
+          "examples": [],
+          "name": "lerp",
+          "parameters": [
+            {
+              "description": "Destination vector.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Vector2",
+                "optional": false
+              }
+            },
+            {
+              "description": "Interpolation factor; 0 keeps the current value and 1 reaches target.",
+              "name": "t",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Multiplies this vector by a scalar in place.",
+          "examples": [],
+          "name": "mul",
+          "parameters": [
+            {
+              "description": "Multiplier applied to both components.",
+              "name": "scalar",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Normalizes this vector in place; a zero vector remains unchanged.",
+          "examples": [],
+          "name": "normalize",
+          "parameters": [],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Replaces both components in place.",
+          "examples": [],
+          "name": "set",
+          "parameters": [
+            {
+              "description": "Replacement X component.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Y component.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Subtracts another vector from this vector in place.",
+          "examples": [],
+          "name": "sub",
+          "parameters": [
+            {
+              "description": "Vector to subtract component-wise.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector2",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts this vector to a plain object for JSON.stringify.",
+          "examples": [],
+          "name": "toJSON",
+          "parameters": [],
+          "returns": {
+            "description": "Object containing the current components.",
+            "type": {
+              "cppName": "",
+              "name": "{ x: number; y: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this vector for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text in Vector2(x, y) form.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a vector whose components are one.",
+          "examples": [],
+          "name": "one",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector2(1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Vector2",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a vector whose components are zero.",
+          "examples": [],
+          "name": "zero",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector2(0, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Vector2",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        }
+      ],
+      "kind": "constructor",
+      "name": "Vector2",
+      "properties": [
+        {
+          "description": "Read-only Euclidean magnitude of this vector.",
+          "name": "length",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Read-only squared magnitude, avoiding a square-root calculation.",
+          "name": "lengthSquared",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable X component.",
+          "name": "x",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Y component.",
+          "name": "y",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a vector from three numeric components.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Initial X component.",
+            "name": "x",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Y component.",
+            "name": "y",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Z component.",
+            "name": "z",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Mutable three-dimensional vector for positions, directions, and Euler angles.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Adds another vector to this vector in place.",
+          "examples": [],
+          "name": "add",
+          "parameters": [
+            {
+              "description": "Vector to add component-wise.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates an independent copy of this vector.",
+          "examples": [],
+          "name": "clone",
+          "parameters": [],
+          "returns": {
+            "description": "New vector with the same components.",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Replaces this vector with its cross product against another vector.",
+          "examples": [],
+          "name": "cross",
+          "parameters": [
+            {
+              "description": "Second vector in the cross product.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated perpendicular vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes Euclidean distance to another vector.",
+          "examples": [],
+          "name": "distance",
+          "parameters": [
+            {
+              "description": "Vector to measure from this vector.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Distance between the two vectors.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Divides this vector by a scalar in place.",
+          "examples": [],
+          "name": "div",
+          "parameters": [
+            {
+              "description": "Divisor applied to every component; must be non-zero.",
+              "name": "scalar",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes the dot product without changing either vector.",
+          "examples": [],
+          "name": "dot",
+          "parameters": [
+            {
+              "description": "Vector used for the dot product.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Scalar dot product.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Linearly interpolates this vector toward a target in place.",
+          "examples": [],
+          "name": "lerp",
+          "parameters": [
+            {
+              "description": "Destination vector.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            },
+            {
+              "description": "Interpolation factor; 0 keeps the current value and 1 reaches target.",
+              "name": "t",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Multiplies this vector by a scalar in place.",
+          "examples": [],
+          "name": "mul",
+          "parameters": [
+            {
+              "description": "Multiplier applied to every component.",
+              "name": "scalar",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Normalizes this vector in place; a zero vector remains unchanged.",
+          "examples": [],
+          "name": "normalize",
+          "parameters": [],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Replaces all components in place.",
+          "examples": [],
+          "name": "set",
+          "parameters": [
+            {
+              "description": "Replacement X component.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Y component.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Z component.",
+              "name": "z",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Subtracts another vector from this vector in place.",
+          "examples": [],
+          "name": "sub",
+          "parameters": [
+            {
+              "description": "Vector to subtract component-wise.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector3",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts this vector to a plain object for JSON.stringify.",
+          "examples": [],
+          "name": "toJSON",
+          "parameters": [],
+          "returns": {
+            "description": "Object containing the current components.",
+            "type": {
+              "cppName": "",
+              "name": "{ x: number; y: number; z: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this vector for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text in Vector3(x, y, z) form.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates the framework's positive-Z unit direction.",
+          "examples": [],
+          "name": "forward",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector3(0, 0, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a vector whose components are one.",
+          "examples": [],
+          "name": "one",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector3(1, 1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates the framework's positive-X unit direction.",
+          "examples": [],
+          "name": "right",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector3(1, 0, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates the framework's positive-Y unit direction.",
+          "examples": [],
+          "name": "up",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector3(0, 1, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a zero vector.",
+          "examples": [],
+          "name": "zero",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector3(0, 0, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Vector3",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        }
+      ],
+      "kind": "constructor",
+      "name": "Vector3",
+      "properties": [
+        {
+          "description": "Read-only Euclidean magnitude of this vector.",
+          "name": "length",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Read-only squared magnitude, avoiding a square-root calculation.",
+          "name": "lengthSquared",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable X component.",
+          "name": "x",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Y component.",
+          "name": "y",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Z component.",
+          "name": "z",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "constructor": {
+        "deprecated": "",
+        "description": "Creates a vector from four numeric components.",
+        "examples": [],
+        "name": "constructor",
+        "parameters": [
+          {
+            "description": "Initial X component.",
+            "name": "x",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Y component.",
+            "name": "y",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial Z component.",
+            "name": "z",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          {
+            "description": "Initial W component.",
+            "name": "w",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          }
+        ],
+        "returns": {
+          "description": "",
+          "type": {
+            "cppName": "",
+            "name": "void",
+            "optional": false
+          }
+        },
+        "since": "",
+        "static": false
+      },
+      "description": "Mutable four-dimensional vector.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Adds another vector to this vector in place.",
+          "examples": [],
+          "name": "add",
+          "parameters": [
+            {
+              "description": "Vector to add component-wise.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector4",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates an independent copy of this vector.",
+          "examples": [],
+          "name": "clone",
+          "parameters": [],
+          "returns": {
+            "description": "New vector with the same components.",
+            "type": {
+              "cppName": "",
+              "name": "Vector4",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes Euclidean distance to another vector.",
+          "examples": [],
+          "name": "distance",
+          "parameters": [
+            {
+              "description": "Vector to measure from this vector.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector4",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Distance between the two vectors.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Divides this vector by a scalar in place.",
+          "examples": [],
+          "name": "div",
+          "parameters": [
+            {
+              "description": "Divisor applied to every component; must be non-zero.",
+              "name": "scalar",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Computes the dot product without changing either vector.",
+          "examples": [],
+          "name": "dot",
+          "parameters": [
+            {
+              "description": "Vector used for the dot product.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector4",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Scalar dot product.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Linearly interpolates this vector toward a target in place.",
+          "examples": [],
+          "name": "lerp",
+          "parameters": [
+            {
+              "description": "Destination vector.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Vector4",
+                "optional": false
+              }
+            },
+            {
+              "description": "Interpolation factor; 0 keeps the current value and 1 reaches target.",
+              "name": "t",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Multiplies this vector by a scalar in place.",
+          "examples": [],
+          "name": "mul",
+          "parameters": [
+            {
+              "description": "Multiplier applied to every component.",
+              "name": "scalar",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Normalizes this vector in place; a zero vector remains unchanged.",
+          "examples": [],
+          "name": "normalize",
+          "parameters": [],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Replaces all components in place.",
+          "examples": [],
+          "name": "set",
+          "parameters": [
+            {
+              "description": "Replacement X component.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Y component.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement Z component.",
+              "name": "z",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Replacement W component.",
+              "name": "w",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Subtracts another vector from this vector in place.",
+          "examples": [],
+          "name": "sub",
+          "parameters": [
+            {
+              "description": "Vector to subtract component-wise.",
+              "name": "other",
+              "type": {
+                "cppName": "",
+                "name": "Vector4",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "This mutated vector for chaining.",
+            "type": {
+              "cppName": "",
+              "name": "this",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Converts this vector to a plain object for JSON.stringify.",
+          "examples": [],
+          "name": "toJSON",
+          "parameters": [],
+          "returns": {
+            "description": "Object containing the current components.",
+            "type": {
+              "cppName": "",
+              "name": "{ x: number; y: number; z: number; w: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Formats this vector for logging and debugging.",
+          "examples": [],
+          "name": "toString",
+          "parameters": [],
+          "returns": {
+            "description": "Text in Vector4(x, y, z, w) form.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a vector whose components are one.",
+          "examples": [],
+          "name": "one",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector4(1, 1, 1, 1).",
+            "type": {
+              "cppName": "",
+              "name": "Vector4",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        },
+        {
+          "deprecated": "",
+          "description": "Creates a zero vector.",
+          "examples": [],
+          "name": "zero",
+          "parameters": [],
+          "returns": {
+            "description": "New Vector4(0, 0, 0, 0).",
+            "type": {
+              "cppName": "",
+              "name": "Vector4",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": true
+        }
+      ],
+      "kind": "constructor",
+      "name": "Vector4",
+      "properties": [
+        {
+          "description": "Read-only Euclidean magnitude of this vector.",
+          "name": "length",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Read-only squared magnitude, avoiding a square-root calculation.",
+          "name": "lengthSquared",
+          "readonly": true,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable W component.",
+          "name": "w",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable X component.",
+          "name": "x",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Y component.",
+          "name": "y",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Mutable Z component.",
+          "name": "z",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Server-side proximity voice rules: how far voice carries, and who may talk to or hear whom.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Reads how far a player's voice carries, with the server-wide default already resolved.",
+          "examples": [],
+          "name": "getPlayerRange",
+          "parameters": [
+            {
+              "description": "Player to query.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Radius in world units.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the voice tier a player is on. A player switching tier raises the playerVoiceTierChange event with the player and the new tier.",
+          "examples": [],
+          "name": "getPlayerTier",
+          "parameters": [
+            {
+              "description": "Player to query.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "0 whisper, 1 normal, 2 shout.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the server-wide proximity range.",
+          "examples": [],
+          "name": "getRange",
+          "parameters": [],
+          "returns": {
+            "description": "Radius in world units.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads how far a voice tier carries, with the server-wide range already resolved.",
+          "examples": [],
+          "name": "getTierRange",
+          "parameters": [
+            {
+              "description": "Voice tier: 0 whisper, 1 normal, 2 shout.",
+              "name": "tier",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Radius in world units.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks a one-way mute.",
+          "examples": [],
+          "name": "isLocallyMuted",
+          "parameters": [
+            {
+              "description": "Player doing the muting.",
+              "name": "listener",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "Player being muted.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the listener does not receive the target.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks the server-wide deafen flag.",
+          "examples": [],
+          "name": "isPlayerDeaf",
+          "parameters": [
+            {
+              "description": "Player to query.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the player receives nobody's voice.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks the server-wide mute flag.",
+          "examples": [],
+          "name": "isPlayerMuted",
+          "parameters": [
+            {
+              "description": "Player to query.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the player's voice reaches nobody.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether a player is speaking right now. Tracks speech rather than the push-to-talk key: silence is dropped before it reaches the server, and the state clears shortly after the last frame. The same signal raises the playerVoiceStart and playerVoiceStop events.",
+          "examples": [],
+          "name": "isPlayerTalking",
+          "parameters": [
+            {
+              "description": "Player to query.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True while the player's voice is reaching the server.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether a player left voice chat enabled in their own client settings. A preference, not a permission: use setPlayerMuted or setPlayerDeaf to enforce anything.",
+          "examples": [],
+          "name": "isPlayerVoiceEnabled",
+          "parameters": [
+            {
+              "description": "Player to query.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True unless the player turned voice chat off.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "One-way mute between two players, enforced by the server rather than the client.",
+          "examples": [],
+          "name": "setLocalMute",
+          "parameters": [
+            {
+              "description": "Player who stops hearing the target.",
+              "name": "listener",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "Player the listener stops hearing.",
+              "name": "target",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "True to mute, false to restore.",
+              "name": "muted",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Server-wide deafen: a deaf player receives nobody.",
+          "examples": [],
+          "name": "setPlayerDeaf",
+          "parameters": [
+            {
+              "description": "Player to deafen or undeafen.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "True to stop them receiving anyone's voice.",
+              "name": "deaf",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Server-wide mute: a muted player's voice reaches nobody.",
+          "examples": [],
+          "name": "setPlayerMuted",
+          "parameters": [
+            {
+              "description": "Player to mute or unmute.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "True to stop their voice reaching anyone.",
+              "name": "muted",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Overrides how far one player's voice carries, whichever voice tier they chose.",
+          "examples": [],
+          "name": "setPlayerRange",
+          "parameters": [
+            {
+              "description": "Player whose voice carries the given distance.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "Audibility radius in world units; values <= 0 return them to the radius of their voice tier.",
+              "name": "range",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Puts a player on a voice tier, as if they had switched to it. Their own indicator follows, and the playerVoiceTierChange event is not raised.",
+          "examples": [],
+          "name": "setPlayerTier",
+          "parameters": [
+            {
+              "description": "Player to move.",
+              "name": "player",
+              "type": {
+                "cppName": "",
+                "name": "Entity",
+                "optional": false
+              }
+            },
+            {
+              "description": "Voice tier: 0 whisper, 1 normal, 2 shout.",
+              "name": "tier",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets how far voice carries for talkers with no override of their own. Connected clients are told, so their playback fades out at the same distance.",
+          "examples": [],
+          "name": "setRange",
+          "parameters": [
+            {
+              "description": "Audibility radius in world units; values <= 0 restore the default of 25.",
+              "name": "range",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets how far a voice tier carries. Players switch tier themselves; whisper starts at 3, shout at 25, and normal carries the server-wide range. Set a tier to 0 to make it carry the server-wide range, which takes it away. Connected clients are told.",
+          "examples": [],
+          "name": "setTierRange",
+          "parameters": [
+            {
+              "description": "Voice tier: 0 whisper, 1 normal, 2 shout.",
+              "name": "tier",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Audibility radius in world units; values <= 0 make the tier carry the server-wide range.",
+              "name": "range",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Voice",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Resource-aware console that routes output through the Framework logger.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Writes a debug log entry prefixed with the current resource name.",
+          "examples": [],
+          "name": "debug",
+          "parameters": [
+            {
+              "description": "Values formatted and joined with spaces.",
+              "name": "values",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Writes an error log entry prefixed with the current resource name.",
+          "examples": [],
+          "name": "error",
+          "parameters": [
+            {
+              "description": "Values formatted and joined with spaces.",
+              "name": "values",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Alias of console.log for informational output.",
+          "examples": [],
+          "name": "info",
+          "parameters": [
+            {
+              "description": "Values formatted and joined with spaces.",
+              "name": "values",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Writes an informational log entry prefixed with the current resource name.",
+          "examples": [],
+          "name": "log",
+          "parameters": [
+            {
+              "description": "Values formatted and joined with spaces.",
+              "name": "values",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Writes a warning log entry prefixed with the current resource name.",
+          "examples": [],
+          "name": "warn",
+          "parameters": [
+            {
+              "description": "Values formatted and joined with spaces.",
+              "name": "values",
+              "type": {
+                "cppName": "",
+                "name": "unknown[]",
+                "optional": false
+              },
+              "variadic": true
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "console",
+      "properties": []
+    }
+  ],
+  "variables": []
+}

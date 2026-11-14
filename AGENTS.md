@@ -109,7 +109,7 @@ make it. Configuration the mod needs belongs in the mod, applied in-process.
 
 ## Project Overview
 
-MafiaHub Framework is a C++ framework for building multiplayer game modifications. It provides networking, entity replication, scripting, GUI, and other essential components for synchronized multiplayer experiences.
+MafiaHub Framework is a C++ framework for building multiplayer game modifications. It provides networking, entity replication, scripting (JavaScript and Lua), GUI, and other essential components for synchronized multiplayer experiences.
 
 ## Build Commands
 
@@ -212,7 +212,7 @@ Other agents do not run these hooks; the rules still apply to them as written.
 1. **CoreModules** (`core_modules.h`) - Central singleton registry coupling all modules together
 2. **Replication** (`networking/replication/`) - Native MafiaNet entity replication (ReplicaManager3 + RPC4) with an interest grid for streaming
 3. **Networking** (`networking/network_peer.h`) - Client-server communication via MafiaNet
-4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
+4. **Scripting** (`scripting/`) - JavaScript/TypeScript and Lua scripting for game logic (Server: libnode + Lua, Client: V8 + Lua). An API is declared once for both languages through the binding layer in `scripting/bind/`, and a builtin registers in both through one `Register(Bind::Registrar &, Bind::Languages = All)` (`bind/registrar.h`); see `docs/scripting_bindings.md` (binding authors) and `docs/scripting_lua.md` (Lua scripting)
 5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
 7. **Voice** (`voice/`) - Proximity voice chat; the server relays opaque Opus frames (RakVoice) without decoding, routed by `VoiceRouter`
@@ -271,6 +271,7 @@ Format: `Module: Brief commit description`
 
 - **FTL** - Fiber Tasking Library for job system (v2.1.0)
 - **libnode/V8** - JavaScript scripting (Server uses libnode for full Node.js APIs, Client uses V8 for sandboxed execution)
+- **Lua 5.5** - Lua scripting on server and client (PUC Lua, compiled as C++, via vcpkg `lua[cpp]`)
 - **MafiaNet** - Networking (MafiaHub's fork of RakNet/SLikeNet)
 - **CEF** - Web-based UI (Chromium Embedded Framework)
 - **Dear ImGui** - Immediate mode GUI

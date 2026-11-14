@@ -1,0 +1,9 @@
+{
+  "name": "js-example",
+  "version": "1.0.0",
+  "description": "A JavaScript resource talking to the Lua resource next to it.",
+  "mafiahub": {
+    "serverScripts": ["server.js"],
+    "resourceDependencies": ["lua-example"]
+  }
+}

@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 
+#include <scripting/bind/lua_definitions.h>
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/events.h>
@@ -22,6 +23,7 @@
 #include <scripting/scripting_catalog.h>
 #include <scripting/timer_metadata.h>
 
+#include "builtins/builtins.h"
 #include "builtins/chat.h"
 #include "builtins/discord.h"
 #include "builtins/keybinds.h"
@@ -59,6 +61,15 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::V8EngineOptions options;
         options.processName = "mafiahub-client";
         _engine             = std::make_unique<Framework::Scripting::V8Engine>(options);
+
+        // Lua scripts come from the server as the JavaScript ones do: sandboxed, with the memory and the time of
+        // a client state.
+        _lua = std::make_unique<Framework::Scripting::LuaClientHost>(Framework::Scripting::LuaEngineOptions::Client());
+        // The builtins only a client has, next to the shared ones of every state, as RegisterFrameworkBindings
+        // recorded them.
+        _lua->AddRuntimeSetup([this](Framework::Scripting::LuaRuntime &runtime) {
+            _luaBindings.Apply(runtime);
+        });
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -104,10 +115,15 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_engine.get(), config);
         }
 
+        // The Lua engine is up before the resource manager can start a resource in it.
+        if (_lua->Init(*_resourceManager, _modVersion) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
+            return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
+        }
+
         // Web views and key binds created by a resource die with it (single callback slot).
-        _resourceManager->AddOnResourceStopped([](const std::string &resourceName) {
+        _resourceManager->AddOnResourceStopped([manager = _resourceManager.get()](const std::string &resourceName) {
             Builtins::Web::CleanupResource(resourceName);
-            Builtins::Keybinds::CleanupResource(resourceName);
+            Builtins::Keybinds::CleanupResource(manager, resourceName);
         });
 
         RegisterFrameworkBindings();
@@ -123,8 +139,11 @@ namespace Framework::Integrations::Client::Scripting {
         if (!v8pp::metadata::export_catalog_from_environment("framework-client", "FRAMEWORK_SCRIPTING_API_METADATA")) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export Framework client scripting API metadata");
         }
+        if (!Framework::Scripting::Bind::ExportLuaDefinitionsFromEnvironment(Builtins::ClientLuaDefinitions(), Framework::Scripting::Bind::Side::Client, "FRAMEWORK_SCRIPTING_LUA_DEFINITIONS")) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to export the Framework client Lua definitions");
+        }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with standalone V8 engine");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with the standalone V8 and Lua engines");
 
         _initialized = true;
         return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
@@ -142,31 +161,13 @@ namespace Framework::Integrations::Client::Scripting {
         v8::Local<v8::Object> global = context->Global();
 
         Framework::Scripting::SetScriptingCatalog(isolate, "framework-client");
-        Framework::Scripting::SetScriptingEnvironment(isolate, /*isClient*/ true);
-
-        // The events the framework raises; a mod's catalog blends them into its own EventMap.
-        Framework::Scripting::RegisterEventMetadata(Framework::Scripting::GetScriptingCatalog(isolate));
-
-        // The engine installs the timers without a binding; declare them for it.
-        Framework::Scripting::RegisterTimerMetadata(Framework::Scripting::GetScriptingCatalog(isolate), /*isClient*/ true);
-
-        // Every builtin registers at the global root (new Vector3, not new Core.Vector3).
-        Framework::Scripting::Builtins::RegisterValueTypes(isolate, global);
-
-        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get(), /*isClient*/ true);
-        Framework::Scripting::Builtins::Messages::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Exports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Imports::Register(isolate, context, global, _resourceManager.get());
-        Framework::Scripting::Builtins::Console::Register(isolate, context, _resourceManager.get());
-        Framework::Scripting::Builtins::ExecutionEnvironment::Register(isolate, context, global, true, _modVersion);
-
-        // Client-only surface.
-        Builtins::Web::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Keybinds::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Chat::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Discord::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Voice::Register(isolate, context, global, _resourceManager.get());
-        Builtins::Nametags::Register(isolate, context, global, _resourceManager.get());
+        // What a client shares with a server, then the client-only surface: both named in builtins/builtins.h,
+        // where the parity gate of the tests reads them.
+        // Each builtin registers in the isolate and records what every Lua state is given.
+        Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Client);
+        Builtins::RegisterSharedBuiltins(registrar, *_resourceManager, _modVersion);
+        Builtins::RegisterClientBuiltins(registrar, Framework::Scripting::Bind::Languages::All, _resourceManager.get());
+        _luaBindings = registrar.Lua();
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
@@ -174,12 +175,17 @@ namespace Framework::Integrations::Client::Scripting {
     void ClientScriptingModule::Shutdown() {
         if (_resourceManager) {
             _resourceManager->StopAll();
-            _resourceManager.reset();
         }
 
-        // Releases V8 globals; must precede engine shutdown (isolate disposal)
+        // What these two kept names the manager: let go of before it is destroyed.
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
+        _resourceManager.reset();
+
+        // After the resources, whose Lua states it owns, and before the V8 engine.
+        _lua->Shutdown();
+
+        // Releases V8 globals; must precede engine shutdown (isolate disposal)
         Builtins::Discord::Shutdown();
         Builtins::Nametags::Shutdown();
 
@@ -199,6 +205,9 @@ namespace Framework::Integrations::Client::Scripting {
         if (_resourceManager) {
             _resourceManager->Reset();
         }
+
+        // No Lua state outlives the connection its scripts came over.
+        _lua->Shutdown();
 
         Builtins::Web::Shutdown();
         Builtins::Keybinds::Shutdown();
@@ -222,8 +231,13 @@ namespace Framework::Integrations::Client::Scripting {
 
     void ClientScriptingModule::Update() {
         if (_resourceManager) {
+            // What the handlers the builtins keep failed with since the last update: here, outside any script.
+            _resourceManager->ProcessHandlerFailures();
             _resourceManager->ProcessScheduledRestarts();
         }
+
+        // Lua timers and sleeps, and what they raised.
+        _lua->Update();
 
         // Process V8 timers, microtasks, and pending message responses
         if (_engine && _engine->IsInitialized()) {
@@ -237,9 +251,13 @@ namespace Framework::Integrations::Client::Scripting {
                 Framework::Scripting::Builtins::Messages::ProcessPendingResponses(isolate, context);
             }
 
-            // Both self-scope the isolate.
+            // Key binds enter the runtime of each handler; Web self-scopes the isolate.
             Builtins::Keybinds::Update();
             Builtins::Web::Update();
+        }
+        else {
+            // Without JavaScript the replies owed to Lua are delivered all the same.
+            Framework::Scripting::Builtins::Messages::ProcessPendingResponses();
         }
     }
 
@@ -353,7 +371,7 @@ namespace Framework::Integrations::Client::Scripting {
             }
         }
         if (discovered == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No JS resources discovered in: {}", _resourceCachePath);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No resources discovered in: {}", _resourceCachePath);
             return true; // Not an error, just no resources
         }
 

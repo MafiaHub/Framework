@@ -24,8 +24,6 @@
 #include <initializer_list>
 
 namespace KeybindTests {
-    using Framework::Integrations::Client::Scripting::Builtins::Keybinds;
-
     class FocusedInput final: public Framework::Input::WindowInput {
       protected:
         bool HasFocus() const override {
@@ -57,20 +55,19 @@ namespace KeybindTests {
 
 MODULE(keybinds, {
     IT("dispatches wheel notches in order, per edge and behind the gate", {
-        using namespace KeybindTests;
         auto &vfs = Framework::Utils::Vfs::Get();
         EQUALS(vfs.Init(nullptr), true);
         Framework::Utils::Package::Writer writer;
         writer.Add("package.json", "{\"name\":\"keys\",\"version\":\"1.0.0\",\"mafiahub\":{\"clientScripts\":[\"client.js\"]}}");
-        writer.Add("client.js", kScript);
+        writer.Add("client.js", KeybindTests::kScript);
         std::string blob, zip, error;
         EQUALS(writer.Build(nullptr, blob) && Framework::Utils::Package::Open(blob, nullptr, zip, error), true);
         EQUALS(vfs.MountMemory(std::move(zip), "keys.zip", Framework::Utils::Vfs::ResourcePath("keys"), error), true);
 
-        FocusedInput input;
+        KeybindTests::FocusedInput input;
         Framework::CoreModules::SetInput(&input);
-        Keybinds::SetActiveCallback([] {
-            return gateOpen;
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::SetActiveCallback([] {
+            return KeybindTests::gateOpen;
         });
         Framework::Scripting::V8Engine engine;
         engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
@@ -83,9 +80,12 @@ MODULE(keybinds, {
             {
                 Framework::Scripting::EngineScope scope(&engine);
                 const auto context = scope.Context();
-                Keybinds::Register(scope.Isolate(), context, context->Global(), &manager);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                    Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                }
                 const auto closeGate = v8::Function::New(context, [](const v8::FunctionCallbackInfo<v8::Value> &) {
-                    gateOpen = false;
+                    KeybindTests::gateOpen = false;
                 }).ToLocalChecked();
                 context->Global()->Set(context, v8pp::to_v8(scope.Isolate(), "closeGate"), closeGate).Check();
             }
@@ -93,47 +93,46 @@ MODULE(keybinds, {
             EQUALS(static_cast<bool>(manager.StartAll()), true);
 
             EQUALS(engine.Execute("bindBoth();"), true);
-            Turn(input, {1, -1, 1});
-            Keybinds::Update();
+            KeybindTests::Turn(input, {1, -1, 1});
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             EQUALS(engine.Execute("expect('wheelup:down,wheelup:up,wheeldown:down,wheeldown:up,wheelup:down,wheelup:up'); reset();"), true);
 
             // Unbinding on down drops both that notch's up and the later notches.
             EQUALS(engine.Execute("bindSelfUnbind();"), true);
-            Turn(input, {-1, -1, -1});
-            Keybinds::Update();
+            KeybindTests::Turn(input, {-1, -1, -1});
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             EQUALS(engine.Execute("expect('wheeldown:down'); reset();"), true);
 
             EQUALS(engine.Execute("bindRebind();"), true);
-            Turn(input, {-1, -1, -1});
-            Keybinds::Update();
+            KeybindTests::Turn(input, {-1, -1, -1});
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             EQUALS(engine.Execute("expect('wheeldown:down,wheeldown:down,wheeldown:down'); reset();"), true);
 
             // A handler that closes the gate holds back the tick's other notches, also once it reopens.
             EQUALS(engine.Execute("bindGate();"), true);
-            Turn(input, {1, 1, 1});
-            Keybinds::Update();
-            gateOpen = true;
-            Keybinds::Update();
+            KeybindTests::Turn(input, {1, 1, 1});
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
+            KeybindTests::gateOpen = true;
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             EQUALS(engine.Execute("expect('wheelup:down');"), true);
 
             // No update saw the window unfocused, yet the notch before the focus loss stays dropped.
-            Turn(input, {1});
+            KeybindTests::Turn(input, {1});
             input.ProcessEvent(nullptr, WM_KILLFOCUS, 0, 0);
             input.ProcessEvent(nullptr, WM_SETFOCUS, 0, 0);
-            Keybinds::Update();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             EQUALS(engine.Execute("expect('wheelup:down'); reset();"), true);
 
-            Keybinds::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
             manager.StopAll();
         }
-        Keybinds::SetActiveCallback(nullptr);
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::SetActiveCallback(nullptr);
         Framework::CoreModules::SetInput(nullptr);
         engine.Shutdown();
         vfs.Unmount("keys.zip");
     });
 
     IT("unbinds only the calling resource's handlers", {
-        using namespace KeybindTests;
         auto &vfs = Framework::Utils::Vfs::Get();
         EQUALS(vfs.Init(nullptr), true);
         const auto mount = [&](const std::string &name) {
@@ -149,9 +148,9 @@ MODULE(keybinds, {
         EQUALS(mount("alpha"), true);
         EQUALS(mount("bravo"), true);
 
-        FocusedInput input;
+        KeybindTests::FocusedInput input;
         Framework::CoreModules::SetInput(&input);
-        Keybinds::SetActiveCallback(nullptr);
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::SetActiveCallback(nullptr);
         Framework::Scripting::V8Engine engine;
         engine.SetModuleRootPath(Framework::Utils::Vfs::kResourceMountRoot);
         EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
@@ -163,7 +162,10 @@ MODULE(keybinds, {
             {
                 Framework::Scripting::EngineScope scope(&engine);
                 const auto context = scope.Context();
-                Keybinds::Register(scope.Isolate(), context, context->Global(), &manager);
+                {
+                    Framework::Scripting::Bind::Registrar registrar(scope.Isolate(), context, context->Global(), Framework::Scripting::Bind::Side::Client);
+                    Framework::Integrations::Client::Scripting::Builtins::Keybinds::Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+                }
             }
             EQUALS(manager.DiscoverResources(), 2u);
             EQUALS(static_cast<bool>(manager.StartAll()), true);
@@ -175,15 +177,15 @@ MODULE(keybinds, {
             EQUALS(engine.Execute("globalThis.second = Key.unbind('wheelup');", "/resources/bravo/client.js"), true);
             EQUALS(engine.Execute("if (first !== true || second !== false) throw Error('unbind returned ' + first + ',' + second);"), true);
 
-            Turn(input, {1});
-            Keybinds::Update();
+            KeybindTests::Turn(input, {1});
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Update();
             EQUALS(engine.Execute("if (log.join() !== 'a') throw Error('ran ' + log.join());"), true);
 
             EQUALS(engine.Execute("Key.unbind('wheelup');", "/resources/alpha/client.js"), true);
-            Keybinds::Shutdown();
+            Framework::Integrations::Client::Scripting::Builtins::Keybinds::Shutdown();
             manager.StopAll();
         }
-        Keybinds::SetActiveCallback(nullptr);
+        Framework::Integrations::Client::Scripting::Builtins::Keybinds::SetActiveCallback(nullptr);
         Framework::CoreModules::SetInput(nullptr);
         engine.Shutdown();
         vfs.Unmount("alpha.zip");

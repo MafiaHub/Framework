@@ -8,33 +8,23 @@
 
 #pragma once
 
+#include <scripting/bind/namespace.h>
+#include <scripting/bind/registrar.h>
+
 #include <v8.h>
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
 
-    // Server-side proximity voice rules, exposed as the global Voice. Players are addressed
-    // through the base Entity handle, like the Chat builtin, so this stays game-agnostic.
+    // Server-side proximity voice rules, exposed as the global Voice to JavaScript and Lua. Players are
+    // addressed through the base Entity handle, like the Chat builtin, so this stays game-agnostic.
     class Voice final {
       public:
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Voice, declared once for both languages.
+        static const Framework::Scripting::Bind::Namespace &Definition();
 
-      private:
-        static void JS_SetRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetPlayerRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetTierRange(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_GetPlayerTier(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetPlayerDeaf(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerDeaf(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_SetLocalMute(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsLocallyMuted(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerVoiceEnabled(const v8::FunctionCallbackInfo<v8::Value> &info);
-        static void JS_IsPlayerTalking(const v8::FunctionCallbackInfo<v8::Value> &info);
+        // Publishes Voice as a global in the languages of `languages`, in the runtimes of a server. JavaScript
+        // also gets the voice events in its catalog.
+        static void Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages = Framework::Scripting::Bind::Languages::All);
     };
 
 } // namespace Framework::Integrations::Server::Scripting::Builtins

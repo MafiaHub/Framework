@@ -8,6 +8,10 @@ framework's server scripting to it.
 The client is out of scope. It runs on the standalone V8 engine with one
 shared isolate and keeps doing so.
 
+A resource's `.lua` scripts run in a Lua state of its own, on both sides; what
+a Lua script has and how it differs from JavaScript is in
+[scripting_lua.md](scripting_lua.md).
+
 ## Why
 
 Today every server resource shares one Node environment. Stopping a resource
@@ -91,7 +95,10 @@ a worker thread; what changes is that the worker now dies with its resource.
   resource stopping itself, one it is waiting on, or one stopped by another
   resource's event handler) is destroyed at the next tick instead, once no
   script is running at all: native code further up the stack may still hold
-  handles into it.
+  handles into it. A Lua script on the stack counts as much as JavaScript does,
+  since it reaches JavaScript runtimes through the binding layer; and a Lua
+  runtime stopped while JavaScript is on the stack waits for the next tick of
+  the Lua engine the same way (`ScriptActivity`, `scripting/script_engine.h`).
 - `process.exit()` stops the resource that calls it, not the server. Node's
   default exit handler would end the process; each resource's environment gets
   one that stops its JavaScript at once. From the next tick the runtime is cut
@@ -161,6 +168,76 @@ only: what it returns is never copied back, so returning an object that cannot
 cross (a timer, a socket) is not an error. A returned `false` still vetoes a
 cancellable event, a returned promise is still waited on, and a throw or
 rejection still reaches the emitter.
+
+The same holds for an event that involves Lua, on either end and also inside
+one resource. A Lua handler receives copies and is called for its outcome
+only: `false` returned before it first waits vetoes, the emitter waits until
+its coroutine ends, and what it raises reaches the emitter. `Events.emit` from
+Lua copies its arguments once, waits until every handler of either language
+has settled, returns nothing, and raises `One or more event handlers failed`
+followed by what each handler failed with. A handler whose resource stops
+while an emit waits on it fails that emit with
+`<resource> stopped before the call finished`.
+
+Messages cross languages the same way. `Messages.request` from Lua waits
+where JavaScript gets a Promise: it returns the reply, or raises what the
+Promise would be rejected with (`Target resource not found`,
+`No handler for message type`, what the handler failed with,
+`Messages.request: resource '<name>' stopped before reply`). A reply is
+delivered at the next update of the server, also when the handler answered at
+once, so a request needs a place where Lua can wait. A handler of either
+language may answer later, a Lua one after a `sleep`; only the first reply
+counts, and a reply to a request that is gone does nothing. Where the
+requester or the handler is Lua the payload and the reply are copies, and a
+Lua caller whose payload cannot be copied is told as it calls
+(`Messages.request: payload: ...`). A request nobody answers waits until the
+resource that owes the answer, or the one that asked, stops, in both
+languages. A handler that fails while its request still waits fails that
+request; a failure nobody waits for (a notification, a handler that fails
+after it replied) is reported against the handler's resource when Lua is
+involved, and only logged between two JavaScript resources, as before.
+
+Exports cross languages the same way. What a Lua script registers with
+`Exports.register` is copied when it is registered, its functions as
+functions that call home, and every importer of either language gets a
+rebuild of that copy: a table changed after it was registered is not seen,
+so share state through exported functions. A Lua importer gets a copy of a
+JavaScript export, made when it asks. Functions in it are called as the next
+section says. Only an export that goes from JavaScript to JavaScript keeps the
+owner's object as `this`. A call
+returns the value itself when the function finished at once; otherwise a
+JavaScript caller gets a Promise and a Lua caller waits, and a rejection or
+an error raised late is thrown to it. A name is registered once per start of
+a resource where Lua is involved: a second `Exports.register` of it throws
+`Exports.register: export '<name>' is already registered`. JavaScript
+registering over its own export replaces it, as before.
+
+#### Calling a function that arrived in a table, from Lua
+
+Every table a Lua script receives from another runtime is a copy the host
+built: an event argument, the result of a call, an export, and the table
+`Imports.get` returns. A function that arrived as a member of such a table
+can be called with `.` or with `:` on it. `api:deposit(5)` and
+`api.deposit(5)` are the same call, and so are `Imports.get('bank'):add(1, 2)`
+and `Imports.get('bank').add(1, 2)`: the function drops a first argument that
+is the very table it arrived in, however the call was written.
+
+- With any other first argument the function passes every argument on. So
+  does a function taken out of its table and put in another one, and a
+  function that arrived on its own.
+- A script that really wants to hand a function the table it came in, as its
+  first argument, must pass a copy of the table or pass it in another
+  position: `api.inspect(api)` calls `inspect` with no argument.
+- The function behind it is never called on the object it was exported in. A
+  JavaScript function called from Lua has the global object of its own
+  resource as `this`, not that object, so a JavaScript export whose methods
+  use `this` does not work from Lua. A Lua export written as
+  `function bank:deposit(n)` gets no `self` from an importer of either
+  language: its first parameter is the importer's first argument. Write
+  exported functions over a closure (`function(n) ... end`, an arrow
+  function) instead.
+- A resource that imports its own Lua export gets its own functions back,
+  which are called exactly as the script wrote the call.
 
 Shared memory cannot be shared between resources. Each environment frees its
 array buffers through its own allocator, which dies with the resource, so a

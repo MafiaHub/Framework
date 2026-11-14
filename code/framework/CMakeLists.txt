@@ -47,6 +47,27 @@ set(FRAMEWORK_SRC
     src/scripting/value_transfer.cpp
     src/scripting/function_references.cpp
     src/scripting/resource_monitor.cpp
+    src/scripting/script_log.cpp
+    src/scripting/v8pp_glm.cpp
+    src/scripting/bind/call.cpp
+    src/scripting/bind/descriptors.cpp
+    src/scripting/bind/lua_call.cpp
+    src/scripting/bind/lua_callable.cpp
+    src/scripting/bind/lua_class.cpp
+    src/scripting/bind/lua_definitions.cpp
+    src/scripting/bind/lua_glm.cpp
+    src/scripting/bind/namespace.cpp
+    src/scripting/bind/registrar.cpp
+    src/scripting/bind/v8_call.cpp
+    src/scripting/bind/v8_callable.cpp
+    src/scripting/lua/lua_builtins.cpp
+    src/scripting/lua/lua_client_host.cpp
+    src/scripting/lua/lua_engine.cpp
+    src/scripting/lua/lua_json.cpp
+    src/scripting/lua/lua_runtime.cpp
+    src/scripting/lua/lua_sandbox.cpp
+    src/scripting/lua/lua_scheduler.cpp
+    src/scripting/lua/lua_transfer.cpp
     src/scripting/builtins/builtins.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
@@ -118,6 +139,7 @@ set(FRAMEWORK_CLIENT_SRC
 
     # JavaScript scripting (V8 engine for client)
     src/integrations/client/scripting/module.cpp
+    src/integrations/client/scripting/builtins/builtins.cpp
     src/integrations/client/scripting/builtins/web.cpp
     src/integrations/client/scripting/builtins/keybinds.cpp
     src/integrations/client/scripting/builtins/chat.cpp
@@ -328,6 +350,8 @@ if(LIBNODE_AVAILABLE)
     target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
     # Tracy's headers and TRACY_* definitions for the runtime zones; Framework links the client itself.
     target_link_libraries(FrameworkNodeEngine PRIVATE Tracy::TracyClient)
+    # The builtin headers include the binding layer, which includes <lua.h>.
+    target_link_libraries(FrameworkNodeEngine PUBLIC unofficial::lua::lua-cpp)
 
     # Node.js internal APIs require NODE_WANT_INTERNALS
     target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
@@ -355,6 +379,8 @@ target_include_directories(FrameworkV8Engine PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog::spdlog fmt::fmt glm::glm nlohmann_json::nlohmann_json function2::function2)
+# The builtin headers include the binding layer, which includes <lua.h>.
+target_link_libraries(FrameworkV8Engine PUBLIC unofficial::lua::lua-cpp)
 target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
 if(WIN32)
     target_compile_definitions(FrameworkV8Engine PRIVATE _USE_MATH_DEFINES NOMINMAX)
@@ -367,6 +393,9 @@ target_link_libraries(Framework v8 v8pp)
 if(LIBNODE_AVAILABLE)
     target_link_libraries(Framework libnode)
 endif()
+# Lua built as C++ (the port's cpp feature). The plain signature links publicly, so <lua.h> reaches
+# everything that links Framework.
+target_link_libraries(Framework unofficial::lua::lua-cpp)
 
 # The prebuilt MafiaHubServices (IMPORTED archive, created in src/services) references Framework
 # symbols (Utils::Time) but can't declare that dependency there since Framework isn't defined yet.

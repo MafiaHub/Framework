@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,12 +8,28 @@
 
 #include "vector3.h"
 #include "../scripting_catalog.h"
+#include "vector_operators.h"
 
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector3>>> Vector3::_classes;
+    namespace {
+        // toJSON method for JSON.stringify support - returns plain JS object
+        void ToJson(const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());
+            if (!self)
+                return;
+
+            auto iso = info.GetIsolate();
+            auto ctx = iso->GetCurrentContext();
+            auto obj = v8::Object::New(iso);
+            obj->Set(ctx, v8pp::to_v8(iso, "x"), v8::Number::New(iso, self->getX())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "y"), v8::Number::New(iso, self->getY())).Check();
+            obj->Set(ctx, v8pp::to_v8(iso, "z"), v8::Number::New(iso, self->getZ())).Check();
+            info.GetReturnValue().Set(obj);
+        }
+    } // namespace
 
     Vector3 &Vector3::normalize() {
         float len = glm::length(_vec);
@@ -28,96 +44,53 @@ namespace Framework::Scripting::Builtins {
         return ss.str();
     }
 
-    v8pp::class_<Vector3> &Vector3::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
-        }
-
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector3>>(isolate, GetScriptingCatalog(isolate), "Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.");
-        cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
-        cls->ctor<float, float, float>(v8pp::metadata::docs("void",
-                                           {
-                                               v8pp::metadata::param("x", "number", false, "Initial X component."),
-                                               v8pp::metadata::param("y", "number", false, "Initial Y component."),
-                                               v8pp::metadata::param("z", "number", false, "Initial Z component."),
-                                           },
-                                           "Creates a vector from three numeric components."))
-            // Instance methods
-            .function("add", &Vector3::add, v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Vector3", false, "Vector to add component-wise.")}, "Adds another vector to this vector in place.", "This mutated vector for chaining."))
-            .function("sub", &Vector3::sub, v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Vector3", false, "Vector to subtract component-wise.")}, "Subtracts another vector from this vector in place.", "This mutated vector for chaining."))
-            .function("mul", &Vector3::mul, v8pp::metadata::docs("this", {v8pp::metadata::param("scalar", "number", false, "Multiplier applied to every component.")}, "Multiplies this vector by a scalar in place.", "This mutated vector for chaining."))
-            .function("div", &Vector3::div, v8pp::metadata::docs("this", {v8pp::metadata::param("scalar", "number", false, "Divisor applied to every component; must be non-zero.")}, "Divides this vector by a scalar in place.", "This mutated vector for chaining."))
-            .function("dot", &Vector3::dot, v8pp::metadata::docs("number", {v8pp::metadata::param("other", "Vector3", false, "Vector used for the dot product.")}, "Computes the dot product without changing either vector.", "Scalar dot product."))
-            .function("cross", &Vector3::cross,
-                v8pp::metadata::docs("this", {v8pp::metadata::param("other", "Vector3", false, "Second vector in the cross product.")}, "Replaces this vector with its cross product against another vector.", "This mutated perpendicular vector for chaining."))
-            .function("normalize", &Vector3::normalize, v8pp::metadata::docs("this", {}, "Normalizes this vector in place; a zero vector remains unchanged.", "This mutated vector for chaining."))
-            .function("lerp", &Vector3::lerp,
-                v8pp::metadata::docs("this",
-                    {
-                        v8pp::metadata::param("target", "Vector3", false, "Destination vector."),
-                        v8pp::metadata::param("t", "number", false, "Interpolation factor; 0 keeps the current value and 1 reaches target."),
-                    },
-                    "Linearly interpolates this vector toward a target in place.", "This mutated vector for chaining."))
-            .function("set", &Vector3::set,
-                v8pp::metadata::docs("this",
-                    {
-                        v8pp::metadata::param("x", "number", false, "Replacement X component."),
-                        v8pp::metadata::param("y", "number", false, "Replacement Y component."),
-                        v8pp::metadata::param("z", "number", false, "Replacement Z component."),
-                    },
-                    "Replaces all components in place.", "This mutated vector for chaining."))
-            .function("distance", &Vector3::distance, v8pp::metadata::docs("number", {v8pp::metadata::param("other", "Vector3", false, "Vector to measure from this vector.")}, "Computes Euclidean distance to another vector.", "Distance between the two vectors."))
-            .function("clone", &Vector3::clone, v8pp::metadata::docs("Vector3", {}, "Creates an independent copy of this vector.", "New vector with the same components."))
-            .function("toString", &Vector3::toString, v8pp::metadata::docs("string", {}, "Formats this vector for logging and debugging.", "Text in Vector3(x, y, z) form."));
-
-        auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
-
-        cls->property("x", &Vector3::getX, &Vector3::setX, v8pp::metadata::property_docs("number", "Mutable X component."));
-        cls->property("y", &Vector3::getY, &Vector3::setY, v8pp::metadata::property_docs("number", "Mutable Y component."));
-        cls->property("z", &Vector3::getZ, &Vector3::setZ, v8pp::metadata::property_docs("number", "Mutable Z component."));
-        cls->property("length", &Vector3::getLength, v8pp::metadata::property_options {"Read-only Euclidean magnitude of this vector.", "number", true, false});
-        cls->property("lengthSquared", &Vector3::getLengthSquared, v8pp::metadata::property_options {"Read-only squared magnitude, avoiding a square-root calculation.", "number", true, false});
-
-        // toJSON method for JSON.stringify support - returns plain JS object
-        protoTemplate->Set(v8pp::to_v8(isolate, "toJSON"), v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-            auto *self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());
-            if (!self)
-                return;
-
-            auto iso = info.GetIsolate();
-            auto ctx = iso->GetCurrentContext();
-            auto obj = v8::Object::New(iso);
-            obj->Set(ctx, v8pp::to_v8(iso, "x"), v8::Number::New(iso, self->getX())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "y"), v8::Number::New(iso, self->getY())).Check();
-            obj->Set(ctx, v8pp::to_v8(iso, "z"), v8::Number::New(iso, self->getZ())).Check();
-            info.GetReturnValue().Set(obj);
-        }));
-
-        // Static methods need to be added to the js_function_template
-        auto func = cls->js_function_template();
-        func->Set(isolate, "zero", v8pp::wrap_function_template(isolate, &Vector3::zero));
-        func->Set(isolate, "one", v8pp::wrap_function_template(isolate, &Vector3::one));
-        func->Set(isolate, "up", v8pp::wrap_function_template(isolate, &Vector3::up));
-        func->Set(isolate, "forward", v8pp::wrap_function_template(isolate, &Vector3::forward));
-        func->Set(isolate, "right", v8pp::wrap_function_template(isolate, &Vector3::right));
-
-        auto &metadata = GetScriptingCatalog(isolate).constructor("Vector3");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("toJSON", v8pp::metadata::docs("{ x: number; y: number; z: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components.")));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector3::zero)>("zero", v8pp::metadata::docs("Vector3", {}, "Creates a zero vector.", "New Vector3(0, 0, 0)."), true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector3::one)>("one", v8pp::metadata::docs("Vector3", {}, "Creates a vector whose components are one.", "New Vector3(1, 1, 1)."), true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector3::up)>("up", v8pp::metadata::docs("Vector3", {}, "Creates the framework's positive-Y unit direction.", "New Vector3(0, 1, 0)."), true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector3::forward)>("forward", v8pp::metadata::docs("Vector3", {}, "Creates the framework's positive-Z unit direction.", "New Vector3(0, 0, 1)."), true));
-        metadata.record(v8pp::metadata::function_of<decltype(&Vector3::right)>("right", v8pp::metadata::docs("Vector3", {}, "Creates the framework's positive-X unit direction.", "New Vector3(1, 0, 0)."), true));
-
-        return *cls;
+    const Bind::Class<Vector3> &Vector3::Definition() {
+        // AddVectorOperators gives the class its Lua operators.
+        static const auto definition = AddVectorOperators(Bind::Class<Vector3>("Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.")
+                .Constructor<float, float, float>(Framework::Scripting::Bind::Doc("Creates a vector from three numeric components.").Param("x", "Initial X component.").Param("y", "Initial Y component.").Param("z", "Initial Z component."))
+                // Instance methods
+                .Method("add", &Vector3::add, Framework::Scripting::Bind::Doc("Adds another vector to this vector in place.").Param("other", "Vector to add component-wise.").Returns("This mutated vector for chaining."))
+                .Method("sub", &Vector3::sub, Framework::Scripting::Bind::Doc("Subtracts another vector from this vector in place.").Param("other", "Vector to subtract component-wise.").Returns("This mutated vector for chaining."))
+                .Method("mul", &Vector3::mul, Framework::Scripting::Bind::Doc("Multiplies this vector by a scalar in place.").Param("scalar", "Multiplier applied to every component.").Returns("This mutated vector for chaining."))
+                .Method("div", &Vector3::div, Framework::Scripting::Bind::Doc("Divides this vector by a scalar in place.").Param("scalar", "Divisor applied to every component; must be non-zero.").Returns("This mutated vector for chaining."))
+                .Method("dot", &Vector3::dot, Framework::Scripting::Bind::Doc("Computes the dot product without changing either vector.").Param("other", "Vector used for the dot product.").Returns("Scalar dot product."))
+                .Method("cross", &Vector3::cross, Framework::Scripting::Bind::Doc("Replaces this vector with its cross product against another vector.").Param("other", "Second vector in the cross product.").Returns("This mutated perpendicular vector for chaining."))
+                .Method("normalize", &Vector3::normalize, Framework::Scripting::Bind::Doc("Normalizes this vector in place; a zero vector remains unchanged.").Returns("This mutated vector for chaining."))
+                .Method("lerp", &Vector3::lerp,
+                    Framework::Scripting::Bind::Doc("Linearly interpolates this vector toward a target in place.").Param("target", "Destination vector.").Param("t", "Interpolation factor; 0 keeps the current value and 1 reaches target.").Returns("This mutated vector for chaining."))
+                .Method("set", &Vector3::set, Framework::Scripting::Bind::Doc("Replaces all components in place.").Param("x", "Replacement X component.").Param("y", "Replacement Y component.").Param("z", "Replacement Z component.").Returns("This mutated vector for chaining."))
+                .Method("distance", &Vector3::distance, Framework::Scripting::Bind::Doc("Computes Euclidean distance to another vector.").Param("other", "Vector to measure from this vector.").Returns("Distance between the two vectors."))
+                .Method("clone", &Vector3::clone, Framework::Scripting::Bind::Doc("Creates an independent copy of this vector.").Returns("New vector with the same components."))
+                .Method("toString", &Vector3::toString, Framework::Scripting::Bind::Doc("Formats this vector for logging and debugging.").Returns("Text in Vector3(x, y, z) form."))
+                .Property("x", &Vector3::getX, &Vector3::setX, "Mutable X component.")
+                .Property("y", &Vector3::getY, &Vector3::setY, "Mutable Y component.")
+                .Property("z", &Vector3::getZ, &Vector3::setZ, "Mutable Z component.")
+                .Property("length", &Vector3::getLength, "Read-only Euclidean magnitude of this vector.")
+                .Property("lengthSquared", &Vector3::getLengthSquared, "Read-only squared magnitude, avoiding a square-root calculation.")
+                // Static factory methods
+                .Static("zero", &Vector3::zero, Framework::Scripting::Bind::Doc("Creates a zero vector.").Returns("New Vector3(0, 0, 0)."))
+                .Static("one", &Vector3::one, Framework::Scripting::Bind::Doc("Creates a vector whose components are one.").Returns("New Vector3(1, 1, 1)."))
+                .Static("up", &Vector3::up, Framework::Scripting::Bind::Doc("Creates the framework's positive-Y unit direction.").Returns("New Vector3(0, 1, 0)."))
+                .Static("forward", &Vector3::forward, Framework::Scripting::Bind::Doc("Creates the framework's positive-Z unit direction.").Returns("New Vector3(0, 0, 1)."))
+                .Static("right", &Vector3::right, Framework::Scripting::Bind::Doc("Creates the framework's positive-X unit direction.").Returns("New Vector3(1, 0, 0)."))
+                // What JSON.stringify asks a JavaScript object for. Lua writes the same object from JsonProperties.
+                .V8Hook([](v8pp::class_<Vector3> &cls, v8::Isolate *) {
+                    cls.prototype_function("toJSON", &ToJson, v8pp::metadata::docs("{ x: number; y: number; z: number }", {}, "Converts this vector to a plain object for JSON.stringify.", "Object containing the current components."));
+                })
+                .JsonProperties({"x", "y", "z"})
+                // Crosses between runtimes as its glm value.
+                .Transfer(&Vector3::vec));
+        return definition;
     }
 
-    void Vector3::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8pp::class_<Vector3> &cls = GetClass(isolate);
-        auto ctx                   = isolate->GetCurrentContext();
-        global->Set(ctx, v8pp::to_v8(isolate, "Vector3"), cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+    v8pp::class_<Vector3> &Vector3::GetClass(v8::Isolate *isolate) {
+        return _classes.Get(isolate, [isolate]() {
+            return Definition().MaterialiseV8(isolate, GetScriptingCatalog(isolate), ScriptingSide(isolate));
+        });
+    }
+
+    void Vector3::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
     }
 
     v8::Local<v8::Object> Vector3::NewInstance(v8::Isolate *isolate, const glm::vec3 &value) {
@@ -126,7 +99,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Vector3::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 
 } // namespace Framework::Scripting::Builtins

@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -10,24 +10,27 @@
 #include "../scripting_catalog.h"
 #include <utils/version.h>
 
-#include <v8pp/convert.hpp>
-
 namespace Framework::Scripting::Builtins {
 
-    void ExecutionEnvironment::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, bool isClient, const std::string &modVersion) {
-        v8pp::module env(isolate);
-        env.const_("isClient", isClient);
-        env.const_("isServer", !isClient);
-        env.const_("frameworkVersion", Framework::Utils::Version::rel);
-        env.const_("modVersion", modVersion);
+    namespace {
+        Bind::Namespace::RuntimeConstants ConstantsOf(bool isClient, const std::string &modVersion) {
+            return {{"isClient", isClient}, {"isServer", !isClient}, {"modVersion", modVersion}};
+        }
+    } // namespace
 
-        target->Set(context, v8pp::to_v8(isolate, "ExecutionEnvironment"), env.new_instance()).Check();
+    const Bind::Namespace &ExecutionEnvironment::Definition() {
+        static const auto definition = Bind::Namespace("ExecutionEnvironment", "Runtime-side flags exposed as the global ExecutionEnvironment.")
+                                           .RuntimeConstant<bool>("isClient", "True in the sandboxed client scripting runtime.")
+                                           .RuntimeConstant<bool>("isServer", "True in the authoritative server scripting runtime.")
+                                           .Constant("frameworkVersion", Framework::Utils::Version::rel, "Local Framework release version.")
+                                           .RuntimeConstant<std::string>("modVersion", "Local mod version from InstanceOptions.modVersion; empty when unset.");
+        return definition;
+    }
 
-        auto &metadata = GetScriptingCatalog(isolate).global_object("ExecutionEnvironment", "Runtime-side flags exposed as the global ExecutionEnvironment.");
-        metadata.add_property("isClient", "boolean", "True in the sandboxed client scripting runtime.", true);
-        metadata.add_property("isServer", "boolean", "True in the authoritative server scripting runtime.", true);
-        metadata.add_property("frameworkVersion", "string", "Local Framework release version.", true);
-        metadata.add_property("modVersion", "string", "Local mod version from InstanceOptions.modVersion; empty when unset.", true);
+    void ExecutionEnvironment::Register(Bind::Registrar &registrar, Bind::Languages languages, const std::string &modVersion) {
+        registrar.Global(Definition(), languages, [modVersion](Bind::Side side) {
+            return ConstantsOf(side == Bind::Side::Client, modVersion);
+        });
     }
 
 } // namespace Framework::Scripting::Builtins

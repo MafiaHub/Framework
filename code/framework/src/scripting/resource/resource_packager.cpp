@@ -25,6 +25,7 @@ namespace Framework::Scripting {
             ".js",
             ".mjs",
             ".cjs",
+            ".lua",
             ".json",
             ".html",
             ".htm",

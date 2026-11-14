@@ -8,10 +8,13 @@
 
 #include "resource_manager.h"
 
+#include "../bind/call.h"
 #include "../builtins/events.h"
 #include "../builtins/messages.h"
 #include "../builtins/state_bag.h"
 #include "../engine_scope.h"
+#include "../lua/lua_engine.h"
+#include "../script_log.h"
 
 #include <utils/vfs.h>
 
@@ -20,6 +23,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <set>
 #include <stack>
 #include <thread>
@@ -72,7 +76,15 @@ namespace Framework::Scripting {
         // Lifecycle entry points remain synchronous to their C++ callers, but the JS work they gate
         // is asynchronous. Pump the shared scripting engine so microtasks, timers, and Node/libuv I/O
         // can make progress; a plain blocking wait here would deadlock every meaningful async handler.
-        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
+        //
+        // A Lua handler settles its part of the promise from a tick of the Lua engine, when its coroutine ends: that
+        // engine is ticked here too, so a handler that sleeps holds the transition up as one that awaits does.
+        //
+        // A Lua runtime that is executing is not ticked (LuaEngine::Tick): were a resource started or stopped from
+        // inside a Lua script, a handler of that same runtime that waits could not go on, and the wait would run
+        // to its timeout. No function the framework gives Lua starts or stops a resource; a host that adds one is
+        // to defer the transition to its next tick, outside the script.
+        LifecyclePromiseResult AwaitLifecyclePromise(Engine *engine, LuaEngine *luaEngine, Builtins::Events &events, v8::Global<v8::Promise> &promise, int timeoutMs) {
             if (!engine || !engine->IsInitialized() || promise.IsEmpty()) {
                 return {};
             }
@@ -113,8 +125,52 @@ namespace Framework::Scripting {
                 }
 
                 engine->Tick();
+                if (luaEngine && luaEngine->IsInitialized()) {
+                    luaEngine->Tick();
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
+        }
+
+        // A lifecycle event emitted without a JavaScript engine to emit it from: what its handlers, which are all
+        // Lua, came to. Shared with the emission, which may outlive the wait.
+        struct LifecycleEmission final {
+            bool settled = false;
+            std::vector<std::string> errors;
+        };
+
+        // Emits a lifecycle event of `resourceName` to the Lua handlers of a manager that has no JavaScript engine,
+        // and waits for them as AwaitLifecyclePromise waits for a promise, under the same timeout.
+        LifecyclePromiseResult EmitLifecycleWithoutJavaScript(LuaEngine *luaEngine, Builtins::Events &events, const char *eventName, const std::string &resourceName, int timeoutMs) {
+            if (!luaEngine || !luaEngine->IsInitialized()) {
+                return {};
+            }
+
+            TransferredValue name;
+            name.kind = TransferredValue::Kind::String;
+            name.text = resourceName;
+            std::vector<TransferredValue> args;
+            args.push_back(std::move(name));
+
+            const auto emission = std::make_shared<LifecycleEmission>();
+            const auto pending  = events.EmitReserved(eventName, std::move(args), [emission](std::vector<std::string> &&errors) {
+                emission->settled = true;
+                emission->errors  = std::move(errors);
+            });
+
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 1));
+            while (!emission->settled) {
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    Builtins::Events::CancelPendingEmission(pending);
+                    return {LifecyclePromiseStatus::TimedOut, {}};
+                }
+                luaEngine->Tick();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            if (!emission->errors.empty()) {
+                return {LifecyclePromiseStatus::Rejected, Builtins::Events::DescribeFailures("One or more event handlers failed", emission->errors)};
+            }
+            return {};
         }
 
         bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
@@ -146,7 +202,9 @@ namespace Framework::Scripting {
                 return 0;
             }
             std::error_code ec;
-            int64_t newest = 0;
+            // The epoch of the file clock is the library's: libstdc++ puts it in 2174, which makes every count
+            // of today negative, so start below all of them.
+            int64_t newest = std::numeric_limits<int64_t>::min();
             std::filesystem::recursive_directory_iterator it(path, std::filesystem::directory_options::skip_permission_denied, ec);
             const std::filesystem::recursive_directory_iterator end;
             if (ec) {
@@ -188,8 +246,16 @@ namespace Framework::Scripting {
 
     ResourceManager::~ResourceManager() {
         StopAll();
+        // A runtime a builtin was registered in with this manager may outlive it.
+        Bind::ForgetCallResourceManager(this);
+        ForgetScriptErrorBudgets(this);
+        Builtins::StateBag::ForgetManager(this);
+        Builtins::Messages::ForgetManager(this);
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
+        }
+        if (_luaEngine) {
+            _luaEngine->SetResourceManager(nullptr);
         }
     }
 
@@ -249,7 +315,7 @@ namespace Framework::Scripting {
 
         BuildDependencyGraph();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} JavaScript resources", count);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} resources", count);
         return count;
     }
 
@@ -280,7 +346,7 @@ namespace Framework::Scripting {
         // them both dependency ordering.
         BuildDependencyGraph();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered JS resource: {} v{}", name, version);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered resource: {} v{}", name, version);
         return true;
     }
 
@@ -388,7 +454,7 @@ namespace Framework::Scripting {
 
         // Check for cycles
         if (result.size() != _resources.size()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Dependency cycle detected in JS resources");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Dependency cycle detected in resources");
             return {};
         }
 
@@ -415,7 +481,7 @@ namespace Framework::Scripting {
             }
             else {
                 failed.push_back(name);
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource {}: {}", name, result.GetError());
+                LogScriptError(this, name, "Failed to start resource: " + result.GetError());
             }
         }
 
@@ -484,6 +550,9 @@ namespace Framework::Scripting {
             std::scoped_lock lock(_scheduledRestartsMutex);
             _scheduledRestarts.clear();
         }
+        // Of resources that are gone: the next connection may bring one of the same name. The count goes on.
+        _handlerFailures.clear();
+        _startGenerations.clear();
         _watchSnapshots.clear();
         _lastFileWatchPoll = {};
     }
@@ -514,6 +583,9 @@ namespace Framework::Scripting {
             }
         } chainGuard {_startChain};
 
+        // What the run before this one wrote to the log is not held against the new one.
+        ResetScriptErrorBudget(this, name);
+
         // Start dependencies first
         auto deps = GetDependencies(name);
         for (const auto &depName : deps) {
@@ -529,7 +601,7 @@ namespace Framework::Scripting {
                 if (!result) {
                     // Installed-but-broken has to degrade like missing, or 'optional' means two things.
                     if (optional) {
-                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' continues without optional dependency '{}': {}", name, depName, result.GetError());
+                        LogScriptError(this, name, "Continues without optional dependency '" + std::string(depName) + "': " + result.GetError(), OutputLevel::Warning);
                         continue;
                     }
                     return ResourceOperationResult("Failed to start dependency '" + depName + "': " + result.GetError());
@@ -550,23 +622,49 @@ namespace Framework::Scripting {
             return ResourceOperationResult("Invalid state transition for resource: " + std::string(name));
         }
 
+        // From here on this is another instance of the resource: what was reported of the one before is not its.
+        _startGenerations[std::string(name)] = ++_lastStartGeneration;
+
         // A plain stop/start (including client refresh notifications) must run
         // the scripts again, not reuse exports from the previous execution.
         if (_jsEngine) {
             _jsEngine->EvictModulesUnderPath(resource->GetPath());
         }
 
+        const ScriptPlan plan = PlanScripts(*resource);
+
+        // Refused before a runtime is created or a script of the other language has run.
+        if (plan.needsLua && (!_luaEngine || !_luaEngine->IsInitialized())) {
+            const std::string error = "Lua scripting is not available";
+            resource->SetError(error);
+            FireOnResourceError(std::string(name), error);
+            return ResourceOperationResult(error);
+        }
+
         // An engine that isolates resources gives this one a fresh runtime; a shared engine has nothing to create.
-        if (_jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
+        if (plan.needsJavaScript && _jsEngine && !_jsEngine->CreateResourceRuntime(std::string(name))) {
             const std::string error = "Failed to create the resource's runtime: " + _jsEngine->GetLastError();
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
             return ResourceOperationResult(error);
         }
 
-        // Execute the entry point script
+        // The Lua state goes second, and takes the JavaScript runtime with it when it cannot be created.
+        if (plan.needsLua) {
+            // Where require finds the resource's modules, and what chunk names leave out.
+            _luaEngine->SetResourceRoot(std::string(name), resource->GetPath());
+            if (!_luaEngine->CreateResourceRuntime(std::string(name))) {
+                const std::string error = "Failed to create the resource's Lua runtime: " + _luaEngine->GetLastError();
+                CleanupResourceRuntime(*resource, name);
+                resource->SetError(error);
+                FireOnResourceError(std::string(name), error);
+                return ResourceOperationResult(error);
+            }
+        }
+
+        // Execute the scripts
         std::string error;
-        if (!ExecuteResourceScript(*resource, error)) {
+        if (!ExecuteResourceScript(*resource, plan, error)) {
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
@@ -592,14 +690,15 @@ namespace Framework::Scripting {
             SetCurrentResourceContext("");
         }
 
-        const auto startLifecycle = AwaitLifecyclePromise(_jsEngine, _events, startPromise, _config.resourceStartTimeoutMs);
+        const bool hasJavaScript  = _jsEngine && _jsEngine->IsInitialized();
+        const auto startLifecycle = hasJavaScript ? AwaitLifecyclePromise(_jsEngine, _luaEngine, _events, startPromise, _config.resourceStartTimeoutMs) : EmitLifecycleWithoutJavaScript(_luaEngine, _events, "resourceStart", std::string(name), _config.resourceStartTimeoutMs);
         if (startLifecycle.status != LifecyclePromiseStatus::Fulfilled) {
             error = startLifecycle.status == LifecyclePromiseStatus::TimedOut ? "resourceStart timed out after " + std::to_string(std::max(_config.resourceStartTimeoutMs, 1)) + "ms" : "resourceStart rejected: " + startLifecycle.error;
             CleanupResourceRuntime(*resource, name);
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
             NotifyStoppedIfStillFailed(resource, std::string(name));
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start JS resource '{}': {}", name, error);
+            LogScriptError(this, name, "Failed to start resource: " + error);
             return ResourceOperationResult(error);
         }
 
@@ -612,7 +711,7 @@ namespace Framework::Scripting {
         resource->ClearRestartAttempts();
 
         FireOnResourceStarted(std::string(name));
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started JS resource: {}", name);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started resource: {}", name);
 
         return ResourceOperationResult::Ok({std::string(name)});
     }
@@ -664,9 +763,10 @@ namespace Framework::Scripting {
             SetCurrentResourceContext("");
         }
 
-        const auto stopLifecycle = AwaitLifecyclePromise(_jsEngine, _events, stopPromise, _config.resourceStopTimeoutMs);
+        const bool hasJavaScript = _jsEngine && _jsEngine->IsInitialized();
+        const auto stopLifecycle = hasJavaScript ? AwaitLifecyclePromise(_jsEngine, _luaEngine, _events, stopPromise, _config.resourceStopTimeoutMs) : EmitLifecycleWithoutJavaScript(_luaEngine, _events, "resourceStop", std::string(name), _config.resourceStopTimeoutMs);
         if (stopLifecycle.status == LifecyclePromiseStatus::Rejected) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' rejected; forcing cleanup: {}", name, stopLifecycle.error);
+            LogScriptError(this, name, "resourceStop rejected; forcing cleanup: " + stopLifecycle.error);
         }
         else if (stopLifecycle.status == LifecyclePromiseStatus::TimedOut) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("resourceStop for '{}' timed out after {}ms; forcing cleanup", name, std::max(_config.resourceStopTimeoutMs, 1));
@@ -679,7 +779,7 @@ namespace Framework::Scripting {
 
         stopped.emplace_back(name);
         FireOnResourceStopped(std::string(name));
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped JS resource: {}", name);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped resource: {}", name);
 
         return ResourceOperationResult::Ok(stopped);
     }
@@ -908,20 +1008,40 @@ namespace Framework::Scripting {
             }
             if (!exists && DiscoverResource(entry.path().string())) {
                 added.push_back(probe.GetName());
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered new JS resource: {}", added.back());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered new resource: {}", added.back());
             }
         }
         return added;
     }
 
-    bool ResourceManager::ExecuteResourceScript(Resource &resource, std::string &outError) {
-        if (!_jsEngine || !_jsEngine->IsInitialized()) {
+    ResourceManager::ScriptPlan ResourceManager::PlanScripts(const Resource &resource) const {
+        ScriptPlan plan;
+        for (auto &path : _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts()) {
+            // The Lua engine says which files are its own. A Lua script is one all the same with no engine here
+            // to ask, and then fails the start.
+            if (_luaEngine ? _luaEngine->HandlesFile(path) : LuaEngine::IsLuaFile(path)) {
+                plan.needsLua = true;
+                plan.scripts.push_back({std::move(path), _luaEngine});
+            }
+            else {
+                plan.needsJavaScript = true;
+                plan.scripts.push_back({std::move(path), _jsEngine});
+            }
+        }
+        // A resource with nothing to run on this side keeps the JavaScript runtime it has always had.
+        if (plan.scripts.empty()) {
+            plan.needsJavaScript = true;
+        }
+        return plan;
+    }
+
+    bool ResourceManager::ExecuteResourceScript(Resource &resource, const ScriptPlan &plan, std::string &outError) {
+        if (plan.needsJavaScript && (!_jsEngine || !_jsEngine->IsInitialized())) {
             outError = "JavaScript engine not initialized";
             return false;
         }
 
-        const auto scripts = _config.isClient ? resource.GetClientScripts() : resource.GetServerScripts();
-        if (scripts.empty()) {
+        if (plan.scripts.empty()) {
             return true;
         }
 
@@ -938,7 +1058,7 @@ namespace Framework::Scripting {
             }
         }
 
-        for (const auto &script : scripts) {
+        for (const auto &[script, engine] : plan.scripts) {
             std::string resolved;
 
             if (virtualRoot) {
@@ -974,11 +1094,11 @@ namespace Framework::Scripting {
 
             // Set resource context so Events.on() etc. know which resource is executing.
             SetCurrentResourceContext(resourceName);
-            const bool ok = _jsEngine->ExecuteResourceFile(resourceName, resolved);
+            const bool ok = engine->ExecuteResourceFile(resourceName, resolved);
             SetCurrentResourceContext("");
 
             if (!ok) {
-                outError = _jsEngine->GetLastError();
+                outError = engine->GetLastError();
                 return false;
             }
         }
@@ -1008,6 +1128,18 @@ namespace Framework::Scripting {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
 
+        // Whatever language the resource is written in, and whether or not the JavaScript engine is up.
+        Builtins::StateBag::CleanupResource(this, std::string(resourceName));
+
+        // What its handlers failed with is no longer acted on: the resource is going anyway.
+        std::erase_if(_handlerFailures, [this, resourceName](const HandlerFailure &failure) {
+            if (failure.resourceName != resourceName) {
+                return false;
+            }
+            LogScriptError(this, failure.resourceName, failure.message + " (the resource is stopping)");
+            return true;
+        });
+
         // Reject and drop message requests tied to this resource. Rejecting the awaiting
         // Promises needs an active isolate/context, so scope one here.
         if (_jsEngine && _jsEngine->IsInitialized()) {
@@ -1015,7 +1147,11 @@ namespace Framework::Scripting {
             v8::Isolate *isolate           = scope.Isolate();
             v8::Local<v8::Context> context = scope.Context();
             Builtins::Messages::CleanupResource(isolate, context, std::string(resourceName));
-            Builtins::StateBag::CleanupResource(isolate, std::string(resourceName));
+        }
+        else {
+            // No JavaScript engine is up to hand an isolate over, and none is needed: each request is failed in
+            // the runtime of its requester.
+            Builtins::Messages::CleanupResource(std::string(resourceName));
         }
         return true;
     }
@@ -1034,7 +1170,11 @@ namespace Framework::Scripting {
         // The isolate goes with the runtime below, and a later one may reuse its address.
         resource.SetIsolate(nullptr);
 
-        // Last: the handles dropped above belong to the runtime, which takes whatever the resource left running.
+        // Last: the handles dropped above belong to the runtimes, which take whatever the resource left running.
+        // The Lua state first, as it was created second.
+        if (_luaEngine) {
+            _luaEngine->DestroyResourceRuntime(std::string(resourceName));
+        }
         if (_jsEngine) {
             _jsEngine->DestroyResourceRuntime(std::string(resourceName));
         }
@@ -1151,6 +1291,23 @@ namespace Framework::Scripting {
 
     Engine *ResourceManager::GetJSEngine() const {
         return _jsEngine;
+    }
+
+    void ResourceManager::SetLuaEngine(LuaEngine *engine) {
+        if (_luaEngine == engine) {
+            return;
+        }
+        if (_luaEngine) {
+            _luaEngine->SetResourceManager(nullptr);
+        }
+        _luaEngine = engine;
+        if (_luaEngine) {
+            _luaEngine->SetResourceManager(this);
+        }
+    }
+
+    LuaEngine *ResourceManager::GetLuaEngine() const {
+        return _luaEngine;
     }
 
     std::string ResourceManager::ResourceOfIsolate(v8::Isolate *isolate) const {
@@ -1318,6 +1475,11 @@ namespace Framework::Scripting {
         return "";
     }
 
+    bool ResourceManager::RegisterExportCopy(std::string_view resourceName, std::string_view exportName, TransferredValue value) {
+        Resource *resource = GetResourceMutable(resourceName);
+        return resource != nullptr && resource->RegisterExport(exportName, std::move(value));
+    }
+
     Resource *ResourceManager::GetCurrentResource() {
         std::string name = GetCurrentResourceContext();
         if (name.empty()) {
@@ -1375,13 +1537,27 @@ namespace Framework::Scripting {
         }
     }
 
+    void ResourceManager::AssignEntity(std::string_view resourceName, uint64_t networkId) {
+        std::scoped_lock lock(_resourcesMutex);
+        const auto owner = _resources.find(resourceName);
+        if (owner == _resources.end()) {
+            return;
+        }
+        for (auto &[name, resource] : _resources) {
+            resource->UntrackEntity(networkId);
+        }
+        owner->second->TrackEntity(networkId);
+    }
+
     void ResourceManager::HandleResourceRuntimeError(const std::string &resourceName, const std::string &error) {
         Resource *resource = GetResourceMutable(resourceName);
         if (!resource) {
             return;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}", resourceName, error);
+        // The text is the script's own: no control character of it reaches the log, and not more of it than a
+        // resource may write in a second.
+        LogScriptError(this, resourceName, "Runtime error: " + error);
 
         const std::string errorBehavior = resource->GetManifest().GetMafiaHubConfig().errorBehavior;
         v8::Isolate *failedIsolate      = resource->GetIsolate();
@@ -1410,6 +1586,38 @@ namespace Framework::Scripting {
             ScheduleAutoRestart(resourceName);
         }
         // "continue" behavior: do nothing, let the resource keep running
+    }
+
+    void ResourceManager::ReportHandlerFailure(const std::string &resourceName, std::string message) {
+        const auto started = _startGenerations.find(resourceName);
+        _handlerFailures.push_back({resourceName, std::move(message), started != _startGenerations.end() ? started->second : 0});
+    }
+
+    void ResourceManager::ProcessHandlerFailures() {
+        // Taken first: handling one may stop a resource, which drops the reports still queued for it, and
+        // may run script that reports more, for the next call.
+        std::vector<HandlerFailure> failures;
+        failures.swap(_handlerFailures);
+
+        for (const HandlerFailure &failure : failures) {
+            // Only a resource that still runs: one that stopped or was retired since has been dealt with,
+            // and retiring it again would stop it twice. One that failed before and was left running, as
+            // errorBehavior continue says, is in the Error state and runs on.
+            const auto started = _startGenerations.find(failure.resourceName);
+            if (started != _startGenerations.end() && started->second != failure.generation) {
+                LogScriptError(this, failure.resourceName, failure.message + " (the resource was started again since)");
+                continue;
+            }
+
+            const Resource *resource = GetResource(failure.resourceName);
+            const bool running       = resource != nullptr && (resource->GetState() == ResourceState::Running || (resource->GetState() == ResourceState::Error && resource->GetManifest().GetMafiaHubConfig().errorBehavior == "continue"));
+            if (running) {
+                HandleResourceRuntimeError(failure.resourceName, failure.message);
+            }
+            else {
+                LogScriptError(this, failure.resourceName, failure.message + " (the resource is not running)");
+            }
+        }
     }
 
     bool ResourceManager::ScheduleAutoRestart(const std::string &resourceName) {

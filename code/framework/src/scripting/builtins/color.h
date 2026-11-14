@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,20 +8,22 @@
 
 #pragma once
 
+#include "../bind/class.h"
+#include "../bind/registrar.h"
+#include "../class_cache.h"
+
 #include <cstdint>
 #include <glm/glm.hpp>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <v8pp/class.hpp>
 #include <v8pp/property.hpp>
 
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Color wrapper class for V8 bindings using v8pp.
+     * Color wrapper class for the script bindings, JavaScript (through v8pp) and Lua.
      * Provides a clean C++ interface that wraps glm::vec4 for RGBA colors.
      * Components are stored as floats in range [0, 1].
      */
@@ -122,8 +124,11 @@ namespace Framework::Scripting::Builtins {
         uint32_t toRGBA() const; // 0xRRGGBBAA
         uint32_t toARGB() const; // 0xAARRGGBB
 
-        // V8 Registration
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Color> &Definition();
+
+        // Publishes the class as a global in the languages of `languages`.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
         static v8pp::class_<Color> &GetClass(v8::Isolate *isolate);
         // Wrap a native color as a JS Color, so C++ (e.g. the native SDK) can return
         // one to script. Mirrors Vector3/Quaternion::NewInstance.
@@ -132,7 +137,9 @@ namespace Framework::Scripting::Builtins {
 
       private:
         glm::vec4 _color;
-        static std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Color>>> _classes;
+        inline static ClassCache<Color> _classes;
     };
 
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Color, "Color");

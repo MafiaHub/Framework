@@ -92,6 +92,17 @@ Chat.isOpen(): boolean                 // overlay input box focused?
 - **`open` / `close` / `isOpen`** drive the overlay's text input (for binding
   your own open key, or scripting focus). No-ops when no overlay is rendered.
 
+A Lua client script has the same `Chat`, with the same names and arguments:
+
+```lua
+Chat.setUIVisible(false)
+Chat.send('hello')
+```
+
+`setUIVisible` reads its argument as the language reads a condition: `0` and
+`''` hide the overlay from JavaScript and show it from Lua, where only `nil`
+and `false` are false.
+
 **Incoming lines** arrive as the reserved **`chatMessage`** event:
 
 ```js

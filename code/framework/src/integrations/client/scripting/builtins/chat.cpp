@@ -8,14 +8,14 @@
 
 #include "chat.h"
 
+#include <scripting/builtins/script_args.h>
+
 #include "integrations/client/instance.h"
 #include "integrations/client/ui/chat_box.h"
 
 #include "core_modules.h"
 
 #include <scripting/scripting_catalog.h>
-
-#include <v8pp/convert.hpp>
 
 #include <string>
 
@@ -25,86 +25,77 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
             auto *instance = CoreModules::GetClientInstance();
             return instance ? &instance->GetChatBox() : nullptr;
         }
+
+        void Send(Framework::Scripting::Bind::Call &call) {
+            if (!call.Arg(0).IsString()) {
+                call.ThrowError("Chat.send: expected (text)");
+                return;
+            }
+            if (auto *instance = CoreModules::GetClientInstance()) {
+                instance->SendChatMessage(call.Arg(0).AsString());
+            }
+        }
+
+        void SetUIVisible(Framework::Scripting::Bind::Call &call) {
+            if (call.ArgCount() < 1) {
+                call.ThrowError("Chat.setUIVisible: expected (visible)");
+                return;
+            }
+            if (auto *box = ResolveBox()) {
+                box->SetVisible(Framework::Scripting::Builtins::ReadFlag(call, 0));
+            }
+        }
+
+        void IsUIVisible(Framework::Scripting::Bind::Call &call) {
+            auto *box = ResolveBox();
+            call.Return(box && box->IsVisible());
+        }
+
+        void Open(Framework::Scripting::Bind::Call &) {
+            if (auto *box = ResolveBox()) {
+                box->OpenInput();
+            }
+        }
+
+        void Close(Framework::Scripting::Bind::Call &) {
+            if (auto *box = ResolveBox()) {
+                box->CloseInput(false);
+            }
+        }
+
+        void IsOpen(Framework::Scripting::Bind::Call &call) {
+            auto *box = ResolveBox();
+            call.Return(box && box->IsInputActive());
+        }
     } // namespace
 
-    void Chat::SendCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        if (args.Length() < 1 || !args[0]->IsString()) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.send: expected (text)")));
-            return;
-        }
-        if (auto *instance = CoreModules::GetClientInstance()) {
-            instance->SendChatMessage(v8pp::from_v8<std::string>(isolate, args[0]));
-        }
+    const Framework::Scripting::Bind::Namespace &Chat::Definition() {
+        static const auto definition = [] {
+            const auto boolean = Framework::Scripting::Bind::TypeOf<bool>();
+            return Framework::Scripting::Bind::Namespace("Chat", "Client chat transport and native chat-box controls.", Framework::Scripting::Bind::Side::Client)
+                .Function("send", &Send, Framework::Scripting::Bind::Doc("Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.").Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Player-authored chat text sent to the server."), Framework::Scripting::Bind::Side::Client)
+                .Function("setUIVisible", &SetUIVisible,
+                    Framework::Scripting::Bind::Doc("Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.")
+                        .Param("visible", boolean, "Whether the chat overlay is rendered."),
+                    Framework::Scripting::Bind::Side::Client)
+                .Function("isUIVisible", &IsUIVisible, Framework::Scripting::Bind::Doc("Checks whether the native chat overlay is visible.").ReturnType(boolean).Returns("True when the overlay is currently rendered."), Framework::Scripting::Bind::Side::Client)
+                .Function("open", &Open, Framework::Scripting::Bind::Doc("Opens and focuses the native chat input field."), Framework::Scripting::Bind::Side::Client)
+                .Function("close", &Close, Framework::Scripting::Bind::Doc("Closes the native chat input field without submitting its contents."), Framework::Scripting::Bind::Side::Client)
+                .Function("isOpen", &IsOpen, Framework::Scripting::Bind::Doc("Checks whether the native chat input field is active.").ReturnType(boolean).Returns("True while chat is capturing keyboard input."), Framework::Scripting::Bind::Side::Client);
+        }();
+        return definition;
     }
 
-    void Chat::SetUIVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope hs(isolate);
-        if (args.Length() < 1) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.setUIVisible: expected (visible)")));
-            return;
+    void Chat::Register(Framework::Scripting::Bind::Registrar &registrar, Framework::Scripting::Bind::Languages languages, Framework::Scripting::ResourceManager *resourceManager) {
+        if (registrar.HasJavaScript(languages) && resourceManager != nullptr) {
+            Framework::Scripting::Bind::SetCallResourceManager(registrar.Isolate(), resourceManager);
         }
-        if (auto *box = ResolveBox()) {
-            box->SetVisible(args[0]->BooleanValue(isolate));
-        }
-    }
-
-    void Chat::IsUIVisibleCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        auto *box = ResolveBox();
-        args.GetReturnValue().Set(box && box->IsVisible());
-    }
-
-    void Chat::OpenCallback(const v8::FunctionCallbackInfo<v8::Value> &) {
-        if (auto *box = ResolveBox()) {
-            box->OpenInput();
-        }
-    }
-
-    void Chat::CloseCallback(const v8::FunctionCallbackInfo<v8::Value> &) {
-        if (auto *box = ResolveBox()) {
-            box->CloseInput(false);
-        }
-    }
-
-    void Chat::IsOpenCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        auto *box = ResolveBox();
-        args.GetReturnValue().Set(box && box->IsInputActive());
-    }
-
-    void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> target, Framework::Scripting::ResourceManager *resourceManager) {
-        (void)resourceManager;
-        if (!isolate || context.IsEmpty() || target.IsEmpty()) {
+        registrar.Global(Definition(), languages);
+        if (!registrar.HasJavaScript(languages)) {
             return;
         }
 
-        const auto attach = [&](v8::Local<v8::Object> obj, const char *name, v8::FunctionCallback callback) {
-            v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(isolate, callback);
-            obj->Set(context, v8pp::to_v8(isolate, name), tmpl->GetFunction(context).ToLocalChecked()).Check();
-        };
-
-        v8::Local<v8::Object> chatObj = v8::Object::New(isolate);
-        attach(chatObj, "send", &Chat::SendCallback);
-        attach(chatObj, "setUIVisible", &Chat::SetUIVisibleCallback);
-        attach(chatObj, "isUIVisible", &Chat::IsUIVisibleCallback);
-        attach(chatObj, "open", &Chat::OpenCallback);
-        attach(chatObj, "close", &Chat::CloseCallback);
-        attach(chatObj, "isOpen", &Chat::IsOpenCallback);
-        target->Set(context, v8pp::to_v8(isolate, "Chat"), chatObj).Check();
-
-        auto &metadata = Framework::Scripting::GetScriptingCatalog(isolate).global_object("Chat", "Client chat transport and native chat-box controls.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("send",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", false, "Player-authored chat text sent to the server.")}, "Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setUIVisible",
-            v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "Whether the chat overlay is rendered.")},
-                "Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isUIVisible", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat overlay is visible.", "True when the overlay is currently rendered.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("open", v8pp::metadata::docs("void", {}, "Opens and focuses the native chat input field.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("close", v8pp::metadata::docs("void", {}, "Closes the native chat input field without submitting its contents.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isOpen", v8pp::metadata::docs("boolean", {}, "Checks whether the native chat input field is active.", "True while chat is capturing keyboard input.")));
-
-        auto &events = Framework::Scripting::GetScriptingCatalog(isolate).data_type("EventMap");
+        auto &events = Framework::Scripting::GetScriptingCatalog(registrar.Isolate()).data_type("EventMap");
         events.add_property("chatMessage", "[message: { author: string; text: string; color: number }]", "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.");
         events.add_property("chatSend", "[text: string]", "Dispatched synchronously for a line the player typed into the chat box, before it is sent. A handler returning false, not a Promise of it, blocks it; Chat.send does not raise this.");
     }

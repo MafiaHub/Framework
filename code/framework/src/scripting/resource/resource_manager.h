@@ -17,6 +17,7 @@
 
 #include <function2/function2.hpp>
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -32,6 +33,8 @@ namespace v8 {
 }
 
 namespace Framework::Scripting {
+
+    class LuaEngine;
 
     /**
      * Configuration for the ResourceManager.
@@ -75,7 +78,7 @@ namespace Framework::Scripting {
     using ResourceStateCallback = fu2::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState) const>;
 
     /**
-     * Central manager for JavaScript resources.
+     * Central manager for resources.
      *
      * Responsibilities:
      * - Discovery: Scan directories for valid package.json files
@@ -258,6 +261,21 @@ namespace Framework::Scripting {
          */
         Engine *GetJSEngine() const;
 
+        // Lua Engine Access
+
+        /**
+         * Set the engine that runs resources' `.lua` scripts (not owned; it must outlive the manager, or be taken
+         * away again with null). A resource whose scripts for this side include one gets a Lua runtime next to, or
+         * instead of, its JavaScript one. Without an engine such a resource fails to start with "Lua scripting is
+         * not available". Set it before resources start: a running resource keeps the runtimes it has.
+         */
+        void SetLuaEngine(LuaEngine *engine);
+
+        /**
+         * Get the Lua engine used by this manager, or null.
+         */
+        LuaEngine *GetLuaEngine() const;
+
         /**
          * Calls and values between resources' runtimes, or null when every resource shares one.
          */
@@ -318,6 +336,13 @@ namespace Framework::Scripting {
         std::string ResolveResourceContext(v8::Isolate *isolate, v8::Local<v8::Function> handler = {}) const;
 
         /**
+         * Register an export of a resource as a copy (Resource::RegisterExport), for a script that is not the
+         * JavaScript the manager names the current resource for: a Lua script, whose runtime names its resource.
+         * @return False when there is no such resource or its manifest does not declare the export
+         */
+        bool RegisterExportCopy(std::string_view resourceName, std::string_view exportName, TransferredValue value);
+
+        /**
          * Get the currently executing resource.
          * @return Pointer to current resource, or nullptr if none
          */
@@ -341,6 +366,13 @@ namespace Framework::Scripting {
         void OnEntityCreated(uint64_t networkId);
         void OnEntityDestroyed(uint64_t networkId);
 
+        // Makes `resourceName` the one resource that owns the entity, which is destroyed when that resource stops or
+        // fails: any other resource stops tracking it. For a builtin that knows from its call which resource made an
+        // entity. OnEntityCreated names the owner from the JavaScript isolate that is running, which is none
+        // while a Lua script runs outside the load of its file. Does nothing for a name that is no resource of
+        // this manager.
+        void AssignEntity(std::string_view resourceName, uint64_t networkId);
+
         // Statistics
 
         /**
@@ -359,6 +391,26 @@ namespace Framework::Scripting {
          * @param error Error message
          */
         void HandleResourceRuntimeError(const std::string &resourceName, const std::string &error);
+
+        /**
+         * Report a script handler of a resource that failed: one a builtin kept and invoked, which threw, or
+         * whose promise or coroutine failed later. Nothing is done about it here, where a script of the
+         * resource may be executing or the resource may be stopping: the report is queued for
+         * ProcessHandlerFailures. Reports of a resource are dropped when it stops, and one made while it
+         * is stopped is dropped when it starts again. Call it on the scripting thread.
+         * @param resourceName Name of the resource that owns the handler
+         * @param message What failed and how, as the error of the resource will read
+         */
+        void ReportHandlerFailure(const std::string &resourceName, std::string message);
+
+        /**
+         * Act on the handler failures reported since the last call, as on an error of the resource nobody
+         * caught (HandleResourceRuntimeError), for each resource that is running by now: in the Running state, or
+         * left running after an earlier error, as errorBehavior continue says, and not started again since the
+         * report. A report for any other resource is logged and dropped. Call from the scripting update tick, with no script
+         * executing.
+         */
+        void ProcessHandlerFailures();
 
         /**
          * Schedule an auto-restart for a resource.
@@ -407,8 +459,22 @@ namespace Framework::Scripting {
         // Validate all dependencies can be satisfied
         bool ValidateDependencies(std::string &outError) const;
 
-        // Execute entry point script for a resource
-        bool ExecuteResourceScript(Resource &resource, std::string &outError);
+        // What a resource runs on this side: its scripts in execution order, each with the engine it runs in, and
+        // the runtimes they need.
+        struct PlannedScript {
+            std::string path;
+            // Null when this manager has no engine for the script's language.
+            ScriptEngine *engine = nullptr;
+        };
+        struct ScriptPlan {
+            std::vector<PlannedScript> scripts;
+            bool needsJavaScript = false;
+            bool needsLua        = false;
+        };
+        ScriptPlan PlanScripts(const Resource &resource) const;
+
+        // Execute a resource's scripts, each in the runtime of its language
+        bool ExecuteResourceScript(Resource &resource, const ScriptPlan &plan, std::string &outError);
 
         // Fire resource lifecycle events
         void FireOnResourceStarted(const std::string &name);
@@ -437,6 +503,9 @@ namespace Framework::Scripting {
         // JS engine (not owned)
         Engine *_jsEngine = nullptr;
 
+        // Lua engine (not owned), or null
+        LuaEngine *_luaEngine = nullptr;
+
         // Resource registry
         std::map<std::string, std::unique_ptr<Resource>, std::less<>> _resources;
         mutable std::mutex _resourcesMutex;
@@ -462,6 +531,20 @@ namespace Framework::Scripting {
         // Current resource context
         std::string _currentResourceContext;
         mutable std::mutex _contextMutex;
+
+        // Handler failures reported and not acted on yet, in the order they came.
+        struct HandlerFailure {
+            std::string resourceName;
+            std::string message;
+            // The start of the resource the report is of: _startGenerations when it was made.
+            uint64_t generation = 0;
+        };
+        std::vector<HandlerFailure> _handlerFailures;
+
+        // The number of the last start of each resource, out of one count for the manager, so that a report is
+        // never taken for one of a later instance of the name. A resource that never started has none.
+        std::unordered_map<std::string, uint64_t> _startGenerations;
+        uint64_t _lastStartGeneration = 0;
 
         // Scheduled restarts
         struct ScheduledRestart {

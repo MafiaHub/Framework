@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "bind/doc.h"
+
 #include <v8.h>
 #include <v8pp/metadata.hpp>
 
@@ -80,6 +82,12 @@ namespace Framework::Scripting {
         const auto &environments = detail::ScriptingEnvironments();
         const auto it            = environments.find(isolate);
         return it != environments.end() && it->second;
+    }
+
+    // The side of the runtime an isolate belongs to, as a binding names it: what a definition is
+    // materialised with in that isolate.
+    inline Bind::Side ScriptingSide(v8::Isolate *isolate) {
+        return IsClientScripting(isolate) ? Bind::Side::Client : Bind::Side::Server;
     }
 
     // Adds the symbols `source` defines and `destination` does not, so a project exporting its

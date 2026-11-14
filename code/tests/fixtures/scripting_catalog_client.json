@@ -1,0 +1,3019 @@
+{
+  "functions": [],
+  "schemaVersion": 2,
+  "symbols": [
+    {
+      "bases": [],
+      "description": "A console call made by a page.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserConsoleMessageEvent",
+      "properties": [
+        {
+          "description": "Line number within that script.",
+          "name": "line",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Console message body.",
+          "name": "message",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Console severity.",
+          "name": "severity",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"debug\" | \"info\" | \"warning\" | \"error\" | \"fatal\"",
+            "optional": false
+          }
+        },
+        {
+          "description": "Script URL that logged it.",
+          "name": "source",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view's browser finished being created.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserCreatedEvent",
+      "properties": [
+        {
+          "description": "URL the view was created with.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "The cursor shape a page is asking for.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserCursorChangeEvent",
+      "properties": [
+        {
+          "description": "CSS-style cursor name, or \"custom\" for shapes without one.",
+          "name": "cursor",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Raw CEF cursor type.",
+          "name": "cursorType",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view's main frame finished loading.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserDocumentReadyEvent",
+      "properties": [
+        {
+          "description": "URL that finished loading.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A form control inside a page gained or lost focus.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserInputFocusChangeEvent",
+      "properties": [
+        {
+          "description": "True while the page holds keyboard input.",
+          "name": "focused",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A load inside a web view was aborted.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserLoadingFailedEvent",
+      "properties": [
+        {
+          "description": "CEF error text, such as ERR_CONNECTION_REFUSED.",
+          "name": "description",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "CEF error code.",
+          "name": "errorCode",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        },
+        {
+          "description": "False for sub-frame failures.",
+          "name": "isMainFrame",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL that failed to load.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A frame inside a web view started loading.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserLoadingStartEvent",
+      "properties": [
+        {
+          "description": "False for sub-frame loads.",
+          "name": "isMainFrame",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL being loaded.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view was asked to navigate.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserNavigateEvent",
+      "properties": [
+        {
+          "description": "Whether the request was refused.",
+          "name": "blocked",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "False for sub-frame navigation.",
+          "name": "isMainFrame",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "boolean",
+            "optional": false
+          }
+        },
+        {
+          "description": "Requested URL.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view's allowed origin changed.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserOriginChangeEvent",
+      "properties": [
+        {
+          "description": "New locked origin, or \"null\" when the URL has none.",
+          "name": "origin",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL the lock was derived from.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A page tried to open a new window or tab.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserPopupEvent",
+      "properties": [
+        {
+          "description": "URL of the frame that requested it.",
+          "name": "openerUrl",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Target URL of the blocked popup.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A web view refused a request.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserResourceBlockedEvent",
+      "properties": [
+        {
+          "description": "Host component of that URL, empty when unparsable.",
+          "name": "domain",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Why the request was refused.",
+          "name": "reason",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "\"cross-origin\" | \"invalid-url\" | \"host-filter\" | \"foreign-event\"",
+            "optional": false
+          }
+        },
+        {
+          "description": "URL that was refused.",
+          "name": "url",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "A page wants to display a tooltip.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "BrowserTooltipEvent",
+      "properties": [
+        {
+          "description": "Tooltip text; empty when the tooltip is dismissed.",
+          "name": "text",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "string",
+            "optional": false
+          }
+        },
+        {
+          "description": "Identifier of the view the event belongs to.",
+          "name": "viewId",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "number",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Client chat transport and native chat-box controls.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Closes the native chat input field without submitting its contents.",
+          "examples": [],
+          "name": "close",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the native chat input field is active.",
+          "examples": [],
+          "name": "isOpen",
+          "parameters": [],
+          "returns": {
+            "description": "True while chat is capturing keyboard input.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the native chat overlay is visible.",
+          "examples": [],
+          "name": "isUIVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True when the overlay is currently rendered.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Opens and focuses the native chat input field.",
+          "examples": [],
+          "name": "open",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sends a chat line to the server, bypassing the chatSend event; incoming lines arrive through the reserved chatMessage event.",
+          "examples": [],
+          "name": "send",
+          "parameters": [
+            {
+              "description": "Player-authored chat text sent to the server.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes visibility of the native chat overlay without opening its input field. Hidden, the overlay also stops opening on its key. The choice holds for the rest of the session and resets to visible on disconnect, so a resource that replaces the chat calls this once at startup.",
+          "examples": [],
+          "name": "setUIVisible",
+          "parameters": [
+            {
+              "description": "Whether the chat overlay is rendered.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Chat",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Client-only Discord rich-presence composer exposed as the global Discord; setters stage values until update or setPresence publishes them.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Clears what scripts published and resets staged state.",
+          "examples": [],
+          "name": "clear",
+          "parameters": [],
+          "returns": {
+            "description": "True when dispatched; false when Discord is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the signed-in Discord user's snowflake.",
+          "examples": [],
+          "name": "getUserId",
+          "parameters": [],
+          "returns": {
+            "description": "User ID string, or an empty string until available.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the signed-in Discord user's username.",
+          "examples": [],
+          "name": "getUsername",
+          "parameters": [],
+          "returns": {
+            "description": "Username string, or an empty string until available.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether Discord is connected and can publish presence.",
+          "examples": [],
+          "name": "isAvailable",
+          "parameters": [],
+          "returns": {
+            "description": "True when rich presence is initialized.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Resets staged activity fields without publishing a Discord update.",
+          "examples": [],
+          "name": "reset",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages multiple Discord image fields at once.",
+          "examples": [],
+          "name": "setAssets",
+          "parameters": [
+            {
+              "description": "Asset keys and tooltips to merge into the staged activity.",
+              "name": "assets",
+              "type": {
+                "cppName": "",
+                "name": "{ largeImage?: string; largeText?: string; smallImage?: string; smallText?: string }",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the top presence line.",
+          "examples": [],
+          "name": "setDetails",
+          "parameters": [
+            {
+              "description": "the top presence line.",
+              "name": "details",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the countdown Unix timestamp in seconds; zero clears it.",
+          "examples": [],
+          "name": "setEndTimestamp",
+          "parameters": [
+            {
+              "description": "the countdown Unix timestamp in seconds; zero clears it.",
+              "name": "seconds",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages whether the activity represents an instanced session.",
+          "examples": [],
+          "name": "setInstance",
+          "parameters": [
+            {
+              "description": "whether the activity represents an instanced session.",
+              "name": "instance",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the opaque join secret that enables invitations.",
+          "examples": [],
+          "name": "setJoinSecret",
+          "parameters": [
+            {
+              "description": "the opaque join secret that enables invitations.",
+              "name": "secret",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the large image asset key.",
+          "examples": [],
+          "name": "setLargeImage",
+          "parameters": [
+            {
+              "description": "the large image asset key.",
+              "name": "assetKey",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the large image tooltip.",
+          "examples": [],
+          "name": "setLargeText",
+          "parameters": [
+            {
+              "description": "the large image tooltip.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the opaque match secret.",
+          "examples": [],
+          "name": "setMatchSecret",
+          "parameters": [
+            {
+              "description": "the opaque match secret.",
+              "name": "secret",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the activity name.",
+          "examples": [],
+          "name": "setName",
+          "parameters": [
+            {
+              "description": "the activity name.",
+              "name": "name",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages multiple Discord party fields at once.",
+          "examples": [],
+          "name": "setParty",
+          "parameters": [
+            {
+              "description": "Party fields to merge into the staged activity.",
+              "name": "party",
+              "type": {
+                "cppName": "",
+                "name": "{ id?: string; size?: [number, number]; privacy?: \"private\" | \"public\" | number }",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the party grouping identifier.",
+          "examples": [],
+          "name": "setPartyId",
+          "parameters": [
+            {
+              "description": "the party grouping identifier.",
+              "name": "id",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the party join-privacy name or numeric enum value.",
+          "examples": [],
+          "name": "setPartyPrivacy",
+          "parameters": [
+            {
+              "description": "the party join-privacy name or numeric enum value.",
+              "name": "privacy",
+              "type": {
+                "cppName": "",
+                "name": "\"private\" | \"public\" | number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the party's current and maximum size.",
+          "examples": [],
+          "name": "setPartySize",
+          "parameters": [
+            {
+              "description": "Current party member count.",
+              "name": "current",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Maximum party capacity.",
+              "name": "max",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Merges a complete option batch into the staged activity and publishes it immediately.",
+          "examples": [],
+          "name": "setPresence",
+          "parameters": [
+            {
+              "description": "Batch of supported activity, timestamp, asset, party, secret, instance, and platform fields.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "Record<string, unknown>",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the update was dispatched; false when Discord is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages multiple Discord activity secrets at once.",
+          "examples": [],
+          "name": "setSecrets",
+          "parameters": [
+            {
+              "description": "Opaque secrets to merge into the staged activity.",
+              "name": "secrets",
+              "type": {
+                "cppName": "",
+                "name": "{ match?: string; join?: string; spectate?: string }",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the small image asset key.",
+          "examples": [],
+          "name": "setSmallImage",
+          "parameters": [
+            {
+              "description": "the small image asset key.",
+              "name": "assetKey",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the small image tooltip.",
+          "examples": [],
+          "name": "setSmallText",
+          "parameters": [
+            {
+              "description": "the small image tooltip.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the opaque spectate secret.",
+          "examples": [],
+          "name": "setSpectateSecret",
+          "parameters": [
+            {
+              "description": "the opaque spectate secret.",
+              "name": "secret",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the elapsed-time Unix timestamp in seconds; zero clears it.",
+          "examples": [],
+          "name": "setStartTimestamp",
+          "parameters": [
+            {
+              "description": "the elapsed-time Unix timestamp in seconds; zero clears it.",
+              "name": "seconds",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the bottom presence line.",
+          "examples": [],
+          "name": "setState",
+          "parameters": [
+            {
+              "description": "the bottom presence line.",
+              "name": "state",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the supported-platform bitmask: Desktop 1, Android 2, and iOS 4.",
+          "examples": [],
+          "name": "setSupportedPlatforms",
+          "parameters": [
+            {
+              "description": "the supported-platform bitmask: Desktop 1, Android 2, and iOS 4.",
+              "name": "flags",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Stages the Discord activity verb or numeric enum value.",
+          "examples": [],
+          "name": "setType",
+          "parameters": [
+            {
+              "description": "the Discord activity verb or numeric enum value.",
+              "name": "type",
+              "type": {
+                "cppName": "",
+                "name": "\"playing\" | \"streaming\" | \"listening\" | \"watching\" | number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Publishes the currently staged activity as one rate-limited Discord update.",
+          "examples": [],
+          "name": "update",
+          "parameters": [],
+          "returns": {
+            "description": "True when dispatched; false when Discord is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Discord",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Native events dispatched through `Events.on`. Each property is the exact callback argument tuple for that event.",
+      "functions": [],
+      "kind": "dataType",
+      "name": "EventMap",
+      "properties": [
+        {
+          "description": "Dispatched for console output of an owned view; the framework logs these regardless.",
+          "name": "browserConsoleMessage",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserConsoleMessageEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched once per view, before any navigation, to the resource that created it.",
+          "name": "browserCreated",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserCreatedEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view's requested cursor shape changes.",
+          "name": "browserCursorChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserCursorChangeEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view's main document is ready; the earliest point at which the page can receive Web.emit.",
+          "name": "browserDocumentReady",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserDocumentReadyEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when focus enters or leaves an editable element of an owned view; use it to stop routing keys to the game.",
+          "name": "browserInputFocusChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserInputFocusChangeEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when a frame of an owned view fails to load.",
+          "name": "browserLoadingFailed",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserLoadingFailedEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when any frame of an owned view begins loading.",
+          "name": "browserLoadingStart",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserLoadingStartEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched for every navigation an owned view is asked to perform, refused or not.",
+          "name": "browserNavigate",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserNavigateEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched on view creation and whenever Web.loadURL re-locks an owned view to a different origin.",
+          "name": "browserOriginChange",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserOriginChangeEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view blocks a popup; windowless views cannot host one, so handle the URL yourself.",
+          "name": "browserPopup",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserPopupEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view rejects a navigation or a page event from outside its locked origin.",
+          "name": "browserResourceBlocked",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserResourceBlockedEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when an owned view requests a tooltip; windowless rendering draws none, so the script must.",
+          "name": "browserTooltip",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[event: BrowserTooltipEvent]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched for every chat line the server sends. An empty author is a notice line; color is packed 0xRRGGBBAA, 0 for the chat box's default.",
+          "name": "chatMessage",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[message: { author: string; text: string; color: number }]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched synchronously for a line the player typed into the chat box, before it is sent. A handler returning false, not a Promise of it, blocks it; Chat.send does not raise this.",
+          "name": "chatSend",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[text: string]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when the local player starts speaking, as isTalking turns true.",
+          "name": "voiceStart",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[]",
+            "optional": false
+          }
+        },
+        {
+          "description": "Dispatched when the local player stops speaking, as isTalking turns false.",
+          "name": "voiceStop",
+          "readonly": false,
+          "static": false,
+          "type": {
+            "cppName": "",
+            "name": "[]",
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
+      "bases": [],
+      "description": "Client-only, resource-owned physical key bindings exposed as the global Key.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Binds a resource-owned handler that fires while the game has foreground input and no UI is capturing it. Each wheelup/wheeldown notch fires down, then up.",
+          "examples": [],
+          "name": "bind",
+          "parameters": [
+            {
+              "description": "Case-insensitive supported keyboard or mouse key name.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Trigger state, or the handler itself to use the default down state.",
+              "name": "stateOrHandler",
+              "type": {
+                "cppName": "",
+                "name": "\"down\" | \"up\" | \"both\" | KeyHandler",
+                "optional": false
+              }
+            },
+            {
+              "description": "Handler required when an explicit trigger state is provided.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "KeyHandler",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True after the binding is installed; invalid keys or states throw.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the current layout's label for a physical key, even while UI owns input. Query again when refreshing prompts. Throws for unknown keys or non-string arguments.",
+          "examples": [],
+          "name": "getLabel",
+          "parameters": [
+            {
+              "description": "Case-insensitive physical key name, using the same names as bind.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "Uppercase printable text, or an English name such as Enter or Mouse 1. Falls back to the uppercase canonical key name when translation is unavailable.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Queries live physical key state using the same foreground and UI-input gate as binding dispatch.",
+          "examples": [],
+          "name": "isDown",
+          "parameters": [
+            {
+              "description": "Case-insensitive supported key name.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "False when the key is up, the game is backgrounded, UI owns input, or the key name is invalid. Always false for the wheel, which is never held.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes matching bindings owned by the calling resource; omitting filters removes every binding for the key.",
+          "examples": [],
+          "name": "unbind",
+          "parameters": [
+            {
+              "description": "Case-insensitive supported key name.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional trigger-state filter.",
+              "name": "state",
+              "type": {
+                "cppName": "",
+                "name": "\"down\" | \"up\" | \"both\"",
+                "optional": true
+              }
+            },
+            {
+              "description": "Optional exact handler filter.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "KeyHandler",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when at least one binding was removed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Key",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "The local player's view of the nametags above players: whether they draw at all, whether they carry a health bar, and whether their own is shown.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Removes an entity's label before its duration elapses.",
+          "examples": [],
+          "name": "clearLabel",
+          "parameters": [
+            {
+              "description": "Network id of the entity whose label to remove.",
+              "name": "entityId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes every label this player is drawing.",
+          "examples": [],
+          "name": "clearLabels",
+          "parameters": [],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player draws health bars on nametags.",
+          "examples": [],
+          "name": "isHealthVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True unless they were hidden locally.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player draws their own nametag.",
+          "examples": [],
+          "name": "isSelfVisible",
+          "parameters": [],
+          "returns": {
+            "description": "False unless it was turned on locally.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether this player draws nametags.",
+          "examples": [],
+          "name": "isVisible",
+          "parameters": [],
+          "returns": {
+            "description": "True unless they were hidden locally.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides the health bar on all nametags for this player only, leaving the names alone.",
+          "examples": [],
+          "name": "setHealthVisible",
+          "parameters": [
+            {
+              "description": "True to draw the health bar under each name, false to hide it.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Hangs a transient line on that entity's nametag, above its name -- speech, an emote, a status. It follows the body, fades with distance and hides behind cover exactly as the name does. Local to this player: the line is not replicated, and a nametag hidden with Nametags.setVisible draws neither. Player.setNametagText is the server-side counterpart for a lasting name.",
+          "examples": [],
+          "name": "setLabel",
+          "parameters": [
+            {
+              "description": "Network id of the entity to label (server-side `player.id`).",
+              "name": "entityId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Label text; '\\n' splits lines. Empty clears the label.",
+              "name": "text",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "How long to hold it (default 6000). <= 0 holds until cleared.",
+              "name": "durationMs",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            },
+            {
+              "description": "Packed 0xAARRGGBB; 0 (default) uses the nametag's own colour.",
+              "name": "color",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides this player's own nametag, drawn as others see it, with any label set on their own id.",
+          "examples": [],
+          "name": "setSelfVisible",
+          "parameters": [
+            {
+              "description": "True to draw this player's own nametag, false (default) to leave it off.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Shows or hides all nametags for this player only. A player hidden with Player.setNametagVisible stays hidden either way.",
+          "examples": [],
+          "name": "setVisible",
+          "parameters": [
+            {
+              "description": "True to draw nametags, false to hide every one of them.",
+              "name": "visible",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Nametags",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Local player's proximity voice chat settings: on/off, playback volume, hearing range and the push-to-talk binding.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Reads the voice-activation threshold.",
+          "examples": [],
+          "name": "getActivationThreshold",
+          "parameters": [],
+          "returns": {
+            "description": "Level from 0 to 1.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the local hearing-range limit.",
+          "examples": [],
+          "name": "getHearingRange",
+          "parameters": [],
+          "returns": {
+            "description": "Radius in world units, or 0 when the server's range applies unreduced.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the chosen microphone.",
+          "examples": [],
+          "name": "getInputDevice",
+          "parameters": [],
+          "returns": {
+            "description": "Its name, or an empty string for the system default.",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Lists the microphones voice can record from.",
+          "examples": [],
+          "name": "getInputDevices",
+          "parameters": [],
+          "returns": {
+            "description": "Device names as the player would recognise them; empty when the game chooses the device itself.",
+            "type": {
+              "cppName": "",
+              "name": "string[]",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads how loud the microphone is while this player is sending voice. The microphone stays open for the whole session, so what it hears the rest of the time is not given to scripts.",
+          "examples": [],
+          "name": "getInputLevel",
+          "parameters": [],
+          "returns": {
+            "description": "Smoothed level from 0 to 1 while isTalking is true; 0 otherwise.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the push-to-talk binding.",
+          "examples": [],
+          "name": "getPushToTalkKey",
+          "parameters": [],
+          "returns": {
+            "description": "Canonical key name, e.g. \"v\".",
+            "type": {
+              "cppName": "",
+              "name": "string",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the push-to-talk release delay.",
+          "examples": [],
+          "name": "getPushToTalkReleaseDelay",
+          "parameters": [],
+          "returns": {
+            "description": "Delay in milliseconds; 0 when transmission stops the moment the key is released.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the server's proximity range for talkers with no override of their own.",
+          "examples": [],
+          "name": "getRange",
+          "parameters": [],
+          "returns": {
+            "description": "Radius in world units.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the voice tier this player is on.",
+          "examples": [],
+          "name": "getTier",
+          "parameters": [],
+          "returns": {
+            "description": "0 whisper, 1 normal, 2 shout.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads what opens the microphone.",
+          "examples": [],
+          "name": "getTransmitMode",
+          "parameters": [],
+          "returns": {
+            "description": "The current transmit mode.",
+            "type": {
+              "cppName": "",
+              "name": "'pushToTalk' | 'voiceActivity'",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Reads the voice playback volume.",
+          "examples": [],
+          "name": "getVolume",
+          "parameters": [],
+          "returns": {
+            "description": "Current gain, where 1 is unattenuated.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether a capture device opened for this session.",
+          "examples": [],
+          "name": "hasMicrophone",
+          "parameters": [],
+          "returns": {
+            "description": "False when the player has no working microphone, i.e. they are listen-only.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether voice chat is enabled for this player.",
+          "examples": [],
+          "name": "isEnabled",
+          "parameters": [],
+          "returns": {
+            "description": "True unless the player turned voice chat off.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether noise suppression is on.",
+          "examples": [],
+          "name": "isNoiseSuppressionEnabled",
+          "parameters": [],
+          "returns": {
+            "description": "True while background noise is being filtered.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether the local player is speaking right now. The same state raises the voiceStart and voiceStop events.",
+          "examples": [],
+          "name": "isTalking",
+          "parameters": [],
+          "returns": {
+            "description": "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets the voice-activation sensitivity: lower sends quieter speech, higher ignores more background noise. Clamped to 0..1.",
+          "examples": [],
+          "name": "setActivationThreshold",
+          "parameters": [
+            {
+              "description": "Microphone level, 0 to 1 on the scale getInputLevel reports, above which voice activation sends.",
+              "name": "level",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Turns voice chat on or off. Off closes the microphone and playback devices and tells the server to stop relaying voice to this client.",
+          "examples": [],
+          "name": "setEnabled",
+          "parameters": [
+            {
+              "description": "Whether voice chat runs at all for this player.",
+              "name": "enabled",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Narrows how far this player hears others. Can only reduce the server's range, since a talker beyond it is never relayed.",
+          "examples": [],
+          "name": "setHearingRange",
+          "parameters": [
+            {
+              "description": "Audibility radius in world units; 0 removes the local limit.",
+              "name": "range",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Chooses the microphone. A running microphone is reopened on the new device; a device that is no longer connected falls back to the default.",
+          "examples": [],
+          "name": "setInputDevice",
+          "parameters": [
+            {
+              "description": "A name from getInputDevices, or an empty string for the system default.",
+              "name": "name",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Turns noise suppression on or off. It runs before the level is measured, so it also keeps steady noise from tripping voice activation.",
+          "examples": [],
+          "name": "setNoiseSuppression",
+          "parameters": [
+            {
+              "description": "Whether to filter background noise out of the microphone.",
+              "name": "enabled",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Rebinds push-to-talk. Unknown key names and the wheel, which is never held, throw.",
+          "examples": [],
+          "name": "setPushToTalkKey",
+          "parameters": [
+            {
+              "description": "Case-insensitive key name, using the same names as Key.bind.",
+              "name": "key",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets how long transmission continues after push-to-talk is released, so letting go slightly early does not clip the end of a word. Muting, turning voice off and starting to type into a text field still stop it at once.",
+          "examples": [],
+          "name": "setPushToTalkReleaseDelay",
+          "parameters": [
+            {
+              "description": "How long to keep transmitting after the key goes up. Clamped to 0..2000.",
+              "name": "milliseconds",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Switches how far this player's voice carries. A request: the server paces it, decides the radius, and may move the player itself.",
+          "examples": [],
+          "name": "setTier",
+          "parameters": [
+            {
+              "description": "Voice tier: 0 whisper, 1 normal, 2 shout.",
+              "name": "tier",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Chooses what opens the microphone. Switching closes whatever the previous mode had open. Unknown modes throw.",
+          "examples": [],
+          "name": "setTransmitMode",
+          "parameters": [
+            {
+              "description": "pushToTalk sends while the key is held; voiceActivity sends whenever the microphone is louder than the activation threshold.",
+              "name": "mode",
+              "type": {
+                "cppName": "",
+                "name": "'pushToTalk' | 'voiceActivity'",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Sets the playback volume of incoming voice. A game that plays voice through its own audio engine applies the same gain there.",
+          "examples": [],
+          "name": "setVolume",
+          "parameters": [
+            {
+              "description": "Playback gain, where 1 is unattenuated. Clamped to 0..4.",
+              "name": "volume",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Voice",
+      "properties": []
+    },
+    {
+      "bases": [],
+      "description": "Client-only, resource-owned CEF web-view API exposed as the global Web.",
+      "functions": [
+        {
+          "deprecated": "",
+          "description": "Creates an origin-locked web view owned by the calling resource.",
+          "examples": [],
+          "name": "createView",
+          "parameters": [
+            {
+              "description": "Resource-relative URL or allowed absolute URL loaded into the view.",
+              "name": "url",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional initial pixel geometry, stacking, visibility, and focus settings.",
+              "name": "options",
+              "type": {
+                "cppName": "",
+                "name": "{ width?: number; height?: number; x?: number; y?: number; zIndex?: number; visible?: boolean; focus?: boolean }",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "Numeric view ID used by the remaining Web methods.",
+            "type": {
+              "cppName": "",
+              "name": "number",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Destroys an owned view and removes all of its script event handlers.",
+          "examples": [],
+          "name": "destroyView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when a view was destroyed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Dispatches a CustomEvent into an owned view.",
+          "examples": [],
+          "name": "emit",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "CustomEvent name dispatched in the page.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional JSON-serializable event detail.",
+              "name": "payload",
+              "type": {
+                "cppName": "",
+                "name": "unknown",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the dispatch script was queued.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Changes input focus for an owned view.",
+          "examples": [],
+          "name": "focusView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Whether the view captures keyboard and mouse input; defaults to true.",
+              "name": "focused",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and focus was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Returns the current client viewport size.",
+          "examples": [],
+          "name": "getScreenSize",
+          "parameters": [],
+          "returns": {
+            "description": "Width and height in physical pixels.",
+            "type": {
+              "cppName": "",
+              "name": "{ width: number; height: number }",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Hides an owned view.",
+          "examples": [],
+          "name": "hideView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether an owned view keeps painting while hidden.",
+          "examples": [],
+          "name": "isViewOffscreen",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "False for missing or unowned views.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Checks whether an owned view is currently visible.",
+          "examples": [],
+          "name": "isViewVisible",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "False for missing or unowned views.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Navigates a view and replaces its allowed origin with the new URL's origin.",
+          "examples": [],
+          "name": "loadURL",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New resource-relative or allowed absolute URL.",
+              "name": "url",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when navigation was requested.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Removes page-event handlers from an owned view.",
+          "examples": [],
+          "name": "off",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Page-to-script event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Optional exact callback; omitting it removes every matching handler owned by the resource.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "WebEventHandler",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when at least one handler was removed.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Registers a handler for an event emitted by an owned same-origin page.",
+          "examples": [],
+          "name": "on",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Page-to-script event name.",
+              "name": "eventName",
+              "type": {
+                "cppName": "",
+                "name": "string",
+                "optional": false
+              }
+            },
+            {
+              "description": "Resource-owned callback invoked by the view's callEvent bridge.",
+              "name": "handler",
+              "type": {
+                "cppName": "",
+                "name": "WebEventHandler",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "",
+            "type": {
+              "cppName": "",
+              "name": "void",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Resizes an owned view's viewport.",
+          "examples": [],
+          "name": "resizeView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New viewport width in pixels.",
+              "name": "width",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New viewport height in pixels.",
+              "name": "height",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was resized.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Keeps a hidden view painting so something else can sample it, such as a render target drawing the page onto world geometry. A view that is merely hidden stops painting and the sampled picture freezes.",
+          "examples": [],
+          "name": "setViewOffscreen",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "Whether the page keeps painting without being drawn on screen; defaults to true.",
+              "name": "offscreen",
+              "type": {
+                "cppName": "",
+                "name": "boolean",
+                "optional": true
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Moves an owned view on screen.",
+          "examples": [],
+          "name": "setViewPosition",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New horizontal screen position in pixels.",
+              "name": "x",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            },
+            {
+              "description": "New vertical screen position in pixels.",
+              "name": "y",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was moved.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        },
+        {
+          "deprecated": "",
+          "description": "Makes an owned view visible.",
+          "examples": [],
+          "name": "showView",
+          "parameters": [
+            {
+              "description": "Owned view identifier.",
+              "name": "viewId",
+              "type": {
+                "cppName": "",
+                "name": "number",
+                "optional": false
+              }
+            }
+          ],
+          "returns": {
+            "description": "True when the view exists and was updated.",
+            "type": {
+              "cppName": "",
+              "name": "boolean",
+              "optional": false
+            }
+          },
+          "since": "",
+          "static": false
+        }
+      ],
+      "kind": "globalObject",
+      "name": "Web",
+      "properties": []
+    }
+  ],
+  "variables": []
+}

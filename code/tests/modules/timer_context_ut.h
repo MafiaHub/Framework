@@ -117,18 +117,17 @@ static void TickUntil(Framework::Scripting::NodeEngine &engine,
 }
 
 MODULE(timer_context, {
-    using namespace Framework::Scripting;
 
     IT("Events.on works inside setTimeout via handler function origin", {
         TimerContextTestHelper::Setup();
         TimerContextTestHelper::CreateResource("timerRes");
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TimerContextTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         {
@@ -140,7 +139,10 @@ MODULE(timer_context, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
         }
 
         // No ambient context set — function origin is the only signal
@@ -174,12 +176,12 @@ MODULE(timer_context, {
     IT("setTimeout without resource context does not crash", {
         TimerContextTestHelper::Setup();
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TimerContextTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -210,12 +212,12 @@ MODULE(timer_context, {
         TimerContextTestHelper::CreateResource("resourceA");
         TimerContextTestHelper::CreateResource("resourceB");
 
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+        Framework::Scripting::NodeEngine engine({});
+        EQUALS(engine.Init(), Framework::Scripting::ScriptingError::SCRIPTING_NONE);
 
-        ResourceManagerConfig config;
+        Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = TimerContextTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
+        Framework::Scripting::ResourceManager manager(&engine, config);
         manager.DiscoverResources();
 
         {
@@ -227,7 +229,10 @@ MODULE(timer_context, {
             v8::Context::Scope contextScope(context);
 
             v8::Local<v8::Object> global = context->Global();
-            manager.GetEvents().Register(isolate, context, global, &manager);
+            {
+                Framework::Scripting::Bind::Registrar registrar(isolate, context, global, Framework::Scripting::Bind::Side::Server);
+                manager.GetEvents().Register(registrar, Framework::Scripting::Bind::Languages::All, &manager);
+            }
         }
 
         TimerRunJS(engine, R"(

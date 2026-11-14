@@ -11,6 +11,8 @@
 #include "quaternion.h"
 #include "vector3.h"
 
+#include "../bind/class.h"
+#include "../bind/registrar.h"
 #include "../class_cache.h"
 
 #include <networking/replication/network_entity.h>
@@ -61,9 +63,14 @@ namespace Framework::Scripting::Builtins {
 
         virtual std::string ToString() const;
 
+        // The class as scripts see it, declared once for both languages.
+        static const Bind::Class<Entity> &Definition();
+
         static v8pp::class_<Entity> &GetClass(v8::Isolate *isolate);
 
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+        // Publishes the class as a global in the languages of `languages`. In Lua, the classes `position`,
+        // `rotation` and `state` read as are made to exist in the state first.
+        static void Register(Bind::Registrar &registrar, Bind::Languages languages = Bind::Languages::All);
 
         static void UnregisterIsolate(v8::Isolate *isolate);
 
@@ -74,3 +81,5 @@ namespace Framework::Scripting::Builtins {
         inline static ClassCache<Entity> _classes;
     };
 } // namespace Framework::Scripting::Builtins
+
+FW_SCRIPT_CLASS(Framework::Scripting::Builtins::Entity, "Entity");

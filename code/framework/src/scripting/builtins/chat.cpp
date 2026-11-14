@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021-2023, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2026, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,7 +8,6 @@
 
 #include "chat.h"
 
-#include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 #include "color.h"
 #include "entity.h"
@@ -17,37 +16,38 @@
 #include <networking/network_peer.h>
 #include <networking/rpc/chat_message.h>
 
-#include <v8pp/class.hpp>
-#include <v8pp/convert.hpp>
-
 #include <mafianet/packet_priority.h>
 #include <mafianet/types.h>
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 
 namespace Framework::Scripting::Builtins {
     namespace {
-        // Pull the optional { author, color } out of an options object argument.
-        void ReadOptions(v8::Isolate *isolate, v8::Local<v8::Value> value, std::string &author, uint32_t &color) {
-            if (value.IsEmpty() || !value->IsObject()) {
-                return;
+        // ToUint32 of JavaScript, which is how a packed color was always read: the whole part, wrapped to 32 bits.
+        uint32_t ToUint32(double number) {
+            if (!std::isfinite(number)) {
+                return 0;
             }
-            auto ctx                   = isolate->GetCurrentContext();
-            v8::Local<v8::Object> opts = value.As<v8::Object>();
-            v8::Local<v8::Value> a;
-            if (opts->Get(ctx, v8pp::to_v8(isolate, "author")).ToLocal(&a) && a->IsString()) {
-                author = v8pp::from_v8<std::string>(isolate, a);
+            const double wrapped = std::fmod(std::trunc(number), 4294967296.0);
+            return static_cast<uint32_t>(static_cast<int64_t>(wrapped));
+        }
+
+        // Pull the optional { author, color } out of an options argument. Anything that is not an object has
+        // neither, and a member of another type is left out: nothing here is an error.
+        void ReadOptions(const Bind::Value &options, std::string &author, uint32_t &color) {
+            const Bind::Value name = options.Member("author");
+            if (name.IsString()) {
+                author = name.AsString();
             }
-            v8::Local<v8::Value> c;
-            if (opts->Get(ctx, v8pp::to_v8(isolate, "color")).ToLocal(&c)) {
-                if (c->IsNumber()) {
-                    color = c->Uint32Value(ctx).FromMaybe(0u);
-                }
-                else if (auto *col = v8pp::class_<Color>::unwrap_object(isolate, c)) {
-                    // Pack a Color into Chat's 0xRRGGBBAA layout.
-                    color = col->toRGBA();
-                }
+            const Bind::Value tint = options.Member("color");
+            if (tint.IsNumber()) {
+                color = ToUint32(tint.AsNumber());
+            }
+            else if (const auto *col = tint.AsBound<Color>()) {
+                // Pack a Color into Chat's 0xRRGGBBAA layout.
+                color = col->toRGBA();
             }
         }
 
@@ -69,80 +69,62 @@ namespace Framework::Scripting::Builtins {
             }
             return true;
         }
+
+        void SendToAll(Bind::Call &call) {
+            if (!call.Arg(0).IsString()) {
+                call.ThrowTypeError("Chat.sendToAll: expected (text, opts?)");
+                return;
+            }
+            std::string author;
+            uint32_t color = 0;
+            ReadOptions(call.Arg(1), author, color);
+            if (!Send(call.Arg(0).AsString(), author, color, MafiaNet::UNASSIGNED_RAKNET_GUID, true)) {
+                call.ThrowError("Chat.sendToAll: network peer unavailable");
+            }
+        }
+
+        void SendToPlayer(Bind::Call &call) {
+            if (!call.Arg(1).IsString()) {
+                call.ThrowTypeError("Chat.sendToPlayer: expected (player, text, opts?)");
+                return;
+            }
+            // Bad argument (not a player) is the caller's bug — throw, mirroring Entity.setVisibleTo.
+            const auto *entity = call.Arg(0).AsBound<Entity>();
+            if (!entity) {
+                call.ThrowTypeError("Chat.sendToPlayer: expected a Player");
+                return;
+            }
+            auto *handle = entity->GetHandle();
+            if (!handle) {
+                call.ThrowError("Chat.sendToPlayer: player has no owning connection");
+                return;
+            }
+            std::string author;
+            uint32_t color = 0;
+            ReadOptions(call.Arg(2), author, color);
+            if (!Send(call.Arg(1).AsString(), author, color, MafiaNet::ToGuid(handle->ownerGUID), false)) {
+                call.ThrowError("Chat.sendToPlayer: network peer unavailable");
+            }
+        }
     } // namespace
 
-    void Chat::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        if (!isolate || global.IsEmpty()) {
-            return;
-        }
-        auto ctx = isolate->GetCurrentContext();
-
-        v8::Local<v8::Object> chatObj = v8::Object::New(isolate);
-        const auto attach             = [&](const char *name, v8::FunctionCallback cb) {
-            chatObj->Set(ctx, v8pp::to_v8(isolate, name), v8::Function::New(ctx, cb).ToLocalChecked()).Check();
-        };
-        attach("sendToAll", &Chat::JS_SendToAll);
-        attach("sendToPlayer", &Chat::JS_SendToPlayer);
-        global->Set(ctx, v8pp::to_v8(isolate, "Chat"), chatObj).Check();
-
-        auto &metadata = GetScriptingCatalog(isolate).global_object("Chat", "Server-side delivery of structured chat messages to connected clients.");
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToAll", v8pp::metadata::docs("void",
-                                                                                           {
-                                                                                               v8pp::metadata::param("text", "string", false, "Message body broadcast to every connected client."),
-                                                                                               v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."),
-                                                                                           },
-                                                                                           "Broadcasts a structured chat message to all clients.")));
-        metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("sendToPlayer", v8pp::metadata::docs("void",
-                                                                                              {
-                                                                                                  v8pp::metadata::param("player", "Entity", false, "Player-owned entity identifying the destination connection."),
-                                                                                                  v8pp::metadata::param("text", "string", false, "Message body sent to the player."),
-                                                                                                  v8pp::metadata::param("options", "{ author?: string; color?: number | Color }", true, "Optional author label and color: a Color or a packed 0xRRGGBBAA integer."),
-                                                                                              },
-                                                                                              "Sends a structured chat message to one player's owning connection.")));
+    const Bind::Namespace &Chat::Definition() {
+        static const auto definition = [] {
+            const auto options      = Bind::Type::Custom("{ author?: string; color?: number | Color }", "{ author: string?, color: (integer|Color)? }");
+            const char *optionsHelp = "Optional author label and color: a Color or a packed 0xRRGGBBAA integer.";
+            return Bind::Namespace("Chat", "Server-side delivery of structured chat messages to connected clients.", Framework::Scripting::Bind::Side::Server)
+                .Function("sendToAll", &SendToAll, Framework::Scripting::Bind::Doc("Broadcasts a structured chat message to all clients.").Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body broadcast to every connected client.").OptionalParam("options", options, optionsHelp), Framework::Scripting::Bind::Side::Server)
+                .Function("sendToPlayer", &SendToPlayer,
+                    Framework::Scripting::Bind::Doc("Sends a structured chat message to one player's owning connection.")
+                        .Param("player", Framework::Scripting::Bind::TypeOf<Entity>(), "Player-owned entity identifying the destination connection.")
+                        .Param("text", Framework::Scripting::Bind::TypeOf<std::string>(), "Message body sent to the player.")
+                        .OptionalParam("options", options, optionsHelp),
+                    Framework::Scripting::Bind::Side::Server);
+        }();
+        return definition;
     }
 
-    void Chat::JS_SendToAll(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        v8::HandleScope hs(isolate);
-        if (info.Length() < 1 || !info[0]->IsString()) {
-            ThrowTypeError(isolate, "Chat.sendToAll: expected (text, opts?)");
-            return;
-        }
-        std::string author;
-        uint32_t color = 0;
-        if (info.Length() >= 2) {
-            ReadOptions(isolate, info[1], author, color);
-        }
-        if (!Send(v8pp::from_v8<std::string>(isolate, info[0]), author, color, MafiaNet::UNASSIGNED_RAKNET_GUID, true)) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToAll: network peer unavailable")));
-        }
-    }
-
-    void Chat::JS_SendToPlayer(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate = info.GetIsolate();
-        v8::HandleScope hs(isolate);
-        if (info.Length() < 2 || !info[1]->IsString()) {
-            ThrowTypeError(isolate, "Chat.sendToPlayer: expected (player, text, opts?)");
-            return;
-        }
-        // Bad argument (not a player) is the caller's bug — throw, mirroring Entity.setVisibleTo.
-        auto *entity = v8pp::class_<Entity>::unwrap_object(isolate, info[0]);
-        if (!entity) {
-            ThrowTypeError(isolate, "Chat.sendToPlayer: expected a Player");
-            return;
-        }
-        auto *handle = entity->GetHandle();
-        if (!handle) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: player has no owning connection")));
-            return;
-        }
-        std::string author;
-        uint32_t color = 0;
-        if (info.Length() >= 3) {
-            ReadOptions(isolate, info[2], author, color);
-        }
-        if (!Send(v8pp::from_v8<std::string>(isolate, info[1]), author, color, MafiaNet::ToGuid(handle->ownerGUID), false)) {
-            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Chat.sendToPlayer: network peer unavailable")));
-        }
+    void Chat::Register(Bind::Registrar &registrar, Bind::Languages languages) {
+        registrar.Global(Definition(), languages);
     }
 } // namespace Framework::Scripting::Builtins
