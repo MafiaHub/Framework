@@ -86,6 +86,10 @@ namespace Framework::GUI {
         Manager();
         ~Manager();
 
+        // Init's Error::code when files CEF needs are not next to the module; the message lists them.
+        // An interrupted update or an antivirus quarantine is the usual cause.
+        static constexpr int32_t kErrorMissingRuntimeFiles = 1;
+
         [[nodiscard]] Utils::Result<void, Error> Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
         void Shutdown() override;
 

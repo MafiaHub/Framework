@@ -35,6 +35,7 @@ void operator delete(void *block, std::size_t) noexcept {
 /* TEST CATEGORIES */
 #include "modules/asset_http_ut.h"
 #include "modules/bitops_ut.h"
+#include "modules/cef_runtime_files_ut.h"
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
@@ -179,6 +180,7 @@ int main() {
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);
+    UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
 

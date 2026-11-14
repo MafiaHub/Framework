@@ -16,6 +16,7 @@
 #include "gui/backend/view_d3d11.h"
 #include "gui/backend/view_d3d12.h"
 #include "gui/backend/view_d3d9.h"
+#include "gui/cef/runtime_files.h"
 #include "gui/resources/scheme.h"
 
 #include "include/cef_scheme.h"
@@ -120,62 +121,6 @@ namespace Framework::GUI {
             case CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: return "the profile was handed to an already-running browser process";
             case CEF_RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED: return "the system is out of a resource CEF needs (handles, memory, desktop heap)";
             default: return "";
-            }
-        }
-
-        std::string ResolveUiLocaleName() {
-            wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
-            if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT), name, LOCALE_NAME_MAX_LENGTH, 0) == 0) {
-                return {};
-            }
-            return std::filesystem::path(name).string();
-        }
-
-        void AuditCefRuntimeFiles(const std::filesystem::path &moduleDir) {
-            const auto logger = Framework::Logging::GetLogger("Web");
-
-            static constexpr const char *kRequiredFiles[] = {"libcef.dll", "cef_subprocess.exe", "chrome_elf.dll", "icudtl.dat", "resources.pak", "chrome_100_percent.pak", "chrome_200_percent.pak", "v8_context_snapshot.bin"};
-
-            std::error_code error;
-            bool complete = true;
-            for (const char *file : kRequiredFiles) {
-                const std::filesystem::path candidate = moduleDir / file;
-                if (!std::filesystem::is_regular_file(candidate, error)) {
-                    logger->error("CEF runtime file is missing: {}", candidate.string());
-                    complete = false;
-                }
-            }
-
-            const std::filesystem::path localesDir = moduleDir / "locales";
-            if (!std::filesystem::is_directory(localesDir, error)) {
-                logger->error("CEF locales directory is missing: {}", localesDir.string());
-                return;
-            }
-
-            std::size_t pakCount = 0;
-            for (const auto &entry : std::filesystem::directory_iterator(localesDir, error)) {
-                if (entry.path().extension() == ".pak") {
-                    ++pakCount;
-                }
-            }
-
-            const std::string uiLocale = ResolveUiLocaleName();
-            if (uiLocale.empty()) {
-                logger->error("CEF locales: {} pak(s) in '{}', OS UI locale could not be resolved", pakCount, localesDir.string());
-            }
-            else {
-                // Chromium falls back from the full name to the bare language.
-                const std::size_t separator          = uiLocale.find('-');
-                const std::filesystem::path exact    = localesDir / (uiLocale + ".pak");
-                const std::filesystem::path language = separator == std::string::npos ? exact : localesDir / (uiLocale.substr(0, separator) + ".pak");
-                const bool localeAvailable           = std::filesystem::is_regular_file(exact, error) || std::filesystem::is_regular_file(language, error);
-
-                logger->error("CEF locales: {} pak(s) in '{}', OS UI locale '{}', matching pak {}", pakCount, localesDir.string(), uiLocale, localeAvailable ? "present" : "MISSING");
-                complete = complete && localeAvailable;
-            }
-
-            if (complete) {
-                logger->error("CEF runtime files are all present; the failure is not a missing file");
             }
         }
 
@@ -319,6 +264,16 @@ namespace Framework::GUI {
             return Error("Failed to resolve owning module for the CEF subprocess path");
         }
         const std::filesystem::path moduleDir        = moduleDirName;
+
+        // Checked here because Chromium aborts the process over a missing file, not the call
+        if (const auto missing = CEF::MissingRuntimeFiles(moduleDir); !missing.empty()) {
+            std::string names;
+            for (const auto &file : missing) {
+                names += names.empty() ? file : ", " + file;
+            }
+            Framework::Logging::GetLogger("Web")->error("CEF runtime files are missing from '{}': {}", moduleDir.string(), names);
+            return Error("CEF runtime files are missing from '" + moduleDir.string() + "': " + names, kErrorMissingRuntimeFiles);
+        }
         const std::filesystem::path subprocessPath   = moduleDir / "cef_subprocess.exe";
         CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
 
@@ -367,7 +322,7 @@ namespace Framework::GUI {
                 logger->error("{}", hint);
             }
             logger->error("CefInitialize inputs: module '{}', cache profile '{}'", moduleDir.string(), cacheRoot.string());
-            AuditCefRuntimeFiles(moduleDir);
+            logger->error("CEF runtime files are all present; the failure is not a missing file");
             if (std::filesystem::exists(cefLogPath, logDirError)) {
                 logger->error("Chromium logged the underlying error to '{}'", cefLogPath.string());
             }
