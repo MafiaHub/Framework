@@ -6,10 +6,17 @@ on:
     paths:
       - 'types/**'
       - 'LICENSE.txt'
+      - '.github/workflows/publish_types.yml'
+  workflow_dispatch:
 
 permissions:
   id-token: write
-  contents: write
+  contents: read
+
+# Never run two publishes at once: both would compute the same next version.
+concurrency:
+  group: publish-types
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -19,7 +26,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: develop
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -30,20 +36,29 @@ jobs:
       - name: Ensure npm supports trusted publishing
         run: npm install -g npm@latest
 
-      - name: Bump patch version
+      # npm is the source of truth for the published version; develop is
+      # protected, so CI cannot write a bump back. The next version is a patch
+      # on top of the latest published one, unless types/package.json was
+      # raised above it by hand (a minor or major bump), which is then used
+      # as is.
+      - name: Compute version
         working-directory: types
         run: |
-          NEW_VERSION=$(npm version patch --no-git-tag-version)
-          echo "VERSION=${NEW_VERSION}" >> $GITHUB_ENV
+          PUBLISHED=$(npm view @mafiahub/types version)
+          LOCAL=$(node -p "require('./package.json').version")
+          NEWER=$(node -e '
+            const [a, b] = process.argv.slice(1).map(v => v.split(".").map(Number));
+            for (let i = 0; i < 3; i++) if (a[i] !== b[i]) { console.log(a[i] > b[i] ? "local" : "published"); process.exit(); }
+            console.log("published");
+          ' "$LOCAL" "$PUBLISHED")
+          if [ "$NEWER" = "local" ]; then
+            echo "Using hand-set version $LOCAL (npm has $PUBLISHED)"
+          else
+            npm version "$PUBLISHED" --no-git-tag-version --allow-same-version
+            npm version patch --no-git-tag-version
+          fi
+          echo "Publishing $(node -p "require('./package.json').version")"
 
       - name: Publish to npm
         working-directory: types
         run: npm publish --access public
-
-      - name: Commit version bump
-        run: |
-          git config user.name "MafiaHub CI"
-          git config user.email "${{ secrets.MHCI_MAIL }}"
-          git add types/package.json
-          git commit -m "ci: publish @mafiahub/types ${{ env.VERSION }} [skip ci]"
-          git push origin develop
