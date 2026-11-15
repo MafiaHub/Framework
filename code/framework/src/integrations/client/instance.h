@@ -31,6 +31,7 @@
 #include "utils/streamed_assets/policy.h"
 #include "voice/client/voice_client.h"
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -187,6 +188,8 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Framework::GUI::Manager> _webManager;
         // Not owned; the reporter is process-wide.
         External::Sentry::Wrapper *_crashReporter = nullptr;
+        // When Update last put crash reporting back in front of the top-level exception filter.
+        std::chrono::steady_clock::time_point _crashFilterCheckedAt {};
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;

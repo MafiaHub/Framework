@@ -39,6 +39,9 @@ namespace Framework::External::Sentry {
         LPTOP_LEVEL_EXCEPTION_FILTER gNext = nullptr;
         bool gInstalled                    = false;
 
+        // Whatever displaced the trail from the top after Install, run once crashpad is done with a crash.
+        std::atomic<LPTOP_LEVEL_EXCEPTION_FILTER> gFollower {nullptr};
+
         // One trail per process: a second thread faulting while the first is
         // being written goes straight on to crashpad.
         std::atomic_flag gWriting = ATOMIC_FLAG_INIT;
@@ -280,7 +283,9 @@ namespace Framework::External::Sentry {
             if (Claim(exceptionInfo)) {
                 Write(exceptionInfo);
             }
-            return gNext != nullptr ? gNext(exceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
+            const LONG result = gNext != nullptr ? gNext(exceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
+            const LPTOP_LEVEL_EXCEPTION_FILTER follower = gFollower.load();
+            return result == EXCEPTION_CONTINUE_SEARCH && follower != nullptr ? follower(exceptionInfo) : result;
         }
     } // namespace
 
@@ -292,6 +297,18 @@ namespace Framework::External::Sentry {
         gNext      = SetUnhandledExceptionFilter(Filter);
     }
 
+    void CrashTrail::Reassert() {
+        if (!gInstalled) {
+            return;
+        }
+        const LPTOP_LEVEL_EXCEPTION_FILTER previous = SetUnhandledExceptionFilter(Filter);
+        if (previous == Filter || previous == nullptr) {
+            return;
+        }
+        gFollower.store(previous);
+        Framework::Logging::GetLogger("CrashTrail")->info("The exception filter at {} had replaced crash reporting; crash reporting is back in front and it runs after", Describe(reinterpret_cast<std::uint64_t>(previous)));
+    }
+
     void CrashTrail::Record(EXCEPTION_POINTERS *exceptionInfo) {
         if (exceptionInfo != nullptr && Claim(exceptionInfo)) {
             Write(exceptionInfo);
@@ -300,5 +317,6 @@ namespace Framework::External::Sentry {
 #else
     void CrashTrail::Install() {}
     void CrashTrail::Record(_EXCEPTION_POINTERS *) {}
+    void CrashTrail::Reassert() {}
 #endif
 } // namespace Framework::External::Sentry
