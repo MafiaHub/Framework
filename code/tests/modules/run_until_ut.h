@@ -15,8 +15,10 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -425,12 +427,22 @@ MODULE(run_until, {
         EQUALS(rig.Start({"interval"}), true);
         rig.engine.Tick();
 
+        // How many 10 ms waits this machine fits in 500 ms: a loaded runner's timer slack (macOS coalesces timers)
+        // can leave well under the 50 due, for the loop and for anything else that sleeps.
+        int wakes             = 0;
+        const auto measureEnd = Clock::now() + std::chrono::milliseconds(500);
+        while (Clock::now() < measureEnd) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            ++wakes;
+        }
+
         const int before = TestManagerHelper::RecordedValue("fired");
         rig.engine.RunUntil(Clock::now() + std::chrono::milliseconds(500));
         const int fired = TestManagerHelper::RecordedValue("fired") - before;
-        // 50 are due, and no tick runs in the window: a wait that slept past them would run none at all. The bound
-        // leaves room for a loaded machine's timer slack.
-        EQUALS(fired >= 20, true);
+        fprintf(stderr, "run_until: the interval fired %d times in 500 ms, where the machine woke from 10 ms sleeps %d times\n", fired, wakes);
+        // No tick runs in the window: a wait that slept past the timers would run none at all, and one that woke only
+        // at the deadline once. Half of what the machine itself manages leaves room for the loop's own work.
+        GREATEREQ(fired, wakes / 2);
     });
 
     IT("returns at the deadline while a resource keeps itself busy", {

@@ -241,6 +241,12 @@ namespace ServerScriptThreadTest {
     // A script that computes for 600 ms out of every 650, and leaves a file once it has done so a few times. Long
     // on purpose: a hosted CI runner stalls a thread for tens of milliseconds on its own, and what is measured has
     // to stand well clear of that.
+    // How long the test scripts hold their thread at a time (the `Date.now() + 600` in each). A tick that waited for a
+    // script would see a gap of at least this, so a bound well short of it tells the two apart on any machine, where
+    // a fixed one does not: a hosted macOS runner already spaces its ticks 130-310 ms apart with nothing waiting.
+    constexpr double kScriptBurstMs = 600.0;
+    constexpr double kLongestGapMs  = kScriptBurstMs * 0.75;
+
     inline const char *kBusyScript = R"(
         const fs = require('node:fs');
         let rounds = 0;
@@ -255,6 +261,7 @@ namespace ServerScriptThreadTest {
 
 MODULE(server_script_thread, {
     using ServerScriptThreadTest::kBusyScript;
+    using ServerScriptThreadTest::kLongestGapMs;
     using ServerScriptThreadTest::Server;
     using namespace std::chrono_literals;
 
@@ -271,8 +278,9 @@ MODULE(server_script_thread, {
             true);
         fprintf(stderr, "server_script_thread: longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
         // The script held its thread for 600 ms at a time, three times over, and no tick waited that out.
-        LESSER(server.longestGapMs, 300.0);
-        GREATER(server.ticks, 20);
+        LESSER(server.longestGapMs, kLongestGapMs);
+        // Three bursts of 650 ms, with no gap past the bound.
+        GREATEREQ(server.ticks, static_cast<int>(3 * 650 / kLongestGapMs));
         server.Stop();
     });
 
@@ -304,7 +312,7 @@ MODULE(server_script_thread, {
         }),
             true);
         fprintf(stderr, "server_script_thread: after a nested call, longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
-        LESSER(server.longestGapMs, 300.0);
+        LESSER(server.longestGapMs, kLongestGapMs);
         server.Stop();
     });
 
@@ -333,7 +341,7 @@ MODULE(server_script_thread, {
         }),
             true);
         fprintf(stderr, "server_script_thread: beside other timers, longest gap between ticks %.1f ms over %d ticks\n", server.longestGapMs, server.ticks);
-        LESSER(server.longestGapMs, 300.0);
+        LESSER(server.longestGapMs, kLongestGapMs);
         server.Stop();
     });
 
@@ -412,7 +420,7 @@ MODULE(server_script_thread, {
         }),
             true);
         EQUALS(postedElsewhere.load(), true);
-        LESSER(server.longestGapMs, 300.0);
+        LESSER(server.longestGapMs, kLongestGapMs);
         server.Stop();
     });
 
