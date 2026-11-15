@@ -221,7 +221,11 @@ if(WIN32)
         src/utils/hooking/pattern_table.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp)
-    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED)
+    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED)
+    # The image's stack reserve is the main thread's, and also every thread's created without a size of its own: the
+    # Windows thread pool, std::thread, input and audio helpers. 12 MB each is a lot of a 32-bit game's address space
+    # for threads that touch a few KB, so a launcher can set FW_LAUNCHER_STACK_RESERVE (bytes) to what its game needs.
+    target_link_options(FrameworkLoader PUBLIC "/STACK:$<IF:$<BOOL:$<TARGET_PROPERTY:FW_LAUNCHER_STACK_RESERVE>>,$<TARGET_PROPERTY:FW_LAUNCHER_STACK_RESERVE>,12000000>,4096")
 
     if(FW_DLL_INJECTION)
         target_compile_definitions(FrameworkLoader PUBLIC FW_DLL_INJECTION)
