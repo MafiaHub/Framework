@@ -45,13 +45,14 @@ namespace Framework::External::Sentry {
         static void Record(_EXCEPTION_POINTERS *exceptionInfo);
 
         /**
-         * Puts the trail back in front of whatever replaced the top-level filter
-         * since Install. A game's C runtime installs its own as it starts, after
-         * a mod's entry point has brought crashpad up, and the Visual C++ 2008
-         * one discards the filter it replaces: from then on no crash reaches
-         * crashpad. What replaced the trail now runs after crashpad instead, if
-         * crashpad hands the exception back. Cheap; call it whenever something
-         * may have installed a filter since.
+         * Takes the top-level filter back from whatever replaced it since
+         * Install, without taking anything from that filter. A game's C runtime
+         * installs its own as it starts, after a mod's entry point has brought
+         * crashpad up, and the Visual C++ 2008 one discards the filter it
+         * replaces, so no later crash reaches crashpad. Afterwards the replacing
+         * filter still runs first and keeps its verdict -- handled, continued,
+         * reported its own way -- and only an exception it lets fall through
+         * goes on to the trail and crashpad, as if it had chained to them.
          */
         static void Reassert();
     };

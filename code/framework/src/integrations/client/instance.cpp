@@ -40,7 +40,6 @@
 #include <cppfs/fs.h>
 
 #include <algorithm>
-#include <chrono>
 #include <filesystem>
 #include <iterator>
 #include <limits>
@@ -271,9 +270,8 @@ namespace Framework::Integrations::Client {
         }
 
         // The game's own C runtime started between the mod's entry point and here, and may have put its
-        // exception filter in front of crash reporting; Update keeps checking for anything that does later.
+        // exception filter in front of crash reporting without chaining to it.
         External::Sentry::CrashTrail::Reassert();
-        _crashFilterCheckedAt = std::chrono::steady_clock::now();
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
@@ -545,11 +543,6 @@ namespace Framework::Integrations::Client {
         {
             FW_PROFILE_SCOPE_N("Client::PostUpdate");
             PostUpdate();
-        }
-
-        if (const auto now = std::chrono::steady_clock::now(); now - _crashFilterCheckedAt >= std::chrono::seconds(1)) {
-            _crashFilterCheckedAt = now;
-            External::Sentry::CrashTrail::Reassert();
         }
 
         FW_PROFILE_FRAME();

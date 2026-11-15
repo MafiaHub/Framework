@@ -39,8 +39,10 @@ namespace Framework::External::Sentry {
         LPTOP_LEVEL_EXCEPTION_FILTER gNext = nullptr;
         bool gInstalled                    = false;
 
-        // Whatever displaced the trail from the top after Install, run once crashpad is done with a crash.
-        std::atomic<LPTOP_LEVEL_EXCEPTION_FILTER> gFollower {nullptr};
+        // The filter that displaced the trail from the top after Install. It still decides first.
+        std::atomic<LPTOP_LEVEL_EXCEPTION_FILTER> gDisplaced {nullptr};
+        // The thread inside gDisplaced, so a displaced filter that chains back here is not called again.
+        std::atomic<DWORD> gInDisplaced {0};
 
         // One trail per process: a second thread faulting while the first is
         // being written goes straight on to crashpad.
@@ -280,12 +282,23 @@ namespace Framework::External::Sentry {
         }
 
         LONG WINAPI Filter(EXCEPTION_POINTERS *exceptionInfo) {
+            // A filter that displaced the trail keeps every decision it makes: it may handle the exception,
+            // continue execution or report the crash its own way. Only what it lets fall through, which
+            // would otherwise end in Windows Error Reporting unreported, goes on to the trail and crashpad.
+            const LPTOP_LEVEL_EXCEPTION_FILTER displaced = gDisplaced.load();
+            const DWORD thread                           = GetCurrentThreadId();
+            if (displaced != nullptr && gInDisplaced.load() != thread) {
+                gInDisplaced.store(thread);
+                const LONG verdict = displaced(exceptionInfo);
+                gInDisplaced.store(0);
+                if (verdict != EXCEPTION_CONTINUE_SEARCH) {
+                    return verdict;
+                }
+            }
             if (Claim(exceptionInfo)) {
                 Write(exceptionInfo);
             }
-            const LONG result = gNext != nullptr ? gNext(exceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
-            const LPTOP_LEVEL_EXCEPTION_FILTER follower = gFollower.load();
-            return result == EXCEPTION_CONTINUE_SEARCH && follower != nullptr ? follower(exceptionInfo) : result;
+            return gNext != nullptr ? gNext(exceptionInfo) : EXCEPTION_CONTINUE_SEARCH;
         }
     } // namespace
 
@@ -305,8 +318,8 @@ namespace Framework::External::Sentry {
         if (previous == Filter || previous == nullptr) {
             return;
         }
-        gFollower.store(previous);
-        Framework::Logging::GetLogger("CrashTrail")->info("The exception filter at {} had replaced crash reporting; crash reporting is back in front and it runs after", Describe(reinterpret_cast<std::uint64_t>(previous)));
+        gDisplaced.store(previous);
+        Framework::Logging::GetLogger("CrashTrail")->info("The exception filter at {} had replaced crash reporting; it still runs first, and what it lets through now reaches crash reporting", Describe(reinterpret_cast<std::uint64_t>(previous)));
     }
 
     void CrashTrail::Record(EXCEPTION_POINTERS *exceptionInfo) {
