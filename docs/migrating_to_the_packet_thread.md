@@ -293,6 +293,19 @@ netServer->RegisterRPC<PropBroken>([](const PropBroken &msg, Sender sender, Worl
   it anyway: the first binding or tick service that reads it is a race.
 - Small things that guard themselves (a `std::atomic` counter, a map behind
   its own mutex that is never held across a call) need not be registered.
+- Or leave the state where it is and move the handler to it. A service that
+  `PostUpdate` and scripts use, and handlers change, can keep its plain
+  members if those handlers are registered for the tick thread, which is
+  where the handler ran before:
+
+  ```cpp
+  netServer->RegisterRPC<PropBroken>([this](const PropBroken &msg, Sender, World &) {
+      _destruction.MarkBroken(msg.propId);
+  }, Framework::Networking::HandlerThread::Tick);
+  ```
+
+  It runs at the tick's next completions rather than at once. See "Running
+  a handler on the tick or the script thread" in `server_threading.md`.
 
 ## 4. The `On*` instance overrides
 

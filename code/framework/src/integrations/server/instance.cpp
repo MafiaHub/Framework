@@ -274,6 +274,14 @@ namespace Framework::Integrations::Server {
         _assetFileServer.Register(webWorkers - kWorkersKeptFromDownloads);
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
+        // Where RPC handlers registered for the tick or the script thread are handed (RegisterRPC's
+        // HandlerThread). The tick runs them among its completions; the script thread among its tasks.
+        _networkingEngine->GetNetworkServer()->SetHandlerPoster(Framework::Networking::HandlerThread::Tick, [scheduler = _scheduler.get()](fu2::unique_function<void()> task) {
+            scheduler->PostToOwner(std::move(task));
+        });
+        _networkingEngine->GetNetworkServer()->SetHandlerPoster(Framework::Networking::HandlerThread::Script, [this](fu2::unique_function<void()> task) {
+            PostToScripts(std::move(task));
+        });
 
         // Before any peer can connect, so the very first handshake already carries it.
         PublishSessionConfig();

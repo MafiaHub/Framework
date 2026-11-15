@@ -105,6 +105,14 @@ namespace ServerPacketThreadTest {
     struct Mood: Value {
         static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::Mood");
     };
+    // Registered for the tick thread: recorded with its thread, and answered with a Pong.
+    struct TickNote: Value {
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::TickNote");
+    };
+    // Registered for the script thread: recorded with its thread.
+    struct ScriptNote: Value {
+        static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::ScriptNote");
+    };
     // Reports what the handler is given for its sender.
     struct Who: Value {
         static constexpr auto kIdentifier = FW_RPC_IDENTIFIER("Test::PacketThread::Who");
@@ -152,6 +160,10 @@ namespace ServerPacketThreadTest {
         std::atomic<bool> blocked {false};
         std::atomic<bool> release {false};
         std::atomic<int> whos {0};
+        // TickNote and ScriptNote, with the thread each ran on and whether it found the sender's avatar.
+        std::vector<uint32_t> postedNotes;
+        std::vector<std::thread::id> postedThreads;
+        std::atomic<int> postedWithAvatar {0};
         std::atomic<uint64_t> whoAvatar {~0ull};
         std::atomic<bool> whoHandleEmpty {false};
         // The avatar the test destroyed under the queued packet, for its handler to ask for.
@@ -238,6 +250,28 @@ namespace ServerPacketThreadTest {
                 }
                 blocked = false;
             });
+            net->RegisterRPC<TickNote>(
+                [this](const TickNote &note, Sender sender, World &world) {
+                    if (world.Read<Avatar>(sender.Avatar())) {
+                        ++postedWithAvatar;
+                    }
+                    {
+                        const std::lock_guard guard(mutex);
+                        postedNotes.push_back(note.value);
+                        postedThreads.push_back(std::this_thread::get_id());
+                    }
+                    Pong pong;
+                    pong.value = note.value;
+                    sender.Reply(pong);
+                },
+                Framework::Networking::HandlerThread::Tick);
+            net->RegisterRPC<ScriptNote>(
+                [this](const ScriptNote &note, Sender, World &) {
+                    const std::lock_guard guard(mutex);
+                    postedNotes.push_back(note.value);
+                    postedThreads.push_back(std::this_thread::get_id());
+                },
+                Framework::Networking::HandlerThread::Script);
             net->RegisterRPC<Who>([this](const Who &, Sender sender, World &world) {
                 const uint64_t avatar = sender.Avatar();
                 whoAvatar             = avatar;
@@ -805,6 +839,84 @@ MODULE(server_packet_thread, {
         // How many ticks fit in the handler's time is the runner's speed, not the packet thread's: Pump ticks back to
         // back, and a macOS runner takes 100-150 ms a tick. The gap bound is the guarantee; it implies this many.
         GREATEREQ(ticksDuring, static_cast<int>(kHandlerMs / kLongestGap));
+        server.Stop();
+    });
+
+    IT("runs a handler registered for the tick on the tick thread, in order, with a usable sender", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_tick_handler");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        constexpr uint32_t kCount = 50;
+        for (uint32_t i = 0; i < kCount; ++i) {
+            client.Send<TickNote>(i);
+        }
+        EQUALS(Pump(server, {&client}, [&] {
+            return client.pongs.size() >= kCount;
+        }),
+            true);
+        std::vector<uint32_t> notes;
+        std::vector<std::thread::id> threads;
+        {
+            const std::lock_guard guard(server.mutex);
+            notes   = server.postedNotes;
+            threads = server.postedThreads;
+        }
+        EQUALS(notes.size(), static_cast<size_t>(kCount));
+        uint32_t inOrder = 0;
+        while (inOrder < notes.size() && notes[inOrder] == inOrder) {
+            ++inOrder;
+        }
+        EQUALS(inOrder, kCount);
+        // This thread runs the ticks: every handler ran here.
+        size_t onTick = 0;
+        for (const std::thread::id thread : threads) {
+            onTick += thread == std::this_thread::get_id() ? 1 : 0;
+        }
+        EQUALS(onTick, static_cast<size_t>(kCount));
+        // The sender kept its avatar and could answer from there.
+        EQUALS(server.postedWithAvatar.load(), static_cast<int>(kCount));
+        server.Stop();
+    });
+
+    IT("runs a handler registered for scripts on the script thread", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_script_handler");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        client.Send<Note>(1);
+        client.Send<ScriptNote>(2);
+        EQUALS(Pump(server, {&client}, [&] {
+            const std::lock_guard guard(server.mutex);
+            return server.notes.size() == 1 && server.postedNotes.size() == 1;
+        }),
+            true);
+        std::thread::id packetThread;
+        std::thread::id scriptThread;
+        {
+            const std::lock_guard guard(server.mutex);
+            packetThread = server.noteThreads.empty() ? std::thread::id() : server.noteThreads[0];
+            scriptThread = server.postedThreads.empty() ? std::thread::id() : server.postedThreads[0];
+        }
+        EQUALS(scriptThread != std::thread::id(), true);
+        EQUALS(scriptThread != std::this_thread::get_id(), true);
+        EQUALS(scriptThread != packetThread, true);
         server.Stop();
     });
 

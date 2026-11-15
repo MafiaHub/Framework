@@ -21,6 +21,7 @@
 #include <utils/result.h>
 
 #include <atomic>
+#include <memory>
 #include <chrono>
 #include <mafianet/peer_interface.h>
 #include <mafianet/types.h>
@@ -57,6 +58,20 @@ namespace Framework::Networking {
         // never answers.
         uint32_t sessionTimeoutMs = 60000;
     };
+
+    // Where a server RPC handler runs. Packet is where packets arrive: soonest, and for handlers that
+    // touch entities (by handle) and send. Tick and Script are for a handler that works on what a
+    // mod keeps outside the world, which those two threads own between them: the payload is decoded
+    // on the packet thread and the handler posted there, so it runs later, in arrival order with
+    // the other handlers posted to the same thread.
+    enum class HandlerThread : uint8_t {
+        Packet,
+        Tick,
+        Script,
+    };
+
+    // Hands a task to a thread (HandlerThread::Tick or Script). Set by the server instance.
+    using HandlerPoster = fu2::function<void(fu2::unique_function<void()>) const>;
 
     class NetworkServer final: public NetworkPeer {
       private:
@@ -109,6 +124,13 @@ namespace Framework::Networking {
 
         void ClearClientState(MafiaNet::RakNetGUID guid);
 
+        // Tick and Script; set before the packet thread starts and read there without a lock.
+        HandlerPoster _posters[2];
+        const HandlerPoster &PosterFor(HandlerThread thread, RPC::Identifier identifier) const;
+        // Runs a posted handler on its thread, with what the packet thread's wrapper gives a handler
+        // that throws.
+        static void RunPosted(RPC::Identifier identifier, MafiaNet::RakNetGUID guid, fu2::unique_function<void()> &handler);
+
       public:
         NetworkServer(): NetworkPeer() {}
 
@@ -137,21 +159,50 @@ namespace Framework::Networking {
         // that sent it and the world, through which it reaches entities by handle (see
         // replication/world.h). A payload whose Serialize read past the end of what the client sent
         // (see RPC::ReadChecked) is dropped before the handler, counted (ShortPayloadsDropped) and
-        // logged at most once a second. Handlers run where packets are drained, on a server its packet
-        // thread, one at a time; register them before it starts (an instance's PostInit or
-        // PostScriptInit), since the table they go in is read there without a lock: registering
-        // once a packet thread has started logs critical and aborts.
+        // logged at most once a second. Register handlers before the packet thread starts (an
+        // instance's PostInit or PostScriptInit), since the table they go in is read there without a
+        // lock: registering once a packet thread has started logs critical and aborts.
+        //
+        // `thread` says where the handler runs. Packet handlers run one at a time on the packet
+        // thread and are timed against the slow-handler budget. A Tick or Script handler is decoded
+        // there and posted: it is given the same Sender, which stays usable (Reply, Drop, Avatar)
+        // although the connection may have closed in the meantime, and the same world.
         template <RPC::Payload T>
-        void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler) {
-            RegisterRawRPC(T::kIdentifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
+        void RegisterRPC(fu2::function<void(const T &payload, Sender sender, Replication::World &world) const> handler, HandlerThread thread = HandlerThread::Packet) {
+            if (thread == HandlerThread::Packet) {
+                RegisterRawRPC(T::kIdentifier, [this, cb = std::move(handler)](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
+                    T payload {};
+                    if (!RPC::ReadChecked(bs, payload)) {
+                        NoteShortPayload(T::kIdentifier, sender.Connection());
+                        return;
+                    }
+                    cb(payload, sender, world);
+                });
+                return;
+            }
+            const HandlerPoster &post = PosterFor(thread, T::kIdentifier);
+            using Handler             = fu2::function<void(const T &, Sender, Replication::World &) const>;
+            auto shared               = std::make_shared<const Handler>(std::move(handler));
+            RegisterRawRPC(T::kIdentifier, [this, &post, shared](MafiaNet::BitStream *bs, Sender sender, Replication::World &world) {
                 T payload {};
                 if (!RPC::ReadChecked(bs, payload)) {
                     NoteShortPayload(T::kIdentifier, sender.Connection());
                     return;
                 }
-                cb(payload, sender, world);
+                post([shared, payload = std::move(payload), sender, world = &world]() mutable {
+                    fu2::unique_function<void()> call = [&] {
+                        (*shared)(payload, sender, *world);
+                    };
+                    RunPosted(T::kIdentifier, sender.Connection(), call);
+                });
             });
         }
+
+        // Where Tick and Script handlers are handed (RegisterRPC's `thread`). The server instance sets
+        // both before PostInit; a NetworkServer used without one sets them itself before registering
+        // such a handler, or the registration logs critical and aborts. Not after the packet thread
+        // has started.
+        void SetHandlerPoster(HandlerThread thread, HandlerPoster poster);
 
         // Raw variant for handlers that decode the bitstream themselves, and so answer for what a short
         // or hostile one decodes to: every BitStream read says whether it got its bits.

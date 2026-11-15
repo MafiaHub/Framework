@@ -320,6 +320,39 @@ on the packet thread without a lock, so registering later logs a critical
 line and aborts. The client's handler form, which is given the packet, does
 not exist on a server: it is `NetworkClient`'s.
 
+#### Running a handler on the tick or the script thread
+
+A handler that works on what the mod keeps outside the world (a service's
+maps, a registry it has not registered) says where it runs instead of
+guarding that state itself:
+
+```cpp
+net->RegisterRPC<ShopBuy>([this](const ShopBuy &msg, Sender sender, World &world) {
+    // On the tick thread: _shop is the tick's, as in PostUpdate.
+    _shop.Buy(sender.Avatar(), msg.item);
+}, Framework::Networking::HandlerThread::Tick);
+```
+
+- `HandlerThread::Packet`, the default, is what is described above.
+- `HandlerThread::Tick` runs the handler among the tick's completions, where
+  `PostUpdate` and the state it owns are. `HandlerThread::Script` runs it
+  among the script thread's tasks.
+- The payload is decoded on the packet thread, so a payload cut short is
+  still dropped there. The handler is then posted, and runs later: a tick
+  handler waits for the tick's next completions. Handlers posted to one
+  thread run in the order their packets arrived.
+- It is given the same `Sender` and `World`. The sender stays usable
+  (`Reply`, `Drop`, `Avatar`), though its connection may have closed in the
+  meantime; `Avatar()` is then 0. Entities are still reached by handle.
+- It is not timed against `slow-packet-handler-ms`, and one that throws is
+  logged as on the packet thread.
+- An `Instance` sets where both go before `PostInit`. A `NetworkServer` used
+  without one calls `SetHandlerPoster` first; registering a tick or script
+  handler with none set logs a critical line and aborts.
+
+This is FiveM's arrangement, where a packet's work is handed to the thread
+that owns what it changes (`gscomms_execute_callback_on_main_thread`).
+
 Sends (`SendRPC`, `BroadcastRPC`, `SignalExcept`, `Sender::Reply`) are
 callable from any thread, with or without a handle held.
 
@@ -617,7 +650,8 @@ overflow.". A rate of 0 turns a limit off.
 What it touches is an entity, registered state, or something that guards
 itself (a mutex of its own, an atomic). `this` captured to call
 `PostToScripts` is fine; `this->_registry` read on the packet thread while
-`PostUpdate` writes it is a data race.
+`PostUpdate` writes it is a data race. Register such a handler for the
+thread that owns `_registry` (`HandlerThread::Tick`) instead.
 
 ### Consistency is per entity
 

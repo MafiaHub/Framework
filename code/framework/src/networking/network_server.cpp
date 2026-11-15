@@ -80,6 +80,45 @@ namespace Framework::Networking {
         });
     }
 
+    void NetworkServer::SetHandlerPoster(HandlerThread thread, HandlerPoster poster) {
+        if (thread == HandlerThread::Packet) {
+            return;
+        }
+        if (_registrationsClosed.load(std::memory_order_acquire)) {
+            const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+            logger->critical("A handler poster was set after the packet thread started; set it before PostInit");
+            logger->flush();
+            std::abort();
+        }
+        _posters[static_cast<size_t>(thread) - 1] = std::move(poster);
+    }
+
+    const HandlerPoster &NetworkServer::PosterFor(HandlerThread thread, RPC::Identifier identifier) const {
+        const HandlerPoster &poster = _posters[static_cast<size_t>(thread) - 1];
+        if (!poster) {
+            // A handler with nowhere to run would drop every packet of its RPC without a word.
+            const auto logger = Logging::GetLogger(FRAMEWORK_INNER_NETWORKING);
+            logger->critical("RPC handler ({:016x}) registered for the {} thread, which this server has no poster for (SetHandlerPoster)", identifier.digest, thread == HandlerThread::Tick ? "tick" : "script");
+            logger->flush();
+            std::abort();
+        }
+        return poster;
+    }
+
+    void NetworkServer::RunPosted(RPC::Identifier identifier, MafiaNet::RakNetGUID guid, fu2::unique_function<void()> &handler) {
+        // As on the packet thread: a handler that throws loses its own packet, not the thread it was
+        // posted to.
+        try {
+            handler();
+        }
+        catch (const std::exception &error) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Handler of RPC {:016x} threw on a packet from {}: {}", identifier.digest, guid.g, error.what());
+        }
+        catch (...) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Handler of RPC {:016x} threw on a packet from {}", identifier.digest, guid.g);
+        }
+    }
+
     void NetworkServer::NoteHandlerTime(RPC::Identifier identifier, std::chrono::steady_clock::duration elapsed) {
         const int32_t warnMs = _slowHandlerWarnMs.load(std::memory_order_relaxed);
         if (warnMs <= 0 || elapsed < std::chrono::milliseconds(warnMs)) {
