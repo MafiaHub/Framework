@@ -114,10 +114,14 @@ jobs:
       # /Z7 keeps the debug information inside the archives, so a project's final link still writes a
       # full PDB with no separate symbol files to carry. No /GL: whole-program objects bind to the exact
       # toolset and would break the "equal or newer MSVC" rule FrameworkAbi.cmake enforces.
+      #
+      # FW_PROFILING=OFF: the SDK is what players' clients and servers link. Tracy in on-demand mode still keeps
+      # what its allocator once reached (measured in M2O's 32-bit client: ~0.5 GB of a 4 GB address space,
+      # never released), and a shipped build has no profiler to connect. Profile from a source build instead.
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         run: >
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW_BUILD_TESTS=OFF
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW_BUILD_TESTS=OFF -DFW_PROFILING=OFF
           -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
           -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
           -DCMAKE_C_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG"
@@ -126,7 +130,7 @@ jobs:
       - name: Configure (Linux)
         if: runner.os == 'Linux'
         run: >
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW_BUILD_TESTS=OFF
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW_BUILD_TESTS=OFF -DFW_PROFILING=OFF
           -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
           -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -g"
           -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -g"
