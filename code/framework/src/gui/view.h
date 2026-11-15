@@ -119,6 +119,9 @@ namespace Framework::GUI {
         // Submit the view's quad; called inside an ImGui frame on the game thread.
         virtual void SubmitImGuiDraw() {}
 
+        // Drops GPU objects that do not survive a device reset (D3D9 default pool); the next Render rebuilds them.
+        virtual void ReleaseDeviceResources() {}
+
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 

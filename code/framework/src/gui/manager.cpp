@@ -551,6 +551,20 @@ namespace Framework::GUI {
         return _id;
     }
 
+    void Manager::OnDeviceLost() {
+        std::scoped_lock lock(_renderMutex);
+        for (auto &view : _views) {
+            if (view) {
+                view->ReleaseDeviceResources();
+            }
+        }
+        for (auto &[view, frames] : _dyingViews) {
+            if (view) {
+                view->ReleaseDeviceResources();
+            }
+        }
+    }
+
     void Manager::Resize(int width, int height) {
         if (width <= 0 || height <= 0) {
             return;
