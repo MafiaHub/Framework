@@ -840,7 +840,9 @@ MODULE(server_packet_thread, {
         const int ticksDuring = server.ticks - ticksAtStart;
         fprintf(stderr, "server_packet_thread: longest gap between ticks %.1f ms over %d ticks while a handler slept %u ms\n", server.longestGapMs, ticksDuring, kHandlerMs);
         LESSER(server.longestGapMs, kLongestGap);
-        GREATER(ticksDuring, 10);
+        // How many ticks fit in the handler's time is the runner's speed, not the packet thread's: Pump ticks back to
+        // back, and a macOS runner takes 100-150 ms a tick. The gap bound is the guarantee; it implies this many.
+        GREATEREQ(ticksDuring, static_cast<int>(kHandlerMs / kLongestGap));
         server.Stop();
     });
 
