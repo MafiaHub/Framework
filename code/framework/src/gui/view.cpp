@@ -143,9 +143,26 @@ namespace Framework::GUI {
     }
 
     void View::RequestBeginFrame() {
+        if (!_browser) {
+            return;
+        }
+
         // Animating off screen costs a full-viewport composite and memcpy per tick on the pump
         // thread. Offscreen opts back in: with external begin frame, no begin frame is no paint.
-        if (!_browser || (!IsOnScreen() && !_offscreen)) {
+        const bool hidden = !IsOnScreen() && !_offscreen;
+
+        // Withholding begin frames stops the paints, but Chromium still thinks the page is shown:
+        // its timers and animation callbacks keep running in the renderer and the compositor keeps
+        // its frame resources. Tell it, so it can throttle and let them go.
+        if (hidden != _hostHidden) {
+            _hostHidden = hidden;
+            _browser->GetHost()->WasHidden(hidden);
+            if (!hidden) {
+                // The last frame it painted predates the hiding; ask for a current one.
+                _browser->GetHost()->Invalidate(PET_VIEW);
+            }
+        }
+        if (hidden) {
             return;
         }
         _browser->GetHost()->SendExternalBeginFrame();
