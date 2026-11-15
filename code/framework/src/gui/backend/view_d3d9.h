@@ -21,8 +21,9 @@ namespace Framework::GUI {
       private:
         // CPU path only: CEF shared textures are D3D11 resources, unusable on D3D9
         Microsoft::WRL::ComPtr<IDirect3DTexture9> _texture;
-        int _textureWidth  = 0;
-        int _textureHeight = 0;
+        int _textureWidth    = 0;
+        int _textureHeight   = 0;
+        bool _textureManaged = false; // fallback when the device has no dynamic textures
 
       public:
         ViewD3D9(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
@@ -31,6 +32,7 @@ namespace Framework::GUI {
 
         void Render() override;
         void SubmitImGuiDraw() override;
+        void ReleaseDeviceResources() override;
 
         [[nodiscard]] void *GetNativeTexture() const override {
             return _texture.Get();

@@ -77,6 +77,8 @@ namespace Framework::GUI {
         bool _garbageCollected = false;
 
         bool _offscreen = false;
+        // What Chromium was last told: WasHidden(true) while the view neither shows nor paints for a render target.
+        bool _hostHidden = false;
 
         bool _alwaysComposite = false;
         bool _audioMuted      = false;
@@ -118,6 +120,9 @@ namespace Framework::GUI {
 
         // Submit the view's quad; called inside an ImGui frame on the game thread.
         virtual void SubmitImGuiDraw() {}
+
+        // Drops GPU objects that do not survive a device reset (D3D9 default pool); the next Render rebuilds them.
+        virtual void ReleaseDeviceResources() {}
 
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

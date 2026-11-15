@@ -111,6 +111,9 @@ namespace Framework::GUI {
         // Match the viewport and every fullscreen view to a new client size.
         void Resize(int width, int height);
 
+        // Before the host resets its D3D9 device: views release what a reset would invalidate.
+        void OnDeviceLost();
+
         // Game-thread companion to Render(); must be called inside an ImGui frame.
         void SubmitImGuiDraws();
 

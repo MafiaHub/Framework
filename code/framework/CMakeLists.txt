@@ -496,6 +496,12 @@ if(WIN32)
         # Windowed subsystem (no black console window per CEF child) while keeping the int main() entry.
         LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
+    # Every CEF child (renderer, GPU, utility) runs this exe. A 32-bit one without the flag gets 2 GB of
+    # address space instead of 4: a heavy page's renderer then dies with Chromium's out-of-memory code and
+    # CEF reloads the page from its first screen. 32-bit chrome.exe ships with it for the same reason.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_link_options(cef_subprocess PRIVATE /LARGEADDRESSAWARE)
+    endif()
     # Shared by every project, so it carries the Framework's identity rather than a mod's
     fw_set_binary_identity(cef_subprocess PRODUCT "MafiaHub Framework" VERSION ${FW_VERSION} COMPANY "MafiaHub" DESCRIPTION "MafiaHub Framework Web Helper")
     if(TARGET CEFCopyDlls)
