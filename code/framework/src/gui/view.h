@@ -77,8 +77,6 @@ namespace Framework::GUI {
         bool _garbageCollected = false;
 
         bool _offscreen = false;
-        // What Chromium was last told: WasHidden(true) while the view neither shows nor paints for a render target.
-        bool _hostHidden = false;
 
         bool _alwaysComposite = false;
         bool _audioMuted      = false;
