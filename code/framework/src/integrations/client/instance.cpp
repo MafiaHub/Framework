@@ -8,6 +8,8 @@
 
 #include "instance.h"
 
+#include "external/sentry/crash_trail.h"
+
 #include "integrations/shared/rpc/emit_script_event.h"
 #include "integrations/shared/scripting/state_bag_events.h"
 #include "scripting/builtins/entity.h"
@@ -266,6 +268,10 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Crash reporting initialized");
             }
         }
+
+        // The game's own C runtime started between the mod's entry point and here, and may have put its
+        // exception filter in front of crash reporting without chaining to it.
+        External::Sentry::CrashTrail::Reassert();
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {

@@ -253,6 +253,21 @@ fw_set_binary_identity(KCDCClient PRODUCT "Kingdoms Connected" VERSION ${KCDC_VE
 
 `CompanyName` should match the subject of the certificate the release is signed with.
 
+### Stack reserve
+
+FrameworkLoader links every launcher with a 12 MB stack reserve. Windows gives that reserve to the
+main thread, which runs the game, and to every thread created without a size of its own: the
+thread pool, `std::thread`, input and audio helpers. In a 32-bit game that is a lot of address space
+for threads that touch a few KB, so a launcher can set its own, in bytes:
+
+```cmake
+# Mafia II asks for 1 MB itself; 2 MB leaves V8 and CEF room on the main thread.
+set_target_properties(M2OLauncher PROPERTIES FW_LAUNCHER_STACK_RESERVE 2097152)
+```
+
+The game's own `SizeOfStackReserve` is no guide to what the main thread needs once the mod runs
+on it too. Measure the threads' committed stacks before going below what the game declares.
+
 ## Launch Types
 
 `ProjectLaunchType::PE_LOADING` is the default and what every project uses. The cross-process

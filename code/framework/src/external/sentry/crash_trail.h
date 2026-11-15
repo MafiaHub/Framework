@@ -43,5 +43,17 @@ namespace Framework::External::Sentry {
          * that replaces the top-level filter (Unreal does) never reaches Install's.
          */
         static void Record(_EXCEPTION_POINTERS *exceptionInfo);
+
+        /**
+         * Takes the top-level filter back from whatever replaced it since
+         * Install, without taking anything from that filter. A game's C runtime
+         * installs its own as it starts, after a mod's entry point has brought
+         * crashpad up, and the Visual C++ 2008 one discards the filter it
+         * replaces, so no later crash reaches crashpad. Afterwards the replacing
+         * filter still runs first and keeps its verdict -- handled, continued,
+         * reported its own way -- and only an exception it lets fall through
+         * goes on to the trail and crashpad, as if it had chained to them.
+         */
+        static void Reassert();
     };
 } // namespace Framework::External::Sentry
