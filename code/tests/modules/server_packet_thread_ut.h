@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../free_port.h"
+
 #include "integrations/server/instance.h"
 #include "integrations/shared/rpc/emit_script_event.h"
 #include "networking/network_client.h"
@@ -52,46 +54,6 @@ namespace ServerPacketThreadTest {
     using Clock = std::chrono::steady_clock;
     using Framework::Networking::Sender;
     using Framework::Networking::Replication::World;
-
-    inline bool UdpPortFree(int32_t port) {
-        const auto probe = ::socket(AF_INET, SOCK_DGRAM, 0);
-#ifdef _WIN32
-        if (probe == INVALID_SOCKET) {
-            return false;
-        }
-#else
-        if (probe < 0) {
-            return false;
-        }
-#endif
-        sockaddr_in address {};
-        address.sin_family      = AF_INET;
-        address.sin_port        = htons(static_cast<uint16_t>(port));
-        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        const bool isFree       = ::bind(probe, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) == 0;
-#ifdef _WIN32
-        ::closesocket(probe);
-#else
-        ::close(probe);
-#endif
-        return isFree;
-    }
-
-    inline int32_t FreePort() {
-        std::mt19937 random(static_cast<unsigned int>(Clock::now().time_since_epoch().count()));
-        for (int attempt = 0; attempt < 8; ++attempt) {
-            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
-            httplib::Server probe;
-            if (probe.bind_to_port("127.0.0.1", candidate)) {
-                probe.stop();
-                // The game port is UDP, which the probe above says nothing of: Windows keeps ranges of it back.
-                if (UdpPortFree(candidate)) {
-                    return candidate;
-                }
-            }
-        }
-        return 0;
-    }
 
     // A player's avatar, owned by its client: `counter` is the client's to write and comes back up as entity state.
     struct Avatar final: Framework::Networking::Replication::NetworkEntity {
@@ -397,7 +359,7 @@ namespace ServerPacketThreadTest {
             opts.gameName           = "test";
             opts.gameVersion        = "1";
             opts.bindHost           = "127.0.0.1";
-            opts.bindPort           = FreePort();
+            opts.bindPort           = TestNetwork::FreePort();
             opts.maxPlayers         = 8;
             opts.bindPublicServer   = false;
             opts.enableSignals      = false;

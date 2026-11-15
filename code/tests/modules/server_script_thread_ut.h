@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../free_port.h"
+
 #include "integrations/server/instance.h"
 #include "scripting/builtins/entity.h"
 #include "scripting/builtins/player.h"
@@ -37,21 +39,6 @@
 
 // Whole servers again, this time for what the script thread changes: who waits for whom.
 namespace ServerScriptThreadTest {
-    // A port nothing listens on, as far as a TCP bind on loopback can tell; 0 when eight tries found none. A server
-    // cannot be initialised twice, so the port is settled before Init rather than by retrying it.
-    inline int32_t FreePort() {
-        std::mt19937 random(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
-        for (int attempt = 0; attempt < 8; ++attempt) {
-            const int32_t candidate = 42000 + static_cast<int32_t>(random() % 20000);
-            httplib::Server probe;
-            if (probe.bind_to_port("127.0.0.1", candidate)) {
-                probe.stop();
-                return candidate;
-            }
-        }
-        return 0;
-    }
-
     using Clock = std::chrono::steady_clock;
 
     struct Server final: Framework::Integrations::Server::Instance {
@@ -143,7 +130,7 @@ namespace ServerScriptThreadTest {
             opts.gameName           = "test";
             opts.gameVersion        = "1";
             opts.bindHost           = "127.0.0.1";
-            opts.bindPort           = FreePort();
+            opts.bindPort           = TestNetwork::FreePort();
             opts.maxPlayers         = 8;
             opts.bindPublicServer   = false;
             opts.enableSignals      = false;
