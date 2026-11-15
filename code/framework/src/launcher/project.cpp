@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <new>
 #include <nlohmann/json.hpp>
 #include <ostream>
 #include <stdexcept>
@@ -72,6 +73,41 @@ HMODULE tlsDll {};
 static Framework::Launcher::ProjectConfiguration *gConfig = nullptr;
 
 static wchar_t gProjectDllPath[32768];
+
+namespace {
+    // Where the address space stands when an allocation fails. A 32-bit game runs out of addresses
+    // long before it runs out of memory, and the largest free block is what decides the next
+    // allocation: the total free can be hundreds of MB with no block left big enough.
+    struct AddressSpaceState {
+        uint64_t largestFree = 0;
+        uint64_t free        = 0;
+        uint64_t used        = 0;
+    };
+
+    AddressSpaceState TakeAddressSpaceState() {
+        AddressSpaceState state;
+        SYSTEM_INFO info {};
+        GetSystemInfo(&info);
+        auto address       = reinterpret_cast<uintptr_t>(info.lpMinimumApplicationAddress);
+        const auto highest = reinterpret_cast<uintptr_t>(info.lpMaximumApplicationAddress);
+        MEMORY_BASIC_INFORMATION region {};
+        while (address < highest && VirtualQuery(reinterpret_cast<LPCVOID>(address), &region, sizeof(region)) == sizeof(region)) {
+            if (region.State == MEM_FREE) {
+                state.free += region.RegionSize;
+                state.largestFree = (std::max<uint64_t>)(state.largestFree, region.RegionSize);
+            }
+            else {
+                state.used += region.RegionSize;
+            }
+            const uintptr_t next = reinterpret_cast<uintptr_t>(region.BaseAddress) + region.RegionSize;
+            if (next <= address) {
+                break;
+            }
+            address = next;
+        }
+        return state;
+    }
+} // namespace
 
 // Default entry point for the client DLL
 using ClientEntryPoint    = void (*)(const wchar_t *projectPath);
@@ -1134,6 +1170,16 @@ namespace Framework::Launcher {
         try {
             InvokeEntryPoint(entry_point);
             return true;
+        }
+        catch (const std::bad_alloc &) {
+            // Nothing below may need much memory: the census walks the address space in place and the
+            // message is short.
+            const AddressSpaceState state = TakeAddressSpaceState();
+            constexpr uint64_t kMegabyte  = 1024ull * 1024ull;
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->critical("The game session ran out of memory: largest free block {} MB, {} MB free, {} MB in use", state.largestFree / kMegabyte, state.free / kMegabyte, state.used / kMegabyte);
+
+            MessageBoxA(nullptr, "The game ran out of memory and has to close.\n\nRestarting it frees everything it used. See Launcher.log for details.", _config.name.c_str(), MB_ICONERROR);
+            return false;
         }
         catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Unhandled C++ exception escaped the game session: {}", ex.what());
