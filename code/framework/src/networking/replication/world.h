@@ -340,7 +340,7 @@ namespace Framework::Networking::Replication {
                 return Exists(id);
             }
             else {
-                return id != 0 && TypeIdOf(id) == EntityTypeId<T>();
+                return IsOfType(id, EntityTypeId<T>());
             }
         }
         // The ids of every T that exists now (every entity, for NetworkEntity), ascending: what ForEach
@@ -477,6 +477,9 @@ namespace Framework::Networking::Replication {
 
         // The new entity, held by `hold`; null if the type is unknown.
         NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold &hold);
+        // One lookup for "it exists and is of this type": TypeIdOf answers 0 for no entity, which is
+        // also the id of a type whose name hashes to 0.
+        bool IsOfType(uint64_t id, uint32_t typeId) const;
         std::vector<uint64_t> IdsOfType(uint32_t typeId, bool anyType);
         void AddState(const void *key, void *object, void (*destroy)(void *));
 

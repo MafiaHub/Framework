@@ -38,6 +38,10 @@ namespace WorldTest {
     struct Registry final {
         int records = 0;
     };
+    // Never registered: its type id is the hash of an empty name, which is 0.
+    struct Nameless final: Framework::Networking::Replication::NetworkEntity {
+        static constexpr const char *kTypeName = "";
+    };
     struct Unregistered final {};
     // Mod state built from arguments.
     struct Ledger final {
@@ -489,6 +493,10 @@ MODULE(world, {
         EQUALS(world.Is<Walker>(0), false);
         EQUALS(world.Is<Walker>(walkerB + 1000), false);
         EQUALS(world.Is<NetworkEntity>(walkerB + 1000), false);
+        // "No such entity" is not mistaken for a type whose id is 0.
+        EQUALS(EntityTypeId<Nameless>(), uint32_t {0});
+        EQUALS(world.Is<Nameless>(walkerB + 1000), false);
+        EQUALS(world.Is<Nameless>(walkerA), false);
 
         const std::vector<uint64_t> walkers = world.IdsOf<Walker>();
         EQUALS(walkers.size(), size_t {2});
