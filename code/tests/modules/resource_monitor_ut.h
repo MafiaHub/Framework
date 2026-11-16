@@ -239,7 +239,7 @@ MODULE(resource_monitor, {
         ResourceIsolationTest::WriteResource("monitor-bank", R"(
             const burn = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
             Exports.register('api', { work(ms) { burn(ms); return ms; } });
-            Events.on('audit', () => burn(200));
+            Events.on('audit', () => burn(400));
         )",
             "\"api\"");
         ResourceIsolationTest::WriteResource("monitor-teller", R"(
@@ -250,8 +250,8 @@ MODULE(resource_monitor, {
 
         NodeEngine engine;
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        // Every burn at least 70 ms from the threshold, so a scheduler pause on a busy runner cannot cross it.
-        engine.GetMonitor().SetSlowThresholdMs(100.0);
+        // Every burn at least 170 ms from the threshold: a hosted macOS runner has paused a 20 ms burn for 80.
+        engine.GetMonitor().SetSlowThresholdMs(200.0);
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
         ResourceManager manager(&engine, config);
@@ -276,13 +276,17 @@ MODULE(resource_monitor, {
         };
         double tellerMs = -1.0;
         double bankMs   = -1.0;
+        double frameMs  = -1.0;
         while (TestManagerHelper::RecordedValue("done") != 1 && std::chrono::steady_clock::now() < started + std::chrono::seconds(5)) {
-            const auto before = engine.GetRuntimeStats();
+            const auto before      = engine.GetRuntimeStats();
+            const auto frameStart  = std::chrono::steady_clock::now();
             frame();
-            const auto after = engine.GetRuntimeStats();
+            const auto frameEnd = std::chrono::steady_clock::now();
+            const auto after    = engine.GetRuntimeStats();
             if (TestManagerHelper::RecordedValue("done") == 1) {
                 tellerMs = chargedMs(before, after, "monitor-teller");
                 bankMs   = chargedMs(before, after, "monitor-bank");
+                frameMs  = std::chrono::duration<double, std::milli>(frameEnd - frameStart).count();
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
@@ -297,11 +301,15 @@ MODULE(resource_monitor, {
         const auto *tellerStats = Find(after, "monitor-teller");
         const auto *bankStats   = Find(after, "monitor-bank");
         EQUALS((tellerStats != nullptr && bankStats != nullptr), true);
+        // Each burn lasts at least what it asks, so the floors hold on any machine. The ceilings are what a wrong
+        // charge would cross, not what a fast machine measures: a pause of the runner lands on whichever script
+        // was running and has reached 80 ms. The teller charged for the bank's handler would show 420 or more,
+        // and time charged twice would make the two exceed the frame they ran in.
         GREATEREQ(tellerMs, 20.0);
-        LESSER(tellerMs, 70.0);
-        GREATEREQ(bankMs, 230.0);
-        LESSER(bankMs, 300.0);
-        // Only the bank's 200 ms handler is over the threshold: its 30 ms export call is not, and the teller is not
+        LESSER(tellerMs, 200.0);
+        GREATEREQ(bankMs, 430.0);
+        LESSEREQ(tellerMs + bankMs, frameMs + 1.0);
+        // Only the bank's 400 ms handler is over the threshold: its 30 ms export call is not, and the teller is not
         // blamed for the bank's time inside its own timer.
         EQUALS(bankStats->slowReports, static_cast<uint64_t>(1));
         EQUALS(tellerStats->slowReports, static_cast<uint64_t>(0));
