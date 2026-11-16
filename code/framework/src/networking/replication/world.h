@@ -330,6 +330,28 @@ namespace Framework::Networking::Replication {
         // code that must choose by type with a handle held or without taking one, such as a
         // WrapScriptEntity override picking the wrapper class.
         uint32_t TypeIdOf(uint64_t id) const;
+        // Whether the id names an entity registered as exactly T now (any entity, for NetworkEntity).
+        // Like Exists and TypeIdOf it takes no entity lock: for checking what a client or a script
+        // named (a sender's avatar, a target) before, or instead of, taking it.
+        template <typename T>
+        bool Is(uint64_t id) const {
+            static_assert(std::is_base_of_v<NetworkEntity, T>, "World::Is<T>: T must derive from NetworkEntity");
+            if constexpr (std::is_same_v<T, NetworkEntity>) {
+                return Exists(id);
+            }
+            else {
+                return IsOfType(id, EntityTypeId<T>());
+            }
+        }
+        // The ids of every T that exists now (every entity, for NetworkEntity), ascending: what ForEach
+        // walks, without taking any of them. For a pass that takes each entity together with something
+        // else (`Write<State, T>(id)`), or that only needs the ids. No entity lock is taken, so it is
+        // allowed with a handle held; an id may stop resolving before it is used.
+        template <typename T>
+        std::vector<uint64_t> IdsOf() {
+            static_assert(std::is_base_of_v<NetworkEntity, T>, "World::IdsOf<T>: T must derive from NetworkEntity");
+            return IdsOfType(TypeOf<T>(), std::is_same_v<T, NetworkEntity>);
+        }
 
         // One object per type, registered before the server handles packets (an instance's PostInit
         // or PostScriptInit) and kept for the world's life: the list is read by every thread without a
@@ -340,6 +362,12 @@ namespace Framework::Networking::Replication {
             AddState(StateKey<T>(), state.release(), [](void *object) {
                 delete static_cast<T *>(object);
             });
+        }
+
+        // The same, with the state built in place from `args`.
+        template <typename T, typename... Args>
+        void EmplaceState(Args &&...args) {
+            RegisterState(std::make_unique<T>(std::forward<Args>(args)...));
         }
 
         // No state is registered from here on: called as a packet thread starts on this world's server.
@@ -449,6 +477,9 @@ namespace Framework::Networking::Replication {
 
         // The new entity, held by `hold`; null if the type is unknown.
         NetworkEntity *CreateEntity(uint32_t typeId, Detail::WorldHold &hold);
+        // One lookup for "it exists and is of this type": TypeIdOf answers 0 for no entity, which is
+        // also the id of a type whose name hashes to 0.
+        bool IsOfType(uint64_t id, uint32_t typeId) const;
         std::vector<uint64_t> IdsOfType(uint32_t typeId, bool anyType);
         void AddState(const void *key, void *object, void (*destroy)(void *));
 

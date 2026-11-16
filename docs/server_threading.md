@@ -368,6 +368,13 @@ net->RegisterRPC<VehicleHorn>([](const VehicleHorn &msg, Sender sender, World &w
 - `world.Exists(id)` says whether an id names an entity, from the table of
   ids alone. It takes no entity lock, so it is allowed with a handle held,
   and the answer may be old by the time it is read.
+- `world.Is<T>(id)` says whether an id names an entity registered as
+  exactly `T`, and `world.IdsOf<T>()` lists the ids of every `T`, ascending.
+  Like `Exists`, neither takes an entity lock, so both are allowed with a
+  handle held and both may be old by the time they are read. `Is` checks
+  what a client or a script named before taking it; `IdsOf` is for a pass
+  that takes each entity together with something else
+  (`Write<State, T>(id)`), where `ForEach` would hold the entity alone.
 - `world.Create<T>()` creates an entity and returns it held: no other
   thread reaches it, and the pass does not serialize it, before the creator
   lets go. Set it up inside that scope. `world.Create(typeId)` does the same
@@ -408,6 +415,9 @@ void MyServer::PostInit() {
     world.RegisterState(std::make_unique<DestructionRegistry>());
 }
 ```
+
+`world.EmplaceState<DestructionRegistry>(args...)` does the same and builds
+the state in place.
 
 It is then reached like an entity, without an id, alone or in the same call
 as entities:

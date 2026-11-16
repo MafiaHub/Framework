@@ -299,6 +299,12 @@ namespace Framework::Networking::Replication {
         return it != _slots.end() ? it->second->entity->GetTypeId() : 0;
     }
 
+    bool World::IsOfType(uint64_t id, uint32_t typeId) const {
+        const std::lock_guard guard(_slotsMutex);
+        const auto it = _slots.find(id);
+        return it != _slots.end() && it->second->entity->GetTypeId() == typeId;
+    }
+
     NetworkEntity *World::CreateEntity(uint32_t typeId, Detail::WorldHold &hold) {
         RequireWorldFree("an entity was created");
         if (!_manager.IsServer()) {

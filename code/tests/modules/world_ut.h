@@ -38,7 +38,16 @@ namespace WorldTest {
     struct Registry final {
         int records = 0;
     };
+    // Never registered: its type id is the hash of an empty name, which is 0.
+    struct Nameless final: Framework::Networking::Replication::NetworkEntity {
+        static constexpr const char *kTypeName = "";
+    };
     struct Unregistered final {};
+    // Mod state built from arguments.
+    struct Ledger final {
+        int start;
+        explicit Ledger(int from): start(from) {}
+    };
 
     // A server-side manager with no network behind it, emptied when the test leaves.
     struct Fixture final {
@@ -469,6 +478,51 @@ MODULE(world, {
             stepped += walker->steps;
         });
         EQUALS(stepped, 15);
+    });
+
+    IT("answers what type an id names and lists a type's ids without taking an entity", {
+        Fixture fixture;
+        World &world           = fixture.world;
+        const uint64_t walkerA = fixture.Make<Walker>();
+        const uint64_t prop    = fixture.Make<Prop>();
+        const uint64_t walkerB = fixture.Make<Walker>();
+
+        EQUALS(world.Is<Walker>(walkerA), true);
+        EQUALS(world.Is<Prop>(walkerA), false);
+        EQUALS(world.Is<NetworkEntity>(walkerA), true);
+        EQUALS(world.Is<Walker>(0), false);
+        EQUALS(world.Is<Walker>(walkerB + 1000), false);
+        EQUALS(world.Is<NetworkEntity>(walkerB + 1000), false);
+        // "No such entity" is not mistaken for a type whose id is 0.
+        EQUALS(EntityTypeId<Nameless>(), uint32_t {0});
+        EQUALS(world.Is<Nameless>(walkerB + 1000), false);
+        EQUALS(world.Is<Nameless>(walkerA), false);
+
+        const std::vector<uint64_t> walkers = world.IdsOf<Walker>();
+        EQUALS(walkers.size(), size_t {2});
+        EQUALS(walkers.size() == 2 && walkers[0] == std::min(walkerA, walkerB) && walkers[1] == std::max(walkerA, walkerB), true);
+        EQUALS(world.IdsOf<Prop>().size(), size_t {1});
+        EQUALS(world.IdsOf<NetworkEntity>().size(), size_t {3});
+        {
+            // With a handle held: neither asks for an entity's lock.
+            const Ref<Prop> held = world.Write<Prop>(prop);
+            EQUALS(world.Is<Walker>(walkerA), true);
+            EQUALS(world.IdsOf<Walker>().size(), size_t {2});
+            EQUALS(World::HeldByThisThread(), size_t {1});
+        }
+        world.Destroy(walkerA);
+        EQUALS(world.Is<Walker>(walkerA), false);
+        EQUALS(world.IdsOf<Walker>().size(), size_t {1});
+    });
+
+    IT("builds a registered state in place", {
+        Fixture fixture;
+        World &world = fixture.world;
+        world.EmplaceState<Ledger>(7);
+        const ConstRef<Ledger> ledger = world.Read<Ledger>();
+        EQUALS(static_cast<bool>(ledger), true);
+        const int start = ledger ? ledger->start : 0;
+        EQUALS(start, 7);
     });
 
     IT("reaches registered state alone and together with an entity", {
