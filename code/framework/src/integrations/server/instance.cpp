@@ -850,12 +850,14 @@ namespace Framework::Integrations::Server {
             PlayerConnectionData data;
             data.guid        = peerGuid;
             data.playerIndex = guid.systemIndex;
+            data.playerId    = net->AssignPlayerId(guid);
             data.nickname    = identity.name;
             data.hardwareID  = identity.hardwareId;
             data.steamId     = identity.steamId;
             data.epicId      = identity.epicId;
             data.discordId   = identity.discordId;
             data.discordName = identity.discordName;
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} joined as player {}", identity.name, data.playerId);
             // Whatever the override leaves undone, the connection goes on to replicate: it is not
             // left half joined.
             GuardOverride("OnPlayerConnect", guid.g, [&] {
@@ -1571,6 +1573,12 @@ namespace Framework::Integrations::Server {
                     const auto net  = _networkingEngine->GetNetworkServer();
                     const auto peer = net->GetPeer();
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
+
+                    // Joined players by player ID, the number admins and scripts address them by.
+                    for (const auto &[playerId, guid] : net->GetJoinedPlayers()) {
+                        const auto identity = net->GetPeerIdentity(guid);
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("    [{}] {} ({} ms)", playerId, identity ? identity->name : "", net->GetPing(guid));
+                    }
                 }
             },
             "Show server status");

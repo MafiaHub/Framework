@@ -344,14 +344,42 @@ namespace Framework::Networking {
         // Reason rides the disconnect notification, so no separate message races the close.
         MafiaNet::BitStream reasonData;
         payload.Serialize(&reasonData, true);
+
+        // A live connection is not gone yet: MafiaNet reports its close as an ID_DISCONNECTION_NOTIFICATION
+        // a tick or more from now, and the disconnect handlers that run then still read its identity and
+        // player ID. Its state is cleared there; only the build gate closes now, so nothing more from the
+        // peer is acted on meanwhile. A guid with no live connection gets no notification to wait for.
+        const MafiaNet::ConnectionState state = _peer->GetConnectionState(guid);
         _peer->CloseConnection(guid, true, 0, MafiaNet::Priority::Low, &reasonData);
-        ClearClientState(guid);
+        if (state == MafiaNet::IS_CONNECTED || state == MafiaNet::IS_DISCONNECTING) {
+            const std::lock_guard guard(_clientsMutex);
+            _authenticatedClients.erase(guid.g);
+        }
+        else {
+            ClearClientState(guid);
+        }
+    }
+
+    std::vector<std::pair<uint32_t, MafiaNet::RakNetGUID>> NetworkServer::GetJoinedPlayers() const {
+        std::vector<std::pair<uint32_t, MafiaNet::RakNetGUID>> joined;
+        {
+            const std::lock_guard guard(_clientsMutex);
+            joined.reserve(_playerIds.Size());
+            _playerIds.ForEach([&joined](uint32_t playerId, uint64_t guid) {
+                joined.emplace_back(playerId, MafiaNet::RakNetGUID(guid));
+            });
+        }
+        std::sort(joined.begin(), joined.end(), [](const auto &a, const auto &b) {
+            return a.first < b.first;
+        });
+        return joined;
     }
 
     void NetworkServer::ClearClientState(MafiaNet::RakNetGUID guid) {
         const std::lock_guard guard(_clientsMutex);
         _authenticatedClients.erase(guid.g);
         _peerIdentities.erase(guid.g);
+        _playerIds.Release(guid.g);
         // Recycles the slot for reconnects, before the next packet is handled: so before any from a
         // connection that takes the slot over.
         _staleReadyEvents.push_back(ReadyEventId(guid));

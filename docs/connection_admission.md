@@ -116,6 +116,10 @@ itself; `steamId` is read from an environment variable the launcher sets and is
 not checked against Steam. A whitelist that must hold against a modified client
 should check the `ticket` with whatever issued it.
 
+A pending connection has no player ID yet. `player.playerId` is given when the
+player joins, once its download is done, so a request that is refused or
+abandoned never uses a number up.
+
 ---
 
 ## 5. Passing a ticket

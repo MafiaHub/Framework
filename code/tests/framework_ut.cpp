@@ -51,6 +51,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/network_packets_ut.h"
 #include "modules/network_work_ut.h"
 #include "modules/persistent_config_ut.h"
+#include "modules/player_ids_ut.h"
 #include "modules/playout_buffer_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_parallel_ut.h"
@@ -204,6 +205,7 @@ int main() {
     UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
+    UNIT_MODULE(player_ids);
     UNIT_MODULE(packet_drain);
     UNIT_MODULE(server_threading);
     UNIT_MODULE(server_script_thread);
