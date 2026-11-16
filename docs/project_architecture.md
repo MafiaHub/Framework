@@ -273,7 +273,7 @@ char __fastcall CommandUpdateFnAnimPlay_Hook(void *human, void *edx, float dt, v
 
 ### 5.3 Server side
 
-The server mirror is `features/<stem>/<stem>_handlers.cpp`: one `Register<Feature>Handlers(Instance &)` per feature, declared in the feature's service header. Every handler stamps the authoritative actor from the sending connection before relaying or scripting the event. Per-tick authoritative progression (clocks, epochs, decay) belongs in the feature's service `Update()`, not scattered across handlers.
+The server mirror is `features/<stem>/<stem>_handlers.cpp`: one `Register<Feature>Handlers(Instance &)` per feature, declared in the feature's service header. A handler is `(const T &payload, Sender sender, Replication::World &world)` and runs on the packet thread (`docs/server_threading.md`). Every handler stamps the authoritative actor from the sending connection (`sender.Avatar()`, never a field of the payload) before relaying or scripting the event. It reaches entities, and feature state registered with `World::RegisterState`, through handles taken in one call (`world.Write<Human, Vehicle>(sender.Avatar(), msg.vehicleId)`); it does not capture a service and use its members bare, and it raises an event that wraps entities for scripts after its handles are released. Per-tick authoritative progression (clocks, epochs, decay) belongs in the feature's service `Update()`, not scattered across handlers.
 
 ---
 
@@ -501,7 +501,7 @@ Use this to bring a project to the reference, or to review a change against it. 
 9. `core/local_events.{h,cpp}` carries only shell-level and cross-feature events; a feature's own local events go to its service's `Notify*` methods.
 10. Every `*_hooks.cpp` forwards and returns - no RPC send, no replica access, no scripting call, no cross-call state.
 11. Every `!= _last` / `!= g_last` comparison either applies replicated state or carries a comment naming the call site that was searched for and not found.
-12. Server RPC handlers are one `Register<Feature>Handlers(Instance &)` per feature in `features/<stem>/<stem>_handlers.cpp`, declared in that feature's service header.
+12. Server RPC handlers are one `Register<Feature>Handlers(Instance &)` per feature in `features/<stem>/<stem>_handlers.cpp`, declared in that feature's service header. Each takes `(payload, Sender, Replication::World &)`, touches only entities and registered state through `world`, and keeps no handle or entity pointer beyond its scope.
 
 **Feature modules**
 

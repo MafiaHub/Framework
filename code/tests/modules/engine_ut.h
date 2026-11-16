@@ -216,7 +216,7 @@ MODULE(engine, {
         STREQUALS(engine.GetLastError().c_str(), "");
         const auto errors = engine.DrainPendingErrors();
         EQUALS(errors.size(), size_t(1));
-        EQUALS(errors.empty() || errors[0].errorMessage.find("later") != std::string::npos, true);
+        EQUALS(errors.empty() || errors[0].errorMessage.contains("later"), true);
 
         engine.Shutdown();
     });
@@ -541,11 +541,11 @@ MODULE(engine, {
 
         std::string error = engine.GetLastError();
         // Should contain the error type
-        EQUALS(error.find("TypeError") != std::string::npos, true);
+        EQUALS(error.contains("TypeError"), true);
         // Should contain the filename from ScriptOrigin
-        EQUALS(error.find("test-error.js") != std::string::npos, true);
+        EQUALS(error.contains("test-error.js"), true);
         // Should contain line number (format: filename:line)
-        EQUALS(error.find("test-error.js:1") != std::string::npos, true);
+        EQUALS(error.contains("test-error.js:1"), true);
 
         engine.Shutdown();
     });
@@ -562,11 +562,11 @@ MODULE(engine, {
 
         std::string error = engine.GetLastError();
         // Should contain the error type
-        EQUALS(error.find("ReferenceError") != std::string::npos, true);
+        EQUALS(error.contains("ReferenceError"), true);
         // Should contain filename
-        EQUALS(error.find("reference-test.js") != std::string::npos, true);
+        EQUALS(error.contains("reference-test.js"), true);
         // Should contain "at" keyword indicating stack trace
-        EQUALS(error.find("at ") != std::string::npos, true);
+        EQUALS(error.contains("at "), true);
 
         engine.Shutdown();
     });
@@ -587,11 +587,11 @@ MODULE(engine, {
 
         std::string error = engine.GetLastError();
         // Should contain ReferenceError
-        EQUALS(error.find("ReferenceError") != std::string::npos, true);
+        EQUALS(error.contains("ReferenceError"), true);
         // Should contain filename
-        EQUALS(error.find("multiline-test.js") != std::string::npos, true);
+        EQUALS(error.contains("multiline-test.js"), true);
         // Should contain line 4 (the error line)
-        EQUALS(error.find("multiline-test.js:4") != std::string::npos, true);
+        EQUALS(error.contains("multiline-test.js:4"), true);
 
         engine.Shutdown();
     });
@@ -608,10 +608,10 @@ MODULE(engine, {
 
         std::string error = engine.GetLastError();
         // Should contain SyntaxError
-        EQUALS(error.find("SyntaxError") != std::string::npos, true);
+        EQUALS(error.contains("SyntaxError"), true);
         // Should contain some location info (line number indicator via colon)
         // Syntax errors may not always include filename but should have line/column
-        EQUALS(error.find(":") != std::string::npos, true);
+        EQUALS(error.contains(":"), true);
 
         engine.Shutdown();
     });
@@ -632,18 +632,18 @@ MODULE(engine, {
 
         std::string error = engine.GetLastError();
         // Should contain the error message
-        EQUALS(error.find("deep error") != std::string::npos, true);
+        EQUALS(error.contains("deep error"), true);
         // Should contain filename
-        EQUALS(error.find("nested-test.js") != std::string::npos, true);
+        EQUALS(error.contains("nested-test.js"), true);
         // Should show multiple stack frames (multiple "at" occurrences)
         size_t firstAt = error.find("at ");
         EQUALS(firstAt != std::string::npos, true);
         size_t secondAt = error.find("at ", firstAt + 1);
         EQUALS(secondAt != std::string::npos, true);
         // Should contain function names in stack
-        EQUALS(error.find("level3") != std::string::npos, true);
-        EQUALS(error.find("level2") != std::string::npos, true);
-        EQUALS(error.find("level1") != std::string::npos, true);
+        EQUALS(error.contains("level3"), true);
+        EQUALS(error.contains("level2"), true);
+        EQUALS(error.contains("level1"), true);
 
         engine.Shutdown();
     });

@@ -5,3 +5,4 @@
 /scripts/build_windows_container.sh text eol=lf
 /scripts/run_windows_server.sh text eol=lf
 /scripts/run_windows_client.sh text eol=lf
+/cmake/vcpkg-ports/**/*.patch -text

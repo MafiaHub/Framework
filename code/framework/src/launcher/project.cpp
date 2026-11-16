@@ -13,6 +13,7 @@
 #include "loaders/process_identity.h"
 #include "logging/logger.h"
 #include "swap_chain_upgrade.h"
+#include "system_graphics.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 #include "utils/url_protocol.h"
@@ -26,6 +27,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <new>
 #include <nlohmann/json.hpp>
 #include <ostream>
 #include <stdexcept>
@@ -72,6 +74,41 @@ static Framework::Launcher::ProjectConfiguration *gConfig = nullptr;
 
 static wchar_t gProjectDllPath[32768];
 
+namespace {
+    // Where the address space stands when an allocation fails. A 32-bit game runs out of addresses
+    // long before it runs out of memory, and the largest free block is what decides the next
+    // allocation: the total free can be hundreds of MB with no block left big enough.
+    struct AddressSpaceState {
+        uint64_t largestFree = 0;
+        uint64_t free        = 0;
+        uint64_t used        = 0;
+    };
+
+    AddressSpaceState TakeAddressSpaceState() {
+        AddressSpaceState state;
+        SYSTEM_INFO info {};
+        GetSystemInfo(&info);
+        auto address       = reinterpret_cast<uintptr_t>(info.lpMinimumApplicationAddress);
+        const auto highest = reinterpret_cast<uintptr_t>(info.lpMaximumApplicationAddress);
+        MEMORY_BASIC_INFORMATION region {};
+        while (address < highest && VirtualQuery(reinterpret_cast<LPCVOID>(address), &region, sizeof(region)) == sizeof(region)) {
+            if (region.State == MEM_FREE) {
+                state.free += region.RegionSize;
+                state.largestFree = (std::max<uint64_t>)(state.largestFree, region.RegionSize);
+            }
+            else {
+                state.used += region.RegionSize;
+            }
+            const uintptr_t next = reinterpret_cast<uintptr_t>(region.BaseAddress) + region.RegionSize;
+            if (next <= address) {
+                break;
+            }
+            address = next;
+        }
+        return state;
+    }
+} // namespace
+
 // Default entry point for the client DLL
 using ClientEntryPoint    = void (*)(const wchar_t *projectPath);
 using ThreadLocalCallback = void(NTAPI *)(void *, DWORD, void *);
@@ -88,6 +125,45 @@ static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     else if (result != EXCEPTION_EXECUTE_HANDLER)
         return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
     return result;
+}
+
+// The OS loader runs an executable's process-attach TLS callbacks under the loader lock, so a thread they start waits
+// for it and then gets its thread attach. Holding the lock until the relay is live gives such threads the same.
+static void RunGameTlsCallbacksForwardingThreads(const Framework::Launcher::Loaders::ExecutableLoader &loader, HMODULE base) {
+    using LockLoaderLockProc   = LONG(NTAPI *)(ULONG flags, ULONG * disposition, PVOID * cookie);
+    using UnlockLoaderLockProc = LONG(NTAPI *)(ULONG flags, PVOID cookie);
+    using ForwardProc          = BOOL (*)(PVOID module, const PIMAGE_TLS_CALLBACK *callbacks);
+
+    const HMODULE ntdll           = GetModuleHandleW(L"ntdll.dll");
+    const auto lockLoaderLock     = reinterpret_cast<LockLoaderLockProc>(GetProcAddress(ntdll, "LdrLockLoaderLock"));
+    const auto unlockLoaderLock   = reinterpret_cast<UnlockLoaderLockProc>(GetProcAddress(ntdll, "LdrUnlockLoaderLock"));
+    const auto forwardThreadCalls = reinterpret_cast<ForwardProc>(GetProcAddress(tlsDll, "CoreRT_ForwardGameTlsCallbacks"));
+
+    const auto callbacks = loader.GetTLSCallbacks();
+    if (!callbacks) {
+        throw std::runtime_error("forwardThreadTlsCallbacks is set but the game has no TLS callbacks");
+    }
+
+    struct LoaderLock final {
+        UnlockLoaderLockProc unlock;
+        PVOID cookie      = nullptr;
+        ULONG disposition = 0;
+        ~LoaderLock() {
+            unlock(0, cookie);
+        }
+    };
+
+    bool forwarding = false;
+    {
+        LoaderLock lock {unlockLoaderLock};
+        lockLoaderLock(0, &lock.disposition, &lock.cookie);
+        loader.RunTLSCallbacks();
+        forwarding = forwardThreadCalls(base, callbacks);
+    }
+
+    if (!forwarding) {
+        throw std::runtime_error("Could not forward thread attach/detach to the game's TLS callbacks");
+    }
 }
 
 void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
@@ -261,6 +337,20 @@ namespace {
         fullPath.resize(length);
         return LoadLibraryExW(fullPath.c_str(), file, flags);
     }
+
+    // ProjectConfiguration::useSystemGraphicsLibraries of the project being launched
+    bool gUseSystemGraphicsLibraries = false;
+
+    HMODULE LoadSystemGraphics(LPCWSTR name, DWORD flags) {
+        return gUseSystemGraphicsLibraries ? static_cast<HMODULE>(Framework::Launcher::LoadSystemGraphicsLibrary(name, flags)) : nullptr;
+    }
+
+    HMODULE LoadGameLibraryExW(LPCWSTR name, HANDLE file, DWORD flags) {
+        if (const auto module = LoadSystemGraphics(name, flags)) {
+            return module;
+        }
+        return IsRunningUnderWine() ? LoadLibraryExWineCompatible(name, file, flags) : LoadLibraryExW(name, file, flags);
+    }
 } // namespace
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -331,12 +421,30 @@ BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *
     return GetModuleHandleExA(dwFlags, lpModuleName, phModule);
 }
 
-// Given to the game for kernel32/kernelbase LoadLibraryExW under Wine only
+// Given to the game for kernel32/kernelbase LoadLibraryExW, under Wine and with useSystemGraphicsLibraries
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
-    return LoadLibraryExWineCompatible(lpLibFileName, hFile, dwFlags);
+    return LoadGameLibraryExW(lpLibFileName, hFile, dwFlags);
 }
 
-// Given to the game for kernel32/kernelbase LoadLibraryExA under Wine only. The name is widened with
+// Given to the game for kernel32/kernelbase LoadLibraryW and LoadLibraryA with useSystemGraphicsLibraries
+HMODULE WINAPI LoadLibraryW_Hook(LPCWSTR lpLibFileName) {
+    const auto module = LoadSystemGraphics(lpLibFileName, 0);
+    return module ? module : LoadLibraryW(lpLibFileName);
+}
+
+HMODULE WINAPI LoadLibraryA_Hook(LPCSTR lpLibFileName) {
+    const UINT codePage = AreFileApisANSI() ? CP_ACP : CP_OEMCP;
+    const int size      = lpLibFileName ? MultiByteToWideChar(codePage, 0, lpLibFileName, -1, nullptr, 0) : 0;
+    std::wstring wideName(size, L'\0');
+    if (size != 0 && MultiByteToWideChar(codePage, 0, lpLibFileName, -1, wideName.data(), size)) {
+        if (const auto module = LoadSystemGraphics(wideName.c_str(), 0)) {
+            return module;
+        }
+    }
+    return LoadLibraryA(lpLibFileName);
+}
+
+// Given to the game for kernel32/kernelbase LoadLibraryExA, as LoadLibraryExW above. The name is widened with
 // the file-API code page first, as kernelbase does, so a DBCS trail byte of 0x5C is not taken for a
 // backslash. Anything that cannot be widened goes to the real function unchanged.
 HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
@@ -350,7 +458,11 @@ HMODULE WINAPI LoadLibraryExA_Hook(LPCSTR lpLibFileName, HANDLE hFile, DWORD dwF
     if (!MultiByteToWideChar(codePage, 0, lpLibFileName, -1, wideName.data(), size)) {
         return LoadLibraryExA(lpLibFileName, hFile, dwFlags);
     }
-    return LoadLibraryExWineCompatible(wideName.c_str(), hFile, dwFlags);
+    if (!IsRunningUnderWine()) {
+        const auto module = LoadSystemGraphics(wideName.c_str(), dwFlags);
+        return module ? module : LoadLibraryExA(lpLibFileName, hFile, dwFlags);
+    }
+    return LoadGameLibraryExW(wideName.c_str(), hFile, dwFlags);
 }
 
 namespace Framework::Launcher {
@@ -433,6 +545,12 @@ namespace Framework::Launcher {
 
         if (!_config.disablePersistentConfig) {
             SaveJSONConfig();
+        }
+
+        // Before the game's folders are searched: a load by name then finds these already mapped
+        gUseSystemGraphicsLibraries = _config.useSystemGraphicsLibraries;
+        if (gUseSystemGraphicsLibraries) {
+            PreloadSystemGraphicsLibraries();
         }
 
         // Add the required DLL directories to the current process
@@ -958,12 +1076,22 @@ namespace Framework::Launcher {
             if (exportName == "GetModuleHandleExW") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
             }
-            // Windows keeps the real imports; the hooks only work around Wine's loader
-            if (exportName == "LoadLibraryExW" && IsRunningUnderWine() && IsKernelModule(hmod)) {
-                return reinterpret_cast<LPVOID>(LoadLibraryExW_Hook);
-            }
-            if (exportName == "LoadLibraryExA" && IsRunningUnderWine() && IsKernelModule(hmod)) {
-                return reinterpret_cast<LPVOID>(LoadLibraryExA_Hook);
+            // Windows keeps the real imports unless the project asks for the System32 graphics
+            // libraries; under Wine the hooks also work around its loader
+            if (IsKernelModule(hmod)) {
+                const bool systemGraphics = _config.useSystemGraphicsLibraries;
+                if (exportName == "LoadLibraryExW" && (systemGraphics || IsRunningUnderWine())) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryExW_Hook);
+                }
+                if (exportName == "LoadLibraryExA" && (systemGraphics || IsRunningUnderWine())) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryExA_Hook);
+                }
+                if (exportName == "LoadLibraryW" && systemGraphics) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryW_Hook);
+                }
+                if (exportName == "LoadLibraryA" && systemGraphics) {
+                    return reinterpret_cast<LPVOID>(LoadLibraryA_Hook);
+                }
             }
             if (_config.upgradeSwapChainToFlipModel) {
                 if (const auto stub = ResolveFlipModelFactoryExport(hmod, exportName)) {
@@ -1019,7 +1147,13 @@ namespace Framework::Launcher {
 
             // The OS loader normally dispatches executable TLS callbacks before the entry
             // point. This image was mapped manually, so complete that loader step here.
-            loader.RunTLSCallbacks();
+            if (_config.forwardThreadTlsCallbacks) {
+                RunGameTlsCallbacksForwardingThreads(loader, base);
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Forwarding thread attach/detach to the game's TLS callbacks");
+            }
+            else {
+                loader.RunTLSCallbacks();
+            }
 
             if (_preLaunchFunctor) {
                 _preLaunchFunctor();
@@ -1036,6 +1170,16 @@ namespace Framework::Launcher {
         try {
             InvokeEntryPoint(entry_point);
             return true;
+        }
+        catch (const std::bad_alloc &) {
+            // Nothing below may need much memory: the census walks the address space in place and the
+            // message is short.
+            const AddressSpaceState state = TakeAddressSpaceState();
+            constexpr uint64_t kMegabyte  = 1024ull * 1024ull;
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->critical("The game session ran out of memory: largest free block {} MB, {} MB free, {} MB in use", state.largestFree / kMegabyte, state.free / kMegabyte, state.used / kMegabyte);
+
+            MessageBoxA(nullptr, "The game ran out of memory and has to close.\n\nRestarting it frees everything it used. See Launcher.log for details.", _config.name.c_str(), MB_ICONERROR);
+            return false;
         }
         catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Unhandled C++ exception escaped the game session: {}", ex.what());

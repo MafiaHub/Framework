@@ -20,12 +20,13 @@ add_executable(FrameworkTests
 
 # The pattern table, the base-relocation helpers and the Epic manifest scan live in
 # FrameworkClient/FrameworkLoader, neither of which the tests link. Compile them and the
-# standalone D3D12 compositor directly; the compositor regression uses WARP without a game or browser.
+# standalone D3D12 backend and compositor directly; their regressions use WARP without a game or browser.
 if(WIN32)
     target_sources(FrameworkTests PRIVATE
         ../framework/src/utils/hooking/pattern_table.cpp
         ../framework/src/utils/hooking/hooking_patterns.cpp
         ../framework/src/utils/hooking/hooking.cpp
+        ../framework/src/graphics/backend/d3d12.cpp
         ../framework/src/graphics/backend/d3d12_ui_compositor.cpp
         ../framework/src/external/epic/manifest.cpp)
     target_link_libraries(FrameworkTests d3d12 dxgi d3dcompiler imgui::imgui)
@@ -42,9 +43,31 @@ endif()
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)
 
+# Not a test: what a server tick's replication costs as players gather (see the file). Build it in
+# RelWithDebInfo or Release.
+add_executable(FrameworkReplicationBench bench/replication_bench.cpp)
+target_include_directories(FrameworkReplicationBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkReplicationBench Framework FrameworkServer libnode)
+
+# Not a test: what copying a value between two resources costs (see the file). Build it in
+# RelWithDebInfo or Release.
+add_executable(FrameworkValueTransferBench bench/value_transfer_bench.cpp)
+target_include_directories(FrameworkValueTransferBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkValueTransferBench Framework FrameworkServer libnode)
+target_compile_definitions(FrameworkValueTransferBench PRIVATE NODE_WANT_INTERNALS=1)
+
+# Not a test: what a log call costs its caller while the outputs keep up, fall behind and stall (see the
+# file). Build it in RelWithDebInfo or Release.
+add_executable(FrameworkLoggingBench bench/logging_bench.cpp)
+target_include_directories(FrameworkLoggingBench PRIVATE ../framework/src)
+target_link_libraries(FrameworkLoggingBench Framework)
+
 
 # Tests use Node.js APIs through the scripting engine
 target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
+# Opens ReplicationManager to replication_test_world.h's TestAccess, for these two targets alone.
+target_compile_definitions(FrameworkTests PRIVATE FW_TESTING=1)
+target_compile_definitions(FrameworkReplicationBench PRIVATE FW_TESTING=1)
 
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>
@@ -57,7 +80,9 @@ endif()
 
 # NodeEngine and V8Engine each initialize V8's process-wide platform, so exercise
 # the client runtime in its own process.
-add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp)
+add_executable(FrameworkClientScriptingTests client_scripting_ut.cpp
+    # Fonts.register's checks, without the atlas it hands families to.
+    ../framework/src/integrations/client/scripting/builtins/fonts.cpp)
 target_include_directories(FrameworkClientScriptingTests PRIVATE . ../framework/src)
 if(WIN32)
     # Key.bind dispatch, without linking the rest of FrameworkClient.

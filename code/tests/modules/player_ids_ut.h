@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "connection_admission_ut.h" // ConnectionAdmissionRig: a server and client over loopback
 
 #include "networking/network_server.h"
@@ -114,7 +115,7 @@ MODULE(player_ids, {
         // The reported case: thousands of server-authoritative loot spots spawned at startup.
         std::vector<LootSpot *> spots;
         for (int i = 0; i < 4005; ++i) {
-            spots.push_back(manager->CreateEntity<LootSpot>());
+            spots.push_back(TestWorld::Make<LootSpot>(manager));
         }
         NEQUALS(spots.back(), nullptr);
         GREATER(spots.back()->GetNetworkID(), uint64_t {4004});
@@ -132,7 +133,7 @@ MODULE(player_ids, {
         EQUALS(server.FindPlayerById(3).has_value(), false);
 
         for (auto *spot : spots) {
-            manager->DestroyEntity(spot);
+            TestWorld::Destroy(manager, spot);
         }
     });
 
@@ -164,7 +165,7 @@ MODULE(player_ids, {
             server->SetOnPlayerDisconnectCallback([this, server](MafiaNet::Packet *, Framework::Networking::DisconnectionReason, const std::string &) {
                 handled             = true;
                 idInHandler         = server->GetPlayerId(guid);
-                const auto *known   = server->GetPeerIdentity(guid);
+                const auto known    = server->GetPeerIdentity(guid);
                 nameInHandler       = known ? known->name : "";
             });
             return true;
@@ -187,7 +188,7 @@ MODULE(player_ids, {
         EQUALS(player.idInHandler, 1u);
         STREQUALS(player.nameInHandler.c_str(), "Jan");
         EQUALS(rig.server->GetPlayerId(player.guid), 0u);
-        EQUALS(rig.server->GetPeerIdentity(player.guid) == nullptr, true);
+        EQUALS(rig.server->GetPeerIdentity(player.guid).has_value(), false);
         EQUALS(rig.server->FindPlayerById(1).has_value(), false);
     });
 
@@ -203,6 +204,6 @@ MODULE(player_ids, {
         EQUALS(player.idInHandler, 1u);
         STREQUALS(player.nameInHandler.c_str(), "Jan");
         EQUALS(rig.server->GetPlayerId(player.guid), 0u);
-        EQUALS(rig.server->GetPeerIdentity(player.guid) == nullptr, true);
+        EQUALS(rig.server->GetPeerIdentity(player.guid).has_value(), false);
     });
 })

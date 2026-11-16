@@ -270,7 +270,7 @@ include(\"\${_fw_sdk_arch_config}\")
         "${_cmake_dir}/FrameworkBootstrap.cmake"
         "${Framework_SOURCE_DIR}/LICENSE.txt"
         DESTINATION "${FW_SDK_SHARE_DIR}")
-    install(DIRECTORY "${_cmake_dir}/vcpkg-triplets" DESTINATION "${FW_SDK_SHARE_DIR}")
+    install(DIRECTORY "${_cmake_dir}/vcpkg-triplets" "${_cmake_dir}/vcpkg-ports" DESTINATION "${FW_SDK_SHARE_DIR}")
     install(PROGRAMS
         "${Framework_SOURCE_DIR}/scripts/check_pattern_table.py"
         "${Framework_SOURCE_DIR}/scripts/build_pattern_table.py"

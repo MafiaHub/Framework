@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <new>
 
 namespace Framework::GUI::CEF {
     namespace {
@@ -306,6 +307,42 @@ namespace Framework::GUI::CEF {
             lock = std::unique_lock<std::mutex>(_pixelMutex);
         }
 
+        // A frame is one contiguous width*height*4 block (8 MB for 1024x2048). In a 32-bit host that runs out of
+        // address space it can fail to fit; the exception would otherwise leave CEF's callback and end the process.
+        try {
+            PaintLocked(type, dirtyRects, buffer, width, height);
+        }
+        catch (const std::bad_alloc &) {
+            DropPixelsForMemory(width, height);
+        }
+    }
+
+    void RenderHandler::DropPixelsForMemory(int width, int height) {
+        // Give the whole surface back: it is the largest block this view holds, and the next paint is a full frame
+        // anyway (a size mismatch makes it copy all of CEF's buffer), so the view recovers as soon as memory does.
+        // Until then it keeps showing its last uploaded texture.
+        std::vector<uint8_t>().swap(_pixelData);
+        std::vector<uint8_t>().swap(_popupPixels);
+        std::vector<uint8_t>().swap(_popupUnderlay);
+        _pixelWidth       = 0;
+        _pixelHeight      = 0;
+        _popupPixelWidth  = 0;
+        _popupPixelHeight = 0;
+        _stampedRect      = CefRect();
+        _pixelDataDirty   = false;
+        _pixelDirtyRect   = CefRect();
+        if (!_allocationFailureLogged) {
+            _allocationFailureLogged = true;
+            try {
+                Framework::Logging::GetLogger("Web")->error("RenderHandler: no room for a {}x{} frame ({} KB); frames are dropped until memory frees up", width, height, static_cast<size_t>(width) * 4 * static_cast<size_t>(height) / 1024);
+            }
+            catch (const std::bad_alloc &) {
+                // nothing left to say it with
+            }
+        }
+    }
+
+    void RenderHandler::PaintLocked(PaintElementType type, const RectList &dirtyRects, const void *buffer, int width, int height) {
         if (type == PET_POPUP) {
             const auto *pixels = static_cast<const uint8_t *>(buffer);
             _popupPixels.assign(pixels, pixels + static_cast<size_t>(width) * 4 * static_cast<size_t>(height));

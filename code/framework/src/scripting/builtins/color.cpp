@@ -16,7 +16,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Color>>> Color::_classes;
+    ClassCache<Color> Color::_classes;
 
     std::string Color::toHex(std::optional<bool> includeAlpha) const {
         int r = static_cast<int>(std::round(_color.r * 255.0f));
@@ -91,13 +91,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Color> &Color::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
+        if (auto *found = _classes.Find(isolate)) {
+            return *found;
         }
+        const CatalogWriteLock building;
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Color>>(isolate, GetScriptingCatalog(isolate), "Color", "Mutable RGBA color, with components stored from 0 to 1.");
+        auto cls = std::make_unique<v8pp::class_<Color>>(isolate, GetScriptingCatalog(isolate), "Color", "Mutable RGBA color, with components stored from 0 to 1.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         // Custom constructor callback rather than the default ctor<...> factory: v8pp's factory
         // forwards args as std::optional<float>&&, which its is_optional trait doesn't recognize, so
@@ -191,7 +190,7 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<decltype(&Color::magenta)>("magenta", v8pp::metadata::docs("Color", {}, "Creates opaque magenta.", "New Color(1, 0, 1, 1)."), true));
         metadata.record(v8pp::metadata::function_of<decltype(&Color::transparent)>("transparent", v8pp::metadata::docs("Color", {}, "Creates fully transparent black.", "New Color(0, 0, 0, 0)."), true));
 
-        return *cls;
+        return _classes.Add(isolate, std::move(cls));
     }
 
     void Color::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -206,7 +205,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Color::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 
 } // namespace Framework::Scripting::Builtins

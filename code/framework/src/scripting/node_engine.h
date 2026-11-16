@@ -17,6 +17,7 @@
 #include "function_references.h"
 #include "node_runtime.h"
 #include "resource_monitor.h"
+#include "script_gate.h"
 
 #include <node.h>
 #include <uv.h>
@@ -24,6 +25,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -48,6 +50,13 @@ namespace Framework::Scripting {
          * - require.resolve paths are restricted
          */
         bool sandboxed = false;
+
+        /**
+         * Threads of Node's platform pool, which every isolate in the process shares for collection and
+         * compilation. With an isolate per resource a server sizes it to its cores. Read once, by the first
+         * engine initialised in the process.
+         */
+        int platformThreads = 4;
 
         /**
          * Process name shown in Node.js (argv[0]).
@@ -115,6 +124,7 @@ namespace Framework::Scripting {
         struct PendingUncaughtError {
             std::string resourceName;
             std::string errorMessage;
+            uint64_t serial = 0; // The resource's runtime that raised it; 0 when it was attributed by its stack.
         };
 
         /**
@@ -133,6 +143,12 @@ namespace Framework::Scripting {
         std::vector<PendingUncaughtError> DrainPendingErrors();
 
         /**
+         * Whether the runtime that raised `error` still runs its resource. An error queued by a runtime that has since
+         * been stopped or replaced is about a resource that no longer exists, and is only to be logged.
+         */
+        bool IsFromCurrentRuntime(const PendingUncaughtError &error) const;
+
+        /**
          * Check if this engine is running in sandboxed mode.
          */
         bool IsSandboxed() const {
@@ -142,6 +158,36 @@ namespace Framework::Scripting {
         /**
          * Get the engine options.
          */
+        // For a host that runs the engine on a thread of its own: RunUntil() gives the world up through the gate
+        // while it waits for work and between two runtimes, and returns at once when the gate turns it away. Not
+        // owned; null, the default, runs as before.
+        void SetRunGate(RunGate *gate) {
+            _runGate = gate;
+        }
+
+        // For a host that runs the engine on a thread of its own: a runtime GetIsolate() and GetContext() name on
+        // another thread. Code there builds values the way it always did (an EngineScope, or V8's own scopes,
+        // on the engine's isolate), in an isolate the engine's thread never enters, so neither side waits for the
+        // other's lock; what it emits is copied across. It has the bindings a resource's runtime has and runs no
+        // script. From the engine's thread, once per name, after Init() and before any other thread uses the
+        // engine: the threads the runtimes are for read the list of them without a lock.
+        bool CreateOffThreadRuntime(std::string_view name);
+
+        // Makes the runtime of that name the one the calling thread sees, so that two threads off the engine's never
+        // wait for each other's isolate either. A thread that bound none sees "tick", and so does one that asks for
+        // a name that was not created, which is logged.
+        void BindOffThreadRuntime(std::string_view name);
+
+        // Whether the last RunUntil() ended because the gate turned it away.
+        bool LostRunGate() const {
+            return _gateLost;
+        }
+
+        // Before Init(), and before any other engine in the process initialised: the platform pool is made once.
+        void SetPlatformThreads(int threads) {
+            _options.platformThreads = threads;
+        }
+
         const NodeEngineOptions &GetOptions() const {
             return _options;
         }
@@ -217,6 +263,7 @@ namespace Framework::Scripting {
             uint64_t serial    = 0;       // Tells this runtime from a later one of the same resource.
             NodeEngine *engine = nullptr; // What the runtime's error sink reports to.
             bool exited        = false;   // It called process.exit(): stopped, and no longer ticked.
+            bool retired       = false;   // Its resource stopped: it waits to be freed, and no longer runs.
             bool closed        = false;   // Since then cut off from other runtimes and from the builtins.
         };
 
@@ -253,13 +300,32 @@ namespace Framework::Scripting {
         // Run these runtimes' loops (null is the engine's own) until `stopAt`, unless script started or stopped resources.
         void RunReady(const std::vector<ResourceRuntime *> &ready, uint64_t generation, std::chrono::steady_clock::time_point stopAt);
 
+        // Whether a tick has anything to run in `runtime`: a completion on its loop, a timer, immediate or callback
+        // due, or a call into it whose queues wait for the tick. A runtime without is left alone, so an idle resource
+        // costs a tick nothing.
+        bool HasWork(NodeRuntime &runtime) const;
+
         void SleepUntil(std::chrono::steady_clock::time_point until);
+
+#ifdef _WIN32
+        // Sleep until a loop's watcher signals a completion or `until`, whichever is first.
+        void WaitForWork(std::chrono::steady_clock::time_point until);
+
+        // The runtimes the schedule has work for that can run now, as RunReady() takes them.
+        void CollectReady(std::chrono::steady_clock::time_point now, std::vector<ResourceRuntime *> &due, std::chrono::steady_clock::time_point &next);
+#else
+        // Which loops have I/O to run, read in one poll over every backend fd, for the tick to run those alone.
+        void PollReadyLoops();
+#endif
 
         NodeEngineOptions _options;
 
         static std::unique_ptr<node::MultiIsolatePlatform> _platform;
         static std::shared_ptr<node::InitializationResult> _initResult;
         static bool _platformInitialized;
+
+        // Before the runtimes, which report to it until they are destroyed.
+        RuntimeSchedule _schedule;
 
         std::unique_ptr<NodeRuntime> _runtime;
 
@@ -268,9 +334,27 @@ namespace Framework::Scripting {
         // Calls and values between the engine's runtime and every resource's.
         std::unique_ptr<FunctionReferences> _references;
         uint32_t _hostReference = 0;
+        struct OffThreadRuntime {
+            std::string name;
+            std::unique_ptr<NodeRuntime> runtime;
+            uint32_t reference = 0;
+        };
+        // In the order they were created; none goes before Shutdown().
+        std::vector<OffThreadRuntime> _offThreadRuntimes;
+        // Tells this engine's off-thread runtimes from any other's, and from its own before a Shutdown(): what a
+        // thread bound is only good for the set it was bound in.
+        uint64_t _offThreadSet = 0;
+        // Whether the calling thread is one the off-thread runtimes are for.
+        bool OffEngineThread() const;
+        // The off-thread runtime `current` belongs to, or else the one the calling thread sees; null on the engine's
+        // thread.
+        NodeRuntime *OffThreadRuntimeFor(v8::Isolate *current) const;
 
         // One runtime per running resource, and the isolate each one owns.
         std::map<std::string, std::unique_ptr<ResourceRuntime>, std::less<>> _resourceRuntimes;
+        // Changed where resources start and stop, and asked by every thread that opens a scope on the engine
+        // (GetIsolate, GetContext): under this mutex, held for the table only.
+        mutable std::shared_mutex _runtimeByIsolateMutex;
         std::unordered_map<v8::Isolate *, ResourceRuntime *> _runtimeByIsolate;
 
         // Runtimes stopped while script was running; destroyed at the next tick.
@@ -285,10 +369,20 @@ namespace Framework::Scripting {
 #ifdef _WIN32
         // std::this_thread::sleep_until can be held to the 15.6 ms system timer, most of a tick.
         HANDLE _waitTimer = nullptr;
+        // What the schedule reported ready, kept between RunUntil()'s rounds.
+        std::vector<NodeRuntime *> _ready;
 #else
         // RunUntil's poll() over the loops failed with something other than EINTR, which is said once.
         bool _pollFailed = false;
+        // The loops this tick's poll found I/O ready in.
+        std::vector<NodeRuntime *> _ioReady;
 #endif
+
+        RunGate *_runGate = nullptr;
+        // The gate turned the engine away during a wait or between runtimes: it no longer has the world.
+        bool _gateLost = false;
+        void GateRelease();
+        void GateAcquire();
 
         // Cached JS function that calls setImmediate(()=>{}) each tick.
         // This serves two purposes for inspector CDP message processing:

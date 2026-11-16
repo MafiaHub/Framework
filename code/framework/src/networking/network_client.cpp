@@ -8,6 +8,7 @@
 
 #include "network_client.h"
 
+#include "replication/client_entities.h"
 #include "replication/replication_manager.h"
 
 #include <logging/logger.h>
@@ -16,6 +17,30 @@
 #include <mafianet/message_identifiers.h>
 
 #include <algorithm>
+
+namespace Framework::Networking::Replication {
+    // Here, in a file only a client links, so that a server target cannot use them (client_entities.h).
+    NetworkEntity *ClientEntities::GetEntityByNetworkID(MafiaNet::NetworkID networkId) const {
+        return _manager.IsServer() ? nullptr : _manager.GetEntityByNetworkID(networkId);
+    }
+
+    void ClientEntities::ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const {
+        if (!_manager.IsServer()) {
+            _manager.ForEachEntity(fn);
+        }
+    }
+
+    void ClientEntities::ForEachAvatar(const fu2::function<void(MafiaNet::PeerGuid, NetworkEntity *) const> &fn) const {
+        // Owning an entity does not make it the player: a delegated NPC, a ridden horse or a dropped
+        // item all carry the player's guid, and taking the last of them as the avatar is what moved
+        // voice away from the speaker. A client has the flag the server replicates off its viewer map.
+        ForEachEntity([&fn](NetworkEntity *entity) {
+            if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
+                fn(entity->ownerGUID, entity);
+            }
+        });
+    }
+} // namespace Framework::Networking::Replication
 
 namespace Framework::Networking {
     namespace {

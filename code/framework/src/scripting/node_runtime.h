@@ -18,13 +18,64 @@
 
 #include "runtime_sample.h"
 
+#include <atomic>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace Framework::Scripting {
+
+    class NodeRuntime;
+
+    /**
+     * Which of an engine's runtimes have work, kept so that the engine finds them without asking every runtime. A
+     * busy loop wakes the engine thousands of times a second, and reading each idle runtime on every wake-up cost
+     * more than the loop's own work. A runtime that joins reports here when its loop has a completion, from its
+     * watcher's thread, and when what it has due may have changed; everything else is the scripting thread's alone.
+     */
+    class RuntimeSchedule final {
+      public:
+        using Clock = std::chrono::steady_clock;
+
+        RuntimeSchedule();
+        ~RuntimeSchedule();
+
+        RuntimeSchedule(const RuntimeSchedule &)            = delete;
+        RuntimeSchedule &operator=(const RuntimeSchedule &) = delete;
+
+        /**
+         * Append to `ready` the runtimes with a completion on their loop or something due at `now`, and return when
+         * the next of the others has something due: time_point::max() for never.
+         */
+        Clock::time_point Collect(Clock::time_point now, std::vector<NodeRuntime *> &ready);
+
+#ifdef _WIN32
+        // Signalled when a runtime's loop gets a completion.
+        HANDLE GetWakeEvent() const {
+            return _wake;
+        }
+#endif
+
+      private:
+        friend class NodeRuntime;
+
+        // Side by side and dense: reading every runtime's due time is one pass over a few cache lines.
+        std::vector<NodeRuntime *> _runtimes;
+        std::vector<Clock::time_point> _dueAt;
+        // The runtimes whose due time has to be read from their loop again.
+        std::vector<NodeRuntime *> _changed;
+
+#ifdef _WIN32
+        HANDLE _wake = nullptr;
+        // The runtimes whose loop has a completion to run; their watchers add to it.
+        std::mutex _signaledMutex;
+        std::vector<NodeRuntime *> _signaled;
+#endif
+    };
 
     /**
      * One Node.js environment: its own isolate, libuv loop, context and Node bootstrap.
@@ -35,6 +86,10 @@ namespace Framework::Scripting {
      *
      * The process-wide platform is not owned here; every runtime is created against the one the
      * engine initialised, and they all run on the thread that ticks them.
+     *
+     * The runtime holds a referenced handle of its own on its loop, as Electron does for the loop it embeds, so the
+     * loop is always alive: uv_run then runs whatever reaches it, the platform's tasks and their delayed timers
+     * included, and a runtime with nothing due can be left alone until its loop says otherwise.
      */
     class NodeRuntime final {
       public:
@@ -75,6 +130,14 @@ namespace Framework::Scripting {
          */
         void Tick();
 
+        /**
+         * Whether a call has entered the runtime since its last Tick(): what a call made through raw V8 queued waits
+         * for that tick. V8 reports every outermost call that completes, Node's own callbacks included.
+         */
+        bool WasEntered() const {
+            return _entered;
+        }
+
         // Names the runtime in profiler zones and GC messages (the resource, or "server").
         void SetName(std::string name) {
             _name = std::move(name);
@@ -99,18 +162,39 @@ namespace Framework::Scripting {
         int GetBackendFd() const;
 
         /**
-         * Whether the loop has referenced handles or requests that can still produce work. uv_run does nothing for
-         * one that has not.
+         * When the loop next has a timer, immediate or pending callback to run: a time not after now when it has one
+         * already, time_point::max() when it has none. I/O is not counted: it is what GetBackendFd() or the watcher
+         * reports. Only something running in the runtime or entering it changes the answer, so the loop is asked
+         * again only after that, and asking an idle runtime costs a comparison.
          */
-        bool IsAlive() const;
+        std::chrono::steady_clock::time_point DueAt();
 
         /**
-         * Milliseconds until a live loop has a timer, immediate or pending callback to run (0: now), or -1 for none.
-         * Only meaningful while IsAlive(): libuv answers 0 for a loop with nothing to run.
+         * Whether the loop has a completion its watcher saw and gave back since the loop last ran. Always false
+         * without a watcher.
          */
-        int64_t MsUntilDue();
+        bool IsSignaled() const {
+#ifdef _WIN32
+            return _signaled.load(std::memory_order_acquire);
+#else
+            return false;
+#endif
+        }
+
+        /**
+         * Report this runtime's work to `schedule`, which must outlive it. On Windows this also starts a thread of
+         * the runtime's own that waits on the loop's completion port and signals the schedule when a completion
+         * arrives, as Electron's embedding does: a port can neither be waited on together with others nor checked
+         * without taking a packet, so the watcher takes it, gives it back, and stays parked until the loop has run.
+         */
+        void JoinSchedule(RuntimeSchedule &schedule);
+
+        // Something ran in the runtime or entered it, so what its loop has due may have changed.
+        void ScheduleChanged();
 
       private:
+        friend class RuntimeSchedule;
+
         NodeRuntime() = default;
 
         static void OnGCPrologue(v8::Isolate *isolate, v8::GCType type, v8::GCCallbackFlags flags, void *data);
@@ -118,6 +202,19 @@ namespace Framework::Scripting {
 
         // The caller holds the locker and the isolate, handle and context scopes.
         void DrainTaskQueues();
+
+        // uv_run(UV_RUN_NOWAIT), then lets the watcher wait for the loop's next completion. The caller holds the
+        // locker and the isolate, handle and context scopes.
+        void RunLoopOnce();
+
+        static void OnCallCompleted(v8::Isolate *isolate);
+
+        void LeaveSchedule();
+
+#ifdef _WIN32
+        void StartWatching();
+        void StopWatching();
+#endif
 
         node::MultiIsolatePlatform *_platform = nullptr;
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;
@@ -128,6 +225,23 @@ namespace Framework::Scripting {
         std::chrono::steady_clock::time_point _gcStart;
         uint64_t _gcPauses = 0;
         double _gcPauseMs  = 0.0;
+
+        // Keeps the loop alive; closed before the environment is freed, whose teardown runs the loop that frees it.
+        uv_async_t *_keepAlive = nullptr;
+        // Starts set, so the first tick drains what the bootstrap queued.
+        bool _entered = true;
+        // _dueAt is what the loop last answered; stale once something ran in the runtime or entered it.
+        bool _dueAtStale = true;
+        std::chrono::steady_clock::time_point _dueAt;
+        RuntimeSchedule *_schedule = nullptr;
+        bool _changeListed         = false; // already in the schedule's list of changed runtimes
+
+#ifdef _WIN32
+        std::thread _watcher;
+        HANDLE _resume = nullptr; // released once the loop has run what the watcher saw
+        std::atomic<bool> _signaled {false};
+        std::atomic<bool> _stopWatching {false};
+#endif
     };
 
 } // namespace Framework::Scripting

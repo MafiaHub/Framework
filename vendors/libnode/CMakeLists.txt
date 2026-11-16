@@ -16,12 +16,13 @@
 cmake_minimum_required(VERSION 3.20)
 
 include(FetchContent)
+include(LibNodePin)
 
 # The release CDN drops a transfer often enough that a single failure must not end a
 # build; without this a hiccup during configure takes a whole release down.
-function(download_with_retry what url destination)
+function(download_with_retry what url destination sha256)
     foreach(attempt RANGE 1 3)
-        file(DOWNLOAD "${url}" "${destination}" SHOW_PROGRESS INACTIVITY_TIMEOUT 60 STATUS status)
+        file(DOWNLOAD "${url}" "${destination}" SHOW_PROGRESS INACTIVITY_TIMEOUT 60 STATUS status EXPECTED_HASH SHA256=${sha256})
         list(GET status 0 code)
         if(code EQUAL 0)
             return()
@@ -36,7 +37,7 @@ function(download_with_retry what url destination)
     message(FATAL_ERROR "${what}: Failed to download after 3 attempts: ${reason}")
 endfunction()
 
-set(LIBNODE_VERSION "26.12.1" CACHE STRING "libnode version")
+set(LIBNODE_VERSION "${LIBNODE_PIN_VERSION}" CACHE STRING "libnode version")
 set(LIBNODE_GITHUB_REPO "MafiaHub/MafiaNode")
 set(LIBNODE_DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/libnode-${LIBNODE_VERSION}")
 
@@ -90,7 +91,10 @@ if(LIBNODE_V8_ONLY)
 
         set(V8_ARCHIVE_PATH "${LIBNODE_DOWNLOAD_DIR}/${V8_ARCHIVE_NAME}")
 
-        download_with_retry(v8 "${V8_URL}" "${V8_ARCHIVE_PATH}")
+        if(NOT DEFINED V8_PIN_SHA256_${LIBNODE_PLATFORM} OR NOT LIBNODE_VERSION STREQUAL LIBNODE_PIN_VERSION)
+            message(FATAL_ERROR "v8: no pinned SHA-256 for ${V8_ARCHIVE_NAME}. Add it to cmake/LibNodePin.cmake (the version and every hash move together).")
+        endif()
+        download_with_retry(v8 "${V8_URL}" "${V8_ARCHIVE_PATH}" "${V8_PIN_SHA256_${LIBNODE_PLATFORM}}")
 
         message(STATUS "v8: Extracting...")
         file(ARCHIVE_EXTRACT
@@ -167,7 +171,10 @@ else()
 
         set(LIBNODE_ARCHIVE_PATH "${LIBNODE_DOWNLOAD_DIR}/${LIBNODE_ARCHIVE_NAME}")
 
-        download_with_retry(libnode "${LIBNODE_URL}" "${LIBNODE_ARCHIVE_PATH}")
+        if(NOT DEFINED LIBNODE_PIN_SHA256_${LIBNODE_PLATFORM} OR NOT LIBNODE_VERSION STREQUAL LIBNODE_PIN_VERSION)
+            message(FATAL_ERROR "libnode: no pinned SHA-256 for ${LIBNODE_ARCHIVE_NAME}. Add it to cmake/LibNodePin.cmake (the version and every hash move together).")
+        endif()
+        download_with_retry(libnode "${LIBNODE_URL}" "${LIBNODE_ARCHIVE_PATH}" "${LIBNODE_PIN_SHA256_${LIBNODE_PLATFORM}}")
 
         message(STATUS "libnode: Extracting...")
         file(ARCHIVE_EXTRACT

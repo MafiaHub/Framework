@@ -45,6 +45,11 @@ namespace Framework::GUI {
         // CEF raises Created inside Init, before any caller can subscribe.
         bool _created = false;
 
+        // What the page's focused element is, as its renderer last reported. Kept through a blur:
+        // the element stays the page's active one and takes the keys again on refocus.
+        bool _formControlFocused = false;
+        bool _textInputFocused   = false;
+
       protected:
         CefRefPtr<CefBrowser> _browser;
         CefRefPtr<CEF::Client> _cefClient;
@@ -90,9 +95,14 @@ namespace Framework::GUI {
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
+        // Click count of the back/forward press this view delivered, 0 when none
+        int _sideButtonClicks[2] = {};
         int _id;
 
         void EmitViewEvent(const ViewEventData &data);
+
+        // Drops side-button presses in flight, here and in the page: their releases no longer reach this view
+        void ResetSideButtons();
 
       public:
         View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
@@ -109,6 +119,9 @@ namespace Framework::GUI {
         // Submit the view's quad; called inside an ImGui frame on the game thread.
         virtual void SubmitImGuiDraw() {}
 
+        // Drops GPU objects that do not survive a device reset (D3D9 default pool); the next Render rebuilds them.
+        virtual void ReleaseDeviceResources() {}
+
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -117,6 +130,9 @@ namespace Framework::GUI {
         }
 
         void Focus(bool enable) {
+            if (enable != _hasFocus) {
+                ResetSideButtons();
+            }
             _hasFocus = enable;
             if (_browser) {
                 _browser->GetHost()->SetFocus(enable);
@@ -127,7 +143,16 @@ namespace Framework::GUI {
             return _hasFocus;
         }
 
+        // Whether a key pressed now types into the page: focused, shown, and a text field holds
+        // the page's own focus.
+        bool HasTextInputFocus() const {
+            return _hasFocus && _shouldDisplay && _textInputFocused;
+        }
+
         void Display(bool enable) {
+            if (enable != _shouldDisplay) {
+                ResetSideButtons();
+            }
             _shouldDisplay = enable;
         }
 

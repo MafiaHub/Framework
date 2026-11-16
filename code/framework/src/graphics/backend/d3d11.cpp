@@ -29,6 +29,7 @@ namespace Framework::Graphics {
         _device    = opts.d3d11.device;
         _context   = opts.d3d11.deviceContext;
         _swapChain = opts.d3d11.swapChain;
+        RefreshBackBufferSize();
 
         {
             // Create Enabled Blend State
@@ -563,6 +564,27 @@ namespace Framework::Graphics {
 
     IDXGISwapChain *D3D11Backend::GetSwapChain() const {
         return _swapChain;
+    }
+
+    void D3D11Backend::RefreshBackBufferSize() {
+        // On a failed read keep the last good size.
+        DXGI_SWAP_CHAIN_DESC desc {};
+        if (!_swapChain || FAILED(_swapChain->GetDesc(&desc))) {
+            return;
+        }
+        std::lock_guard lock(_backBufferSizeMutex);
+        _backBufferWidth  = desc.BufferDesc.Width;
+        _backBufferHeight = desc.BufferDesc.Height;
+    }
+
+    bool D3D11Backend::GetBackBufferSize(UINT &width, UINT &height) const {
+        std::lock_guard lock(_backBufferSizeMutex);
+        if (_backBufferWidth == 0 || _backBufferHeight == 0) {
+            return false;
+        }
+        width  = _backBufferWidth;
+        height = _backBufferHeight;
+        return true;
     }
 
     void D3D11Backend::EnableBlend() {

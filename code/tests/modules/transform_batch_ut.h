@@ -8,11 +8,32 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/replication/transform_batch.h"
 
+#include <chrono>
+#include <functional>
+#include <future>
 #include <vector>
+
+namespace TransformBatchTest {
+    // An entity whose hook, run with the entity locked, puts off what it cannot do there.
+    struct Deferring final: Framework::Networking::Replication::NetworkEntity {
+        static constexpr const char *kTypeName = "Test::TransformBatch::Deferring";
+        static inline std::function<void()> later;
+        static inline int deserialized = 0;
+        void OnDeserialized(bool) override {
+            ++deserialized;
+            Framework::Networking::Replication::World::WhenNoneHeld([] {
+                if (later) {
+                    later();
+                }
+            });
+        }
+    };
+} // namespace TransformBatchTest
 
 MODULE(transform_batch, {
     struct Packet {
@@ -177,7 +198,7 @@ MODULE(transform_batch, {
         packet.data   = game;
         packet.length = sizeof(game);
         packet.guid   = MafiaNet::RakNetGUID(1001);
-        EQUALS(manager->OnReceive(&packet), MafiaNet::RR_CONTINUE_PROCESSING);
+        EQUALS(TestWorld::OnReceive(manager, &packet), MafiaNet::RR_CONTINUE_PROCESSING);
     });
 
     IT("applies batches through ownership epoch and per-entity timestamp gates", {
@@ -192,13 +213,13 @@ MODULE(transform_batch, {
             }
         } cleanup {manager};
         const MafiaNet::RakNetGUID owner(1001), stranger(1002);
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, stranger));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, stranger));
         Framework::Networking::Replication::NetworkEntity entity;
         entity.SetNetworkID(7);
         entity.ownerGUID  = MafiaNet::ToPeerGuid(owner);
         entity.stateEpoch = 3;
-        manager->Reference(&entity);
+        TestWorld::Rm3(manager)->Reference(&entity);
 
         auto deliver = [&](MafiaNet::RakNetGUID sender, MafiaNet::Time time, std::uint8_t epoch, float x, bool truncate = false) {
             Harness h;
@@ -217,7 +238,7 @@ MODULE(transform_batch, {
             packet.length = static_cast<unsigned int>(bytes.size()) - (truncate ? 1 : 0);
             packet.guid   = sender;
             // The unit macros break out of the test on failure, so the check stays out of this lambda.
-            return manager->OnReceive(&packet);
+            return TestWorld::OnReceive(manager, &packet);
         };
         EQUALS(deliver(stranger, 100, 3, 9.0f), MafiaNet::RR_STOP_PROCESSING_AND_DEALLOCATE);
         EQUALS(entity.position.x, 0.0f);
@@ -234,6 +255,124 @@ MODULE(transform_batch, {
         // The stack replica detaches before the peer tears down its connections.
     });
 
+    IT("applies a batch while another thread holds ReplicaManager3's world, as a pass does", {
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            Framework::Networking::Replication::ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+            }
+        } cleanup {manager};
+        const MafiaNet::RakNetGUID owner(1001);
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        Framework::Networking::Replication::NetworkEntity entity;
+        entity.SetNetworkID(7);
+        entity.ownerGUID = MafiaNet::ToPeerGuid(owner);
+        TestWorld::Rm3(manager)->Reference(&entity);
+
+        Harness h;
+        h.pose.Reset();
+        h.pose.Write(entity.stateEpoch);
+        Framework::Networking::Replication::NetworkEntity source;
+        source.position.x = 4.0f;
+        Framework::Networking::Replication::FieldSerializer fields(&h.pose, true);
+        source.SerializeTransform(fields);
+        h.Queue(7, 100);
+        h.Flush();
+        MafiaNet::Packet packet {};
+        packet.data   = h.packets[0].data.data();
+        packet.length = static_cast<unsigned int>(h.packets[0].data.size());
+        packet.guid   = owner;
+
+        bool applied = false;
+        std::future<void> delivery;
+        {
+            const MafiaNet::ReplicaManager3::WorldGuard world(*TestWorld::Rm3(manager));
+            delivery = std::async(std::launch::async, [&] {
+                TestWorld::OnReceive(manager, &packet);
+            });
+            // Only a batch that waits for the world waits this out; it is then delivered once the guard goes.
+            applied = delivery.wait_for(std::chrono::seconds(3)) == std::future_status::ready;
+        }
+        delivery.wait();
+        EQUALS(applied, true);
+        EQUALS(entity.position.x, 4.0f);
+    });
+
+    IT("runs what OnDeserialized put off at the thread's next settle, with nothing held", {
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        struct Cleanup {
+            Framework::Networking::Replication::ReplicationManager *manager;
+            ~Cleanup() {
+                manager->Clear();
+                TransformBatchTest::Deferring::later = nullptr;
+            }
+        } cleanup {manager};
+        using TransformBatchTest::Deferring;
+        Framework::Networking::Replication::EntityRegistry::Get().Register<Deferring>(Deferring::kTypeName);
+        auto &world = manager->GetWorld();
+        const MafiaNet::RakNetGUID owner(1001);
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        uint64_t moved = 0, other = 0;
+        std::uint8_t epoch = 0;
+        {
+            const auto created = world.Create<Deferring>();
+            created->ownerGUID = MafiaNet::ToPeerGuid(owner);
+            moved              = created.Id();
+            epoch              = created->stateEpoch;
+        }
+        {
+            other = world.Create<Deferring>().Id();
+        }
+
+        int ran           = 0;
+        size_t heldThen   = 99;
+        bool reachedOther = false;
+        Deferring::later  = [&] {
+            ++ran;
+            heldThen = Framework::Networking::Replication::World::HeldByThisThread();
+            // What the hook could not do while its own entity was locked: reach another one.
+            reachedOther = static_cast<bool>(world.Write<Deferring>(other));
+        };
+
+        Harness h;
+        h.pose.Reset();
+        h.pose.Write(epoch);
+        Framework::Networking::Replication::NetworkEntity source;
+        source.position.x = 6.0f;
+        Framework::Networking::Replication::FieldSerializer fields(&h.pose, true);
+        source.SerializeTransform(fields);
+        h.Queue(moved, 100);
+        h.Flush();
+        MafiaNet::Packet packet {};
+        packet.data   = h.packets[0].data.data();
+        packet.length = static_cast<unsigned int>(h.packets[0].data.size());
+        packet.guid   = owner;
+        TestWorld::OnReceive(manager, &packet);
+
+        // The hook ran; what it put off has not, since letting go of the Framework's own hold on the entity
+        // runs nothing (it is let go under the sender's connection lock). It waits for the settle that ends a
+        // drain or a tick's pass, or for the next handle this thread lets go of.
+        const int ranAfterReceive = ran;
+        Framework::Networking::Replication::World::Settle();
+        float x = 0.0f;
+        {
+            const auto entity = world.Read<Deferring>(moved);
+            x                 = entity ? entity->position.x : -1.0f;
+        }
+        EQUALS(x, 6.0f);
+        EQUALS(Deferring::deserialized, 1);
+        EQUALS(ranAfterReceive, 0);
+        EQUALS(ran, 1);
+        EQUALS(heldThen, static_cast<size_t>(0));
+        EQUALS(reachedOther, true);
+        Deferring::deserialized = 0;
+    });
+
     IT("resets the reused pose stream between entities and packets", {
         Framework::Networking::NetworkServer peer;
         auto *manager = peer.GetReplicationManager();
@@ -245,13 +384,13 @@ MODULE(transform_batch, {
             }
         } cleanup {manager};
         const MafiaNet::RakNetGUID owner(1001);
-        manager->PushConnection(manager->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
+        TestWorld::Rm3(manager)->PushConnection(TestWorld::Rm3(manager)->AllocConnection(MafiaNet::UNASSIGNED_SYSTEM_ADDRESS, owner));
         Framework::Networking::Replication::NetworkEntity entities[2];
         for (unsigned int i = 0; i < 2; ++i) {
             entities[i].SetNetworkID(i + 1);
             entities[i].ownerGUID  = MafiaNet::ToPeerGuid(owner);
             entities[i].stateEpoch = static_cast<uint8_t>(i + 1);
-            manager->Reference(&entities[i]);
+            TestWorld::Rm3(manager)->Reference(&entities[i]);
         }
         for (unsigned int pass = 1; pass <= 3; ++pass) {
             Harness h;
@@ -270,7 +409,7 @@ MODULE(transform_batch, {
             packet.data   = h.packets[0].data.data();
             packet.length = static_cast<unsigned int>(h.packets[0].data.size());
             packet.guid   = owner;
-            manager->OnReceive(&packet);
+            TestWorld::OnReceive(manager, &packet);
             EQUALS(entities[0].position.x, static_cast<float>(10 * pass));
             EQUALS(entities[1].position.x, static_cast<float>(10 * pass + 1));
         }
@@ -313,7 +452,7 @@ MODULE(transform_batch, {
                 ++passes;
             }
         } entity;
-        manager->Reference(&entity);
+        TestWorld::Rm3(manager)->Reference(&entity);
         manager->BeginNetworkUpdate();
         for (int packet = 0; packet < 300; ++packet) {
             manager->Update();

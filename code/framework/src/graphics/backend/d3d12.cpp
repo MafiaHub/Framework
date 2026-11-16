@@ -28,14 +28,19 @@ namespace Framework::Graphics {
         _swapChain    = swapChain;
         _commandQueue = commandQueue;
 
-        // #2 get count of buffers
+        // #2 get count of buffers and the description the game thread reads
         {
-            DXGI_SWAP_CHAIN_DESC desc {};
-            swapChain->GetDesc(&desc);
+            DXGI_SWAP_CHAIN_DESC1 desc {};
+            if (FAILED(swapChain->GetDesc1(&desc))) {
+                return false;
+            }
             _frameBufferCount = desc.BufferCount;
 
             _frameContext.clear();
             _frameContext.resize(desc.BufferCount);
+
+            std::lock_guard lock(_backBufferDescMutex);
+            _backBufferDesc = {desc.Format, desc.Width, desc.Height};
         }
 
         // #3 create srv heap
@@ -141,13 +146,32 @@ namespace Framework::Graphics {
         }
     }
 
+    void D3D12Backend::SetSwapChain(IDXGISwapChain3 *swapChain) {
+        _swapChain = swapChain;
+        RefreshBackBufferDesc();
+    }
+
+    void D3D12Backend::RefreshBackBufferDesc() {
+        // On a failed read keep the last good values: an UNKNOWN format would rebuild ImGui's pipeline for nothing.
+        DXGI_SWAP_CHAIN_DESC1 desc {};
+        if (!_swapChain || FAILED(_swapChain->GetDesc1(&desc))) {
+            return;
+        }
+        std::lock_guard lock(_backBufferDescMutex);
+        _backBufferDesc = {desc.Format, desc.Width, desc.Height};
+    }
+
     void D3D12Backend::Begin() {
+        // Every frame: ResizeBuffers keeps the pointer, and a new swapchain can reuse a freed one's address.
+        RefreshBackBufferDesc();
+
         const UINT idx = _swapChain->GetCurrentBackBufferIndex();
         // _frameContext/RTV heap are sized to Init's buffer count; a replacement
         // swapchain (SetSwapChain) with a larger count would index out of range
         if (idx >= _frameContext.size()) {
             return;
         }
+        _currentFrameIndex              = idx;
         const auto &currentFrameContext = _frameContext[idx];
         if (FAILED(currentFrameContext._commandAllocator->Reset())) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::Begin, command allocator Reset failed; skipping frame");
@@ -212,9 +236,18 @@ namespace Framework::Graphics {
     }
 
     DXGI_FORMAT D3D12Backend::GetBackBufferFormat() const {
-        DXGI_SWAP_CHAIN_DESC1 desc {};
-        _swapChain->GetDesc1(&desc);
-        return desc.Format;
+        std::lock_guard lock(_backBufferDescMutex);
+        return _backBufferDesc.format;
+    }
+
+    bool D3D12Backend::GetBackBufferSize(UINT &width, UINT &height) const {
+        std::lock_guard lock(_backBufferDescMutex);
+        if (_backBufferDesc.width == 0 || _backBufferDesc.height == 0) {
+            return false;
+        }
+        width  = _backBufferDesc.width;
+        height = _backBufferDesc.height;
+        return true;
     }
 
     int D3D12Backend::AllocateSRVSlot() {

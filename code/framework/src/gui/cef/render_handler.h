@@ -80,6 +80,8 @@ namespace Framework::GUI::CEF {
         int _popupPixelHeight = 0;
         std::vector<uint8_t> _popupUnderlay;
         CefRect _stampedRect;
+        // Logged once: a host out of address space would otherwise log every frame.
+        bool _allocationFailureLogged = false;
 
         // Accelerated path: the popup arrives as its own shared texture.
         SharedCopy _sharedPopup;
@@ -167,6 +169,10 @@ namespace Framework::GUI::CEF {
         }
 
       private:
+        // OnPaint's body, with _pixelMutex held; may throw std::bad_alloc.
+        void PaintLocked(PaintElementType type, const RectList &dirtyRects, const void *buffer, int width, int height);
+        // Frees the view's software surfaces after an allocation failed; _pixelMutex held.
+        void DropPixelsForMemory(int width, int height);
         bool CreateCopyDevice();
         bool EnsureSharedCopy(SharedCopy &copy, UINT width, UINT height);
         static void ReleaseSharedCopy(SharedCopy &copy);

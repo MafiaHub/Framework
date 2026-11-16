@@ -70,6 +70,12 @@ namespace Framework::Integrations::Server::Scripting {
         void WaitUntil(std::chrono::steady_clock::time_point deadline);
 
         /**
+         * For a server whose scripts have their own thread: run the runtimes that have work until the deadline,
+         * once, and come back early with an error waiting or a task for that thread. False with no engine to run.
+         */
+        bool RunScriptsUntil(std::chrono::steady_clock::time_point deadline);
+
+        /**
          * Get the Node.js engine.
          */
         Framework::Scripting::NodeEngine *GetEngine() const {
@@ -104,6 +110,13 @@ namespace Framework::Integrations::Server::Scripting {
          * before Init(); also updates an already-created resource manager.
          */
         void SetDevMode(bool enabled);
+
+        /**
+         * Size Node's platform pool, shared by every resource's isolate. Must be set before Init().
+         */
+        void SetPlatformThreads(uint32_t threads) {
+            _nodeEngine->SetPlatformThreads(static_cast<int>(threads));
+        }
 
         /**
          * Set the mod version exposed as ExecutionEnvironment.modVersion. Must be set before Init().

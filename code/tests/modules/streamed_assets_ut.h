@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "integrations/server/asset_file_server.h"
 #include "integrations/server/asset_paks/asset_pak_builder.h"
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
@@ -24,13 +25,15 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 // Asset paks: a resource's lane folders built into plain ZIPs an engine mounts, staged beside its
 // .fwpak and announced in its ResourceInfo. A test policy stands in for a mod's. The HTTP transfer is
 // tested in asset_http_ut.h.
 namespace StreamedAssetsTest {
-    class TestPolicy final: public Framework::Utils::StreamedAssets::Policy {
+    class TestPolicy: public Framework::Utils::StreamedAssets::Policy {
       public:
         const std::vector<std::string> &GetLanes() const override {
             static const std::vector<std::string> lanes = {"stream"};
@@ -38,7 +41,7 @@ namespace StreamedAssetsTest {
         }
 
         bool NormalizeEntry(std::string_view lane, std::string_view, std::string_view raw, std::string &out, std::string &reason) const override {
-            if (lane != "stream" || raw.empty() || raw.find("..") != std::string_view::npos || raw.find("forbidden") != std::string_view::npos) {
+            if (lane != "stream" || raw.empty() || raw.contains("..") || raw.contains("forbidden")) {
                 reason = "refused";
                 return false;
             }
@@ -51,6 +54,15 @@ namespace StreamedAssetsTest {
 
         bool PrefersStore(std::string_view normalized) const override {
             return normalized.size() > 4 && normalized.substr(normalized.size() - 4) == ".bin";
+        }
+    };
+
+    // Accepts what TestPolicy refuses, so a test can write a pak the strict policy must then refuse.
+    class LenientPolicy final: public TestPolicy {
+      public:
+        bool NormalizeEntry(std::string_view, std::string_view, std::string_view raw, std::string &out, std::string &) const override {
+            out.assign(raw);
+            return true;
         }
     };
 
@@ -97,6 +109,85 @@ MODULE(streamed_assets, {
         EQUALS(Framework::Utils::StreamedAssets::PakArchive::Validate((root / "one.pak").string(), policy, "stream", "demo", listed, error), true);
         UEQUALS(listed.size(), 2u);
         EQUALS(listed[0].path == "a.txt" && listed[0].size == 5000 && listed[0].crc32 != 0, true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("finds no refused pak among valid ones", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto root = Scratch("fw_pak_refused_none");
+        WriteBytes(root / "a.txt", 500, 1);
+        WriteBytes(root / "b.txt", 600, 2);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "one.pak").string(), {{"a.txt", (root / "a.txt").string()}}, policy, error), true);
+        EQUALS(PakArchive::Write((root / "two.pak").string(), {{"b.txt", (root / "b.txt").string()}}, policy, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "one.pak").string(), "demo", "stream"}, {(root / "two.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 0u);
+        UEQUALS(errors.size(), 0u);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("refuses a pak announced under a lane the policy does not declare", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto root = Scratch("fw_pak_refused_lane");
+        WriteBytes(root / "a.txt", 500, 1);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "one.pak").string(), {{"a.txt", (root / "a.txt").string()}}, policy, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "one.pak").string(), "demo", "notalane"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 0u);
+        UEQUALS(errors.size(), 1u);
+        EQUALS(errors[0].contains("notalane"), true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("refuses a pak whose entries the lane does not accept", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        StreamedAssetsTest::LenientPolicy lenient;
+        const auto root = Scratch("fw_pak_refused_entries");
+        WriteBytes(root / "a.txt", 500, 1);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "bad.pak").string(), {{"forbidden/a.txt", (root / "a.txt").string()}}, lenient, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "bad.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 0u);
+        UEQUALS(errors.size(), 1u);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("refuses a file that is not a zip", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto root = Scratch("fw_pak_refused_garbage");
+        WriteBytes(root / "junk.pak", 64, 3);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "junk.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 0u);
+        UEQUALS(errors.size(), 1u);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("reports refused paks by index, leaving valid ones out", {
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        StreamedAssetsTest::LenientPolicy lenient;
+        const auto root = Scratch("fw_pak_refused_index");
+        WriteBytes(root / "a.txt", 500, 1);
+        std::string error;
+        EQUALS(PakArchive::Write((root / "ok1.pak").string(), {{"a.txt", (root / "a.txt").string()}}, policy, error), true);
+        EQUALS(PakArchive::Write((root / "bad.pak").string(), {{"forbidden/a.txt", (root / "a.txt").string()}}, lenient, error), true);
+        EQUALS(PakArchive::Write((root / "ok2.pak").string(), {{"b/a.txt", (root / "a.txt").string()}}, policy, error), true);
+        std::vector<std::string> errors;
+        const auto refused = PakArchive::FindRefused({{(root / "ok1.pak").string(), "demo", "stream"}, {(root / "bad.pak").string(), "demo", "stream"}, {(root / "ok2.pak").string(), "demo", "stream"}}, policy, errors);
+        UEQUALS(refused.size(), 1u);
+        EQUALS(refused[0], 1u);
+        UEQUALS(errors.size(), 1u);
         std::filesystem::remove_all(root);
     });
 
@@ -191,6 +282,97 @@ MODULE(streamed_assets, {
         EQUALS(changed[0].sha256 != first[0].sha256, true);
         EQUALS(std::filesystem::exists(builder.PathOf("demo", changed[0])), true);
         EQUALS(std::filesystem::exists(firstPath), false);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("prepares a changed lane on another thread while clients still fetch the pak it replaces", {
+        const auto root    = Scratch("fw_asset_pak_prepare");
+        const auto staging = root / "staging";
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 5);
+
+        Framework::Integrations::Server::AssetPakBuilder builder;
+        builder.Init(std::make_shared<TestPolicy>(), staging);
+        const auto first = builder.Build("demo", root / "demo");
+        UEQUALS(first.size(), 1u);
+        const auto firstPath = builder.PathOf("demo", first[0]);
+
+        const auto modified = std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin");
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 6);
+        WriteBytes(root / "demo" / "stream" / "b.bin", 300, 7);
+        std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin", modified + std::chrono::seconds(2));
+
+        Framework::Integrations::Server::AssetPakBuilder::Prepared prepared;
+        std::thread worker([&] {
+            prepared = std::as_const(builder).Prepare("demo", root / "demo");
+        });
+        worker.join();
+
+        // Nothing the server announces has changed yet: the old pak is still there and still what it answers for.
+        EQUALS(std::filesystem::exists(firstPath), true);
+        EQUALS(builder.HasEntry("stream", "b.bin"), false);
+
+        const auto adopted = builder.Adopt("demo", std::move(prepared));
+        UEQUALS(adopted.size(), 1u);
+        EQUALS(adopted[0].sha256 != first[0].sha256, true);
+        const auto newPath = builder.PathOf("demo", adopted[0]);
+        EQUALS(std::filesystem::exists(newPath), true);
+        EQUALS(std::filesystem::exists(firstPath), false);
+        EQUALS(builder.HasEntry("stream", "b.bin"), true);
+        // Its chunk list came with it, so publishing it does not hash the pak again on the tick thread.
+        EQUALS(Framework::Integrations::Server::AssetFileServer::HasCurrentChunkList(newPath), true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("keeps the pak of a lane prepared again without a change", {
+        const auto root    = Scratch("fw_asset_pak_prepare_same");
+        const auto staging = root / "staging";
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 5);
+
+        Framework::Integrations::Server::AssetPakBuilder builder;
+        builder.Init(std::make_shared<TestPolicy>(), staging);
+        const auto first     = builder.Build("demo", root / "demo");
+        const auto firstPath = builder.PathOf("demo", first[0]);
+        const auto adopted   = builder.Adopt("demo", builder.Prepare("demo", root / "demo"));
+        UEQUALS(adopted.size(), 1u);
+        EQUALS(adopted[0].sha256 == first[0].sha256, true);
+        EQUALS(std::filesystem::exists(firstPath), true);
+        std::filesystem::remove_all(root);
+    });
+
+    IT("tells a lane it could not build from a lane that ships nothing", {
+        const auto root    = Scratch("fw_asset_pak_failed");
+        const auto staging = root / "staging";
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 5);
+
+        Framework::Integrations::Server::AssetPakBuilder builder;
+        builder.Init(std::make_shared<TestPolicy>(), staging);
+        const auto first = builder.Build("demo", root / "demo");
+        UEQUALS(first.size(), 1u);
+
+        // The folder changes, and the staging directory cannot be written to when the pak is built (a file stands
+        // where it was): an I/O failure, not a resource that stopped shipping the lane.
+        const auto modified = std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin");
+        WriteBytes(root / "demo" / "stream" / "a.bin", 4000, 6);
+        std::filesystem::last_write_time(root / "demo" / "stream" / "a.bin", modified + std::chrono::seconds(2));
+        std::filesystem::remove_all(staging);
+        WriteBytes(staging, 10, 1);
+        const auto failed = builder.Prepare("demo", root / "demo");
+        EQUALS(failed.Failed(), true);
+        // What it built before is still what it answers for: nothing was adopted.
+        EQUALS(builder.HasEntry("stream", "a.bin"), true);
+
+        // A lane the policy refuses is not a failure: the resource ships nothing for it, on purpose.
+        std::filesystem::remove(staging);
+        std::filesystem::create_directories(staging);
+        WriteBytes(root / "other" / "stream" / "forbidden.bin", 100, 8);
+        const auto refused = builder.Prepare("other", root / "other");
+        EQUALS(refused.Failed(), false);
+        // And neither is a resource with no lane folder at all.
+        std::filesystem::create_directories(root / "plain");
+        EQUALS(builder.Prepare("plain", root / "plain").Failed(), false);
         std::filesystem::remove_all(root);
     });
 

@@ -53,9 +53,18 @@ namespace Framework::GUI {
         const bool recreate = !_texture || _textureWidth != _width || _textureHeight != _height;
         if (recreate) {
             _texture.Reset();
-            // MANAGED survives device resets, so no lost-device handling needed
-            if (FAILED(device->CreateTexture(_width, _height, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, _texture.ReleaseAndGetAddressOf(), nullptr))) {
-                Framework::Logging::GetLogger("Web")->error("View {}: failed to create {}x{} D3D9 texture", _id, _width, _height);
+            // A dynamic texture in the default pool, as MANAGED keeps a second, system-memory copy of every texel in
+            // the host process: the size of the frame again, in a 32-bit host where the CPU accumulator already holds
+            // one. Default-pool resources die with a device reset; Manager::OnDeviceLost releases this one first.
+            HRESULT created = device->CreateTexture(_width, _height, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, _texture.ReleaseAndGetAddressOf(), nullptr);
+            _textureManaged = false;
+            if (FAILED(created) && device->TestCooperativeLevel() == D3D_OK) {
+                // a device without dynamic textures
+                created         = device->CreateTexture(_width, _height, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, _texture.ReleaseAndGetAddressOf(), nullptr);
+                _textureManaged = SUCCEEDED(created);
+            }
+            if (FAILED(created)) {
+                Framework::Logging::GetLogger("Web")->error("View {}: failed to create {}x{} D3D9 texture ({:#x})", _id, _width, _height, static_cast<unsigned>(created));
                 return false;
             }
             _textureWidth  = _width;
@@ -75,8 +84,11 @@ namespace Framework::GUI {
                 return true;
             }
 
+            // A whole-surface write may discard the old contents; a partial one keeps the texels around the rect.
+            const bool whole  = area.left == 0 && area.top == 0 && area.right == _width && area.bottom == _height;
+            const DWORD flags = whole && !_textureManaged ? D3DLOCK_DISCARD : 0;
             D3DLOCKED_RECT locked;
-            if (FAILED(_texture->LockRect(0, &locked, &area, 0))) {
+            if (FAILED(_texture->LockRect(0, &locked, whole ? nullptr : &area, flags))) {
                 // keep the dirty flag so the copy retries next frame
                 return true;
             }
@@ -96,6 +108,13 @@ namespace Framework::GUI {
         }
 
         return true;
+    }
+
+    void ViewD3D9::ReleaseDeviceResources() {
+        std::scoped_lock lock(_renderMutex);
+        _texture.Reset();
+        _textureWidth  = 0;
+        _textureHeight = 0;
     }
 
     void ViewD3D9::DrawQuad(IDirect3DDevice9 *device) const {

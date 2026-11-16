@@ -59,6 +59,8 @@ namespace Framework::GUI {
         bool isMainFrame = false;
         bool blocked     = false;
         bool focused     = false;
+        // InputFocusChange: the focused element takes text. The view keeps it; scripts never see it.
+        bool editable = false;
     };
 
     using OnViewEventCallback = fu2::function<void(const ViewEventData &) const>;

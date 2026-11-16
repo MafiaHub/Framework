@@ -39,6 +39,7 @@ namespace Framework::Scripting::Builtins {
         static constexpr float kMaxFontSize   = 512.0f;
         static constexpr float kDefaultMetres = 30.0f;
         static constexpr float kMaxDrawMetres = 1000.0f;
+        static constexpr size_t kMaxFontBytes = Networking::Replication::Entities::kTextLabelMaxFontBytes;
 
         TextLabel(uint64_t networkId): Entity(networkId) {}
 
@@ -47,7 +48,26 @@ namespace Framework::Scripting::Builtins {
         static void SetUnitsPerMetre(float unitsPerMetre);
         static float GetUnitsPerMetre();
 
-        LabelEntity *ResolveLabel() const;
+        // The label behind this handle, held for the scope that keeps it; with another entity when
+        // one is named, both taken in one call. False when the handle is stale or not a label.
+        struct HeldLabel {
+            Held entity;
+            Held target;
+            LabelEntity *label = nullptr;
+
+            explicit operator bool() const {
+                return label != nullptr;
+            }
+            LabelEntity *operator->() const {
+                return label;
+            }
+            LabelEntity &operator*() const {
+                return *label;
+            }
+        };
+        HeldLabel ResolveLabel(uint64_t with = 0) const;
+        // With the entity the label follows, if it follows one.
+        HeldLabel ResolveLabelAndTarget() const;
 
         std::string GetText() const;
         void SetText(const std::string &text);
@@ -65,6 +85,17 @@ namespace Framework::Scripting::Builtins {
 
         float GetFadeDistance() const;
         void SetFadeDistance(float distance);
+
+        // The near edge. Not the streaming radius: a label too close to draw is still sent, so
+        // another can take over at that distance without a gap.
+        float GetMinDrawDistance() const;
+        void SetMinDrawDistance(float distance);
+
+        float GetMinFadeDistance() const;
+        void SetMinFadeDistance(float distance);
+
+        std::string GetFont() const;
+        void SetFont(const std::string &family);
 
         uint32_t GetStyle() const;
         void SetStyle(uint32_t style);

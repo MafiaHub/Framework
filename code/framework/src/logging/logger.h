@@ -34,6 +34,10 @@ namespace Framework::Logging {
     using LogForwarder = std::function<void(int level, const std::string &name, const std::string &message)>;
 
     class Logger final {
+      public:
+        // Lines the outputs can fall behind by before the oldest are dropped.
+        static constexpr size_t kQueuedLines = 32768;
+
       private:
         [[maybe_unused]] std::chrono::time_point<std::chrono::system_clock> _sessionStart;
         // Serializes logger/sink creation; the fast path (already-registered logger) never takes it.
@@ -53,6 +57,12 @@ namespace Framework::Logging {
         std::shared_ptr<spdlog::sinks::sink> _fileSink;
         std::shared_ptr<spdlog::sinks::sink> _countingSink;
         std::atomic<uint64_t> _logEventCount {0};
+        spdlog::level::level_enum _consoleLevel = spdlog::level::debug;
+
+        // Lines the queue has dropped that the outputs were told about, and when to look for more (a steady_clock
+        // count).
+        std::atomic<uint64_t> _reportedDrops {0};
+        std::atomic<int64_t> _nextDropCheck {0};
 
         std::shared_ptr<spdlog::sinks::sink> _forwardingSink;
         std::mutex _forwarderMutex;
@@ -140,6 +150,16 @@ namespace Framework::Logging {
         void CountLogEvent() {
             _logEventCount.fetch_add(1, std::memory_order_relaxed);
         }
+
+        // The lowest level the console shows; the file keeps everything. Applies at once.
+        void SetConsoleLevel(spdlog::level::level_enum level);
+
+        // Lines dropped since the start because the outputs fell a whole queue behind. A log call never waits for
+        // them: it costs its caller the same whether they keep up or not.
+        uint64_t GetDroppedLineCount() const;
+
+        // Tells the outputs how many lines were dropped since it last did. Called as lines are written.
+        void ReportDroppedLines();
 
         static uint32_t GetCacheGeneration() {
             return _cacheGeneration.load(std::memory_order_acquire);

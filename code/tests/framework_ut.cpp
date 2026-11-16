@@ -6,20 +6,46 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 64
+#include "alloc_counter.h"
 #include "logging/logger.h"
 #include "unit.h"
+
+#include <cstdlib>
+#include <new>
+
+// Feeds FrameworkTests::AllocationScope. Every other form of new and delete defaults onto these two.
+void *operator new(std::size_t size) {
+    if (FrameworkTests::g_countAllocations) {
+        ++FrameworkTests::g_allocations;
+    }
+    if (void *block = std::malloc(size == 0 ? 1 : size)) {
+        return block;
+    }
+    throw std::bad_alloc();
+}
+
+void operator delete(void *block) noexcept {
+    std::free(block);
+}
+
+void operator delete(void *block, std::size_t) noexcept {
+    std::free(block);
+}
 
 /* TEST CATEGORIES */
 #include "modules/asset_http_ut.h"
 #include "modules/bitops_ut.h"
+#include "modules/cef_runtime_files_ut.h"
+#include "modules/client_package_ut.h"
 #include "modules/connection_admission_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/entity_registry_ut.h"
+#include "modules/fork_join_pool_ut.h"
 #include "modules/gui_resources_ut.h"
 #include "modules/input_state_ut.h"
 #include "modules/interest_grid_ut.h"
+#include "modules/interest_scale_ut.h"
 #include "modules/interpolator_ut.h"
 #include "modules/nametag_ut.h"
 #include "modules/network_packets_ut.h"
@@ -28,6 +54,8 @@
 #include "modules/player_ids_ut.h"
 #include "modules/playout_buffer_ut.h"
 #include "modules/replication_authority_ut.h"
+#include "modules/replication_parallel_ut.h"
+#include "modules/replication_threads_ut.h"
 #include "modules/replication_rate_ut.h"
 #include "modules/resource_package_ut.h"
 #include "modules/result_ut.h"
@@ -36,12 +64,19 @@
 #include "modules/server_config_ut.h"
 #include "modules/snapshot_buffer_ut.h"
 #include "modules/spsc_ring_ut.h"
+#include "modules/state_bag_routing_ut.h"
 #include "modules/state_bag_scripting_ut.h"
 #include "modules/state_bag_ut.h"
 #include "modules/state_machine_ut.h"
 #include "modules/streamed_assets_ut.h"
 #include "modules/string_utils_ut.h"
+#include "modules/system_graphics_ut.h"
+#include "modules/task_scheduler_ut.h"
 #include "modules/text_label_ut.h"
+#include "modules/thread_budget_ut.h"
+#include "modules/token_bucket_ut.h"
+#include "modules/tick_breakdown_ut.h"
+#include "modules/logger_ut.h"
 #include "modules/transform_batch_ut.h"
 #include "modules/url_protocol_ut.h"
 #include "modules/voice_activity_ut.h"
@@ -49,9 +84,13 @@
 #include "modules/voice_positions_ut.h"
 #include "modules/voice_ptt_gate_ut.h"
 #include "modules/voice_router_ut.h"
+#include "modules/webserver_main_thread_ut.h"
+#include "modules/world_lock_ut.h"
 #include "modules/world_text_ut.h"
+#include "modules/world_ut.h"
 
 #ifdef _WIN32
+#include "modules/d3d12_backend_ut.h"
 #include "modules/d3d12_ui_compositor_ut.h"
 #include "modules/epic_manifest_ut.h"
 #include "modules/world_text_layout_ut.h"
@@ -75,6 +114,11 @@
 #include "modules/run_until_ut.h"
 #include "modules/resource_ut.h"
 #include "modules/timer_context_ut.h"
+// Starts and stops whole servers, which shuts the logger down with each: kept last.
+#include "modules/packet_drain_ut.h"
+#include "modules/server_threading_ut.h"
+#include "modules/server_script_thread_ut.h"
+#include "modules/server_packet_thread_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -84,20 +128,35 @@ int main() {
     UNIT_MODULE(asset_http);
     UNIT_MODULE(bitops);
     UNIT_MODULE(string_utils);
+    UNIT_MODULE(system_graphics);
     UNIT_MODULE(world_text);
     UNIT_MODULE(text_label);
+    UNIT_MODULE(tick_breakdown);
+    UNIT_MODULE(logger);
     UNIT_MODULE(interpolator);
     UNIT_MODULE(result);
     UNIT_MODULE(network_packets);
     UNIT_MODULE(network_work);
     UNIT_MODULE(replication_authority);
     UNIT_MODULE(replication_rate);
+    UNIT_MODULE(replication_parallel);
+    UNIT_MODULE(replication_threads);
     UNIT_MODULE(transform_batch);
     UNIT_MODULE(interest_grid);
+    UNIT_MODULE(interest_scale);
+    UNIT_MODULE(fork_join_pool);
+    UNIT_MODULE(task_scheduler);
+    UNIT_MODULE(thread_budget);
+    UNIT_MODULE(token_bucket);
+    UNIT_MODULE(webserver_main_thread);
+    UNIT_MODULE(world_lock);
+    UNIT_MODULE(world);
+    UNIT_MODULE(client_package);
     UNIT_MODULE(input_state);
     UNIT_MODULE(delegation);
     UNIT_MODULE(entity_registry);
     UNIT_MODULE(state_bag);
+    UNIT_MODULE(state_bag_routing);
     UNIT_MODULE(state_bag_scripting);
     UNIT_MODULE(scripting_catalog);
     UNIT_MODULE(rpc_identifier);
@@ -117,6 +176,7 @@ int main() {
     UNIT_MODULE(resource_package);
     UNIT_MODULE(streamed_assets);
 #ifdef _WIN32
+    UNIT_MODULE(d3d12_backend);
     UNIT_MODULE(d3d12_ui_compositor);
     UNIT_MODULE(epic_manifest);
     UNIT_MODULE(world_text_layout);
@@ -142,9 +202,14 @@ int main() {
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
     UNIT_MODULE(connection_gate);
+    UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);
     UNIT_MODULE(nametag);
     UNIT_MODULE(player_ids);
+    UNIT_MODULE(packet_drain);
+    UNIT_MODULE(server_threading);
+    UNIT_MODULE(server_script_thread);
+    UNIT_MODULE(server_packet_thread);
 
     return UNIT_RUN();
 }

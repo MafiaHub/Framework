@@ -130,6 +130,15 @@ behind the join. Anything the level load must see stays blocking. The
 default is blocking for every lane, so a mod that does nothing keeps today's
 behaviour.
 
+## Checking paks on the client
+
+The client takes the same policy the server builds with through
+`Integrations::Client::InstanceOptions::assetPakPolicy`. With it set, a pak
+that fails validation is deleted and never announced: a blocking pak at the
+first connect ends the connection, a refreshed or deferred one is skipped.
+Without it the framework does not look inside a pak, and the mod must call
+`PakArchive::Validate` itself before mounting one.
+
 ## Downloading beside the player slots
 
 `max-downloading` (config and command line; `InstanceOptions::maxDownloading`)
@@ -146,6 +155,14 @@ commas, tried in order before the game port, with no token. The server logs
 at start which files to copy there from its staging directory; copy the
 `.chunks` lists with them. A mirror that fails, serves wrong bytes or cannot
 serve ranges falls back per file.
+
+A client uses at most 8 of the announced mirrors (`kMaxDownloadMirrors`) and
+skips the others it cannot trust: a mirror must be plain `http(s)` without
+credentials, query or fragment, and its host must not be loopback, private,
+link-local or unspecified, judged on the URL text alone. The host the player
+connected to is always accepted, so a LAN server may mirror itself. A mod
+that mirrors from another machine on its LAN sets
+`InstanceOptions::allowPrivateDownloadMirrors`.
 
 ## What the log says
 

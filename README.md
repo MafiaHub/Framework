@@ -4,7 +4,7 @@
 
 <div align="center">
     <a href="https://discord.gg/eBQ4QHX"><img src="https://img.shields.io/discord/402098213114347520.svg" alt="Discord server" /></a>
-    <a href="LICENSE.txt"><img src="https://img.shields.io/badge/License-MafiaHub%20OSS-blue" alt="license" /></a>
+    <a href="LICENSE.txt"><img src="https://img.shields.io/badge/License-MafiaHub%20source--available-blue" alt="license" /></a>
     <a href="https://github.com/MafiaHub/Framework/releases/latest"><img src="https://img.shields.io/github/v/release/MafiaHub/Framework?include_prereleases" alt="Latest release" /></a>
 </div>
 
@@ -153,6 +153,6 @@ We're always looking for contributors. Reach us on [Discord](https://discord.gg/
 
 ## License
 
-The code is licensed under the [MafiaHub OSS](LICENSE.txt) license.
+The code is available under the [MafiaHub source-available license](LICENSE.txt). Forks and source builds are for contributions back to the Framework. Using it in another project requires written permission from MafiaHub, which may be granted by that project's license.
 
-Its 5th clause keeps work on shared functionality in this repository: improvements go into the Framework rather than into diverging copies, so every project built on it benefits.
+Community servers and players use official releases. Custom launchers require written permission. Scripts, game modes and resources can use the scripting API with official releases under the license's terms.

@@ -1,0 +1,19 @@
+# ThreadSanitizer suppressions for a -DFW_SANITIZE=thread build of the tests. The sanitizer job
+# (.github/workflows/build-test.yml) joins this file to MafiaNet's own baseline, ci/tsan.supp in
+# the MafiaNet checkout it builds:
+#   cat cmake/tsan.supp <MafiaNet>/ci/tsan.supp > all.supp
+#   TSAN_OPTIONS=suppressions=all.supp build/bin/FrameworkTests
+#
+# Third-party code only, one reason per entry. Nothing here may name Framework or MafiaNet code:
+# a report in the Framework is a finding, and one in MafiaNet is fixed or baselined there.
+#
+# Format: https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
+# No entry today. Tracy races with itself before main() (its worker threads start from one static
+# initializer, its allocator's span cache is constructed by a later one); configure with
+# -DFW_PROFILING=OFF, as the job does, rather than suppress it.
+
+# spdlog: a logger's sink list is not synchronised, and network_packets_ut.h adds a ring-buffer
+# sink to a live logger to read what it logs while spdlog's periodic flusher walks that list.
+# Test-only: the server sets its sinks up before any thread logs.
+race:spdlog::sinks::base_sink

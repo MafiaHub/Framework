@@ -309,7 +309,7 @@ MODULE(function_references, {
 
         // A Node timer links back to itself: as a value it cannot cross, as an outcome it is never copied.
         const std::string asValue = FunctionReferencesTest::CallOwner(pair, "timer", Returned::Value);
-        EQUALS(asValue.find("refers back to itself") != std::string::npos, true);
+        EQUALS(asValue.contains("refers back to itself"), true);
         STREQUALS(FunctionReferencesTest::CallOwner(pair, "timer", Returned::Outcome).c_str(), "undefined");
 
         STREQUALS(FunctionReferencesTest::CallOwner(pair, "veto", Returned::Outcome).c_str(), "false");

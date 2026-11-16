@@ -61,7 +61,7 @@ namespace Framework::Utils::UrlProtocol {
                 return std::nullopt;
             }
         }
-        if (url.find(L"..") != std::wstring::npos) {
+        if (url.contains(L"..")) {
             return std::nullopt;
         }
 

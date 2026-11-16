@@ -128,7 +128,7 @@ Unchanged — `RegisterRPC<T>` reads `T::kIdentifier` for you:
 ```cpp
 // client/src/core/modules/human.cpp
 net->RegisterRPC<Shared::RPC::PlayerReload>([](const Shared::RPC::PlayerReload &reload, MafiaNet::Packet *) {
-    auto *human = Replication()->GetEntityByNetworkID(reload.networkId);
+    auto *human = Framework::Networking::Replication::ClientEntities(*Replication()).GetEntityByNetworkID(reload.networkId);
     // ... replay the reload on the remote ped
 });
 ```
@@ -152,7 +152,7 @@ macro still produces a `const char *`:
 // server/src/core/rpc/player_handlers.cpp — relay to everyone but the sender
 MafiaNet::BitStream bs;
 relayed.Serialize(&bs, true);
-netServer->SignalExcept(Shared::RPC::PlayerReload::kIdentifier, bs, packet->guid);
+netServer->SignalExcept(Shared::RPC::PlayerReload::kIdentifier, bs, sender.Connection());
 ```
 
 ### 2.4 Naming rules

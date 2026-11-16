@@ -9,6 +9,7 @@
 #pragma once
 
 #include "networking/replication/network_entity.h"
+#include "networking/replication/world.h"
 
 #include <cstdint>
 
@@ -19,6 +20,9 @@ namespace Framework::World::Archetypes {
     // connection's viewer — its position/streamRange drive that client's interest set. The caller
     // registers it as the viewer for the player's GUID via ReplicationManager::SetViewer. Player
     // metadata (nickname, hardware id) belongs on the game's player NetworkEntity subclass.
+    //
+    // A server sets it up through the handle it holds on the entity; a client, which reaches its
+    // entities by pointer, through that.
     class PlayerArchetype final {
       public:
         void SetupClient(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
@@ -27,7 +31,8 @@ namespace Framework::World::Archetypes {
             }
         }
 
-        void SetupServer(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
+        template <typename T>
+        void SetupServer(const Replication::Ref<T> &entity, MafiaNet::PeerGuid guid) {
             if (entity) {
                 entity->ownerGUID          = guid;
                 entity->streaming.isViewer = true;

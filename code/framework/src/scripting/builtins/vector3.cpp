@@ -13,7 +13,7 @@
 
 namespace Framework::Scripting::Builtins {
 
-    std::unordered_map<v8::Isolate *, std::unique_ptr<v8pp::class_<Vector3>>> Vector3::_classes;
+    ClassCache<Vector3> Vector3::_classes;
 
     Vector3 &Vector3::normalize() {
         float len = glm::length(_vec);
@@ -29,13 +29,12 @@ namespace Framework::Scripting::Builtins {
     }
 
     v8pp::class_<Vector3> &Vector3::GetClass(v8::Isolate *isolate) {
-        auto it = _classes.find(isolate);
-        if (it != _classes.end()) {
-            return *it->second;
+        if (auto *found = _classes.Find(isolate)) {
+            return *found;
         }
+        const CatalogWriteLock building;
 
-        auto &cls = _classes[isolate];
-        cls       = std::make_unique<v8pp::class_<Vector3>>(isolate, GetScriptingCatalog(isolate), "Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.");
+        auto cls = std::make_unique<v8pp::class_<Vector3>>(isolate, GetScriptingCatalog(isolate), "Vector3", "Mutable three-dimensional vector for positions, directions, and Euler angles.");
         cls->auto_wrap_objects(true); // Enable auto-wrapping for return values
         cls->ctor<float, float, float>(v8pp::metadata::docs("void",
                                            {
@@ -111,7 +110,7 @@ namespace Framework::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<decltype(&Vector3::forward)>("forward", v8pp::metadata::docs("Vector3", {}, "Creates the framework's positive-Z unit direction.", "New Vector3(0, 0, 1)."), true));
         metadata.record(v8pp::metadata::function_of<decltype(&Vector3::right)>("right", v8pp::metadata::docs("Vector3", {}, "Creates the framework's positive-X unit direction.", "New Vector3(1, 0, 0)."), true));
 
-        return *cls;
+        return _classes.Add(isolate, std::move(cls));
     }
 
     void Vector3::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
@@ -126,7 +125,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     void Vector3::UnregisterIsolate(v8::Isolate *isolate) {
-        _classes.erase(isolate);
+        _classes.Unregister(isolate);
     }
 
 } // namespace Framework::Scripting::Builtins

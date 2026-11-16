@@ -86,6 +86,10 @@ namespace Framework::GUI {
         Manager();
         ~Manager();
 
+        // Init's Error::code when files CEF needs are not next to the module; the message lists them.
+        // An interrupted update or an antivirus quarantine is the usual cause.
+        static constexpr int32_t kErrorMissingRuntimeFiles = 1;
+
         [[nodiscard]] Utils::Result<void, Error> Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
         void Shutdown() override;
 
@@ -95,6 +99,8 @@ namespace Framework::GUI {
         void CleanupViews();
         bool IsAnyViewFocused() const;
         bool IsAnyGCViewFocused() const;
+        // Narrower than IsAnyViewFocused: a focused panel of buttons takes keys but types nothing.
+        bool IsAnyViewTextInputFocused() const;
 
         std::vector<GUI::View *> GetAllViews() const;
         std::vector<GUI::View *> GetGCViews() const;
@@ -104,6 +110,9 @@ namespace Framework::GUI {
 
         // Match the viewport and every fullscreen view to a new client size.
         void Resize(int width, int height);
+
+        // Before the host resets its D3D9 device: views release what a reset would invalidate.
+        void OnDeviceLost();
 
         // Game-thread companion to Render(); must be called inside an ImGui frame.
         void SubmitImGuiDraws();

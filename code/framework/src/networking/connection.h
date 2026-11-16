@@ -12,6 +12,7 @@
 #include <mafianet/bit_stream.h>
 #include <mafianet/types.h>
 #include <string>
+#include <utility>
 
 namespace Framework::Networking {
     enum class DisconnectionReason : uint32_t {
@@ -35,7 +36,7 @@ namespace Framework::Networking {
 
     // Optional reason carried on a graceful disconnect (CloseConnection's reasonData).
     struct DisconnectPayload {
-        uint32_t reason = static_cast<uint32_t>(DisconnectionReason::UNKNOWN);
+        uint32_t reason = std::to_underlying(DisconnectionReason::UNKNOWN);
         std::string customReason;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {

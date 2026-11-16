@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace Framework::Networking::Replication {
     // Wire values are shared with External::ImGUI::Widgets::NameTagComponent; keep in sync.
@@ -24,7 +25,7 @@ namespace Framework::Networking::Replication {
     // A player avatar's nametag state. Games embed one, return it from NetworkEntity::GetNametag and
     // serialize it in their own SerializeFields. Server-written: the owner neither sends nor overrides it.
     struct NametagState {
-        static constexpr uint8_t kAllComponents = static_cast<uint8_t>(NametagComponent::Name) | static_cast<uint8_t>(NametagComponent::Health);
+        static constexpr uint8_t kAllComponents = std::to_underlying(NametagComponent::Name) | std::to_underlying(NametagComponent::Health);
         // Replicated to every client, so a script cannot push an unbounded string through it.
         static constexpr std::size_t kMaxTextBytes = 64;
 

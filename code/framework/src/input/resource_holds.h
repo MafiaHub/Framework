@@ -48,7 +48,7 @@ namespace Framework::Input {
             }
         }
         bool IsHeld(const std::string &owner) const {
-            return _holds.find(owner) != _holds.end();
+            return _holds.contains(owner);
         }
         bool IsHeld() const {
             return !_holds.empty();

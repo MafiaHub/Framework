@@ -86,7 +86,7 @@ namespace Framework::Utils {
         }
 
         _buffers.emplace(id, std::move(owned));
-        if (std::find(_mounts.begin(), _mounts.end(), id) == _mounts.end()) {
+        if (!std::ranges::contains(_mounts, id)) {
             _mounts.push_back(id);
         }
         return true;
@@ -98,7 +98,7 @@ namespace Framework::Utils {
             return false;
         }
         const int result = PHYSFS_unmount(id.c_str());
-        _mounts.erase(std::remove(_mounts.begin(), _mounts.end(), id), _mounts.end());
+        std::erase(_mounts, id);
 
         if (auto buffer = _buffers.find(id); buffer != _buffers.end()) {
             Crypto::SecureZero(buffer->second->data(), buffer->second->size());
@@ -117,6 +117,15 @@ namespace Framework::Utils {
             return false;
         }
         return stat.filetype == PHYSFS_FILETYPE_REGULAR;
+    }
+
+    std::optional<uint64_t> Vfs::Size(const std::string &vpath) const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        PHYSFS_Stat stat {};
+        if (!_initialized || PHYSFS_stat(vpath.c_str(), &stat) == 0 || stat.filetype != PHYSFS_FILETYPE_REGULAR || stat.filesize < 0) {
+            return std::nullopt;
+        }
+        return static_cast<uint64_t>(stat.filesize);
     }
 
     bool Vfs::Read(const std::string &path, std::string &outContents) const {

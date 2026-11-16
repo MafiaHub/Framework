@@ -61,6 +61,9 @@ namespace Framework::GUI::CEF {
             // takes the whole browser down ("GPU process isn't usable")
             commandLine->AppendSwitch("disable-gpu");
             commandLine->AppendSwitch("disable-gpu-compositing");
+            // This is already Chromium's last GPU mode, so its crash limit has nothing to fall
+            // back to and aborts the host instead. Keep restarting the process.
+            commandLine->AppendSwitch("disable-gpu-process-crash-limit");
         }
         else {
             // The GPU process is its own process, so the launcher's forcing does not
@@ -106,7 +109,7 @@ namespace Framework::GUI::CEF {
         // so App (not RendererApp) receives this callback. Register the same
         // JS bindings that RendererApp::OnContextCreated registers in multi-process mode.
         CefRefPtr<CefV8Value> global    = context->GetGlobal();
-        CefRefPtr<CefV8Handler> handler = new CallEventHandler(browser);
+        CefRefPtr<CefV8Handler> handler = new CallEventHandler();
         CefRefPtr<CefV8Value> func      = CefV8Value::CreateFunction("callEvent", handler);
         global->SetValue("callEvent", func, V8_PROPERTY_ATTRIBUTE_NONE);
     }

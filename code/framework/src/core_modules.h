@@ -45,6 +45,11 @@ namespace Framework::Integrations::Server {
     class ConnectionGate;
 } // namespace Framework::Integrations::Server
 
+namespace Framework::Utils {
+    class ForkJoinPool;
+    class TaskScheduler;
+} // namespace Framework::Utils
+
 namespace Framework {
 
 #define FW_ASSERT_MODULE_REGISTRATION(current, incoming, name)                                                                                                                                                                                                                         \
@@ -68,6 +73,8 @@ namespace Framework {
             _clientInstance  = nullptr;
             _connectionGate  = nullptr;
             _webserver       = nullptr;
+            _taskScheduler   = nullptr;
+            _tickWorkers     = nullptr;
             _tickInterval    = 1.0 / 60.0;
         }
 
@@ -122,6 +129,16 @@ namespace Framework {
             _webserver = webserver;
         }
 
+        static void SetTaskScheduler(Utils::TaskScheduler *scheduler) {
+            FW_ASSERT_MODULE_REGISTRATION(_taskScheduler, scheduler, "TaskScheduler");
+            _taskScheduler = scheduler;
+        }
+
+        static void SetTickWorkers(Utils::ForkJoinPool *workers) {
+            FW_ASSERT_MODULE_REGISTRATION(_tickWorkers, workers, "TickWorkers");
+            _tickWorkers = workers;
+        }
+
         static void SetTickInterval(double seconds) noexcept {
             _tickInterval = (seconds > 0.0) ? seconds : (1.0 / 60.0);
         }
@@ -167,6 +184,18 @@ namespace Framework {
             return _webserver;
         }
 
+        // Server: takes blocking work off the tick thread and brings its result back to it. RunInBackground and
+        // PostToOwner may be called from any thread; nothing else here may.
+        static Utils::TaskScheduler *GetTaskScheduler() noexcept {
+            return _taskScheduler;
+        }
+
+        // Server: the threads the replication pass runs on, for a game's own loops of independent iterations
+        // inside its tick (ForkJoinPool::Run from PostUpdate). The tick thread waits for them.
+        static Utils::ForkJoinPool *GetTickWorkers() noexcept {
+            return _tickWorkers;
+        }
+
         static double GetTickInterval() noexcept {
             return _tickInterval;
         }
@@ -182,6 +211,8 @@ namespace Framework {
         static inline Integrations::Client::Instance *_clientInstance {};
         static inline Integrations::Server::ConnectionGate *_connectionGate {};
         static inline HTTP::Webserver *_webserver {};
+        static inline Utils::TaskScheduler *_taskScheduler {};
+        static inline Utils::ForkJoinPool *_tickWorkers {};
         static inline double _tickInterval {1.0 / 60.0};
     };
 } // namespace Framework

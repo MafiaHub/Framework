@@ -11,21 +11,36 @@
 #include "network_entity.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace Framework::Networking::Replication {
+    void StateValue::Write(MafiaNet::BitStream *bs) const {
+        bs->Write(static_cast<uint8_t>(type));
+        switch (type) {
+        case Type::Boolean: bs->Write(boolean); break;
+        case Type::Number: bs->Write(number); break;
+        case Type::String:
+        case Type::Json: bs->Write(text); break;
+        case Type::Null: break;
+        }
+    }
+
     void StateValue::Serialize(MafiaNet::BitStream *bs, bool write) {
-        auto tag = static_cast<uint8_t>(type);
-        bs->Serialize(write, tag);
-        if (!write) {
-            // An unknown tag degrades to Null instead of aliasing some other case.
-            type = tag <= static_cast<uint8_t>(Type::Json) ? static_cast<Type>(tag) : Type::Null;
+        if (write) {
+            Write(bs);
+            return;
         }
 
+        uint8_t tag = 0;
+        bs->Serialize(false, tag);
+        // An unknown tag degrades to Null instead of aliasing some other case.
+        type = tag <= std::to_underlying(Type::Json) ? static_cast<Type>(tag) : Type::Null;
+
         switch (type) {
-        case Type::Boolean: bs->Serialize(write, boolean); break;
-        case Type::Number: bs->Serialize(write, number); break;
+        case Type::Boolean: bs->Serialize(false, boolean); break;
+        case Type::Number: bs->Serialize(false, number); break;
         case Type::String:
-        case Type::Json: bs->Serialize(write, text); break;
+        case Type::Json: bs->Serialize(false, text); break;
         case Type::Null: break;
         }
     }
@@ -81,7 +96,7 @@ namespace Framework::Networking::Replication {
             if (!dirty.previous.has_value() || *dirty.previous != StateScope::Owner || dirty.scope != StateScope::Server) {
                 continue;
             }
-            if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+            if (!std::ranges::contains(keys, key)) {
                 keys.push_back(key);
             }
         }
@@ -238,7 +253,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         StateChange change;
-        change.entity      = _owner;
+        change.networkId   = _owner->GetNetworkID();
         change.key         = key;
         change.value       = value;
         change.previous    = previous;

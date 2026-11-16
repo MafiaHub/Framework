@@ -103,6 +103,10 @@ namespace Framework::Launcher {
         // Suppress the mapped game's second registration when that would abort startup.
         bool suppressThreadLocalExeAtexitCallback = false;
 
+        // PE loading only. Gives the game's TLS callbacks thread attach/detach, as the OS loader would, for every
+        // thread started from the loader's process-attach pass on; protected images keep per-thread state there.
+        bool forwardThreadTlsCallbacks = false;
+
         // Protected images may query their loader record before their CRT starts.
         bool publishGameImageLayout = false;
 
@@ -124,6 +128,19 @@ namespace Framework::Launcher {
         // Enable it when the unmodified game presents through the flip model (dxgi!FlipPresentToDWM on its
         // present thread) and the mapped one through blt (PrepareWindowedBltPresent). See swap_chain_upgrade.h.
         bool upgradeSwapChainToFlipModel = false;
+
+        // PE loading only. The game runs the System32 dxgi, d3d11, d3d12, d3d9 and opengl32, never a DLL of
+        // that name from its own folder (ReShade, OptiScaler, DXVK).
+        //
+        // Why: started by Windows, the game's import binds to whichever dxgi.dll the loader finds, and the
+        // import keeps it mapped. Mapped here, the import is one LoadLibrary reference, and it lands on the
+        // System32 copy whenever that is in the process already. An engine that then loads the file in its
+        // folder by full path gets a second module. Unreal does, takes CreateDXGIFactory2 from it and frees
+        // it before the call, so the call ran unmapped memory. A stand-in also sits under the mod's hooks.
+        //
+        // How: the launcher maps the System32 copies before the game's folders join the search path, and
+        // gives the game LoadLibrary* that send those names there, whatever path the call names.
+        bool useSystemGraphicsLibraries = false;
 
         // Custom URL scheme deep link, so a Join button on a server's website reaches the game. When
         // set, every launch claims the scheme for the current user under

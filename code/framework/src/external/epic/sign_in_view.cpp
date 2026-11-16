@@ -66,7 +66,7 @@ namespace Framework::External::Epic {
             // The redirect page shows the authorization code, so hide the window as navigation to it
             // starts, before it can paint. The page still has to load for the code to be read.
             bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefRequest> request, bool, bool) override {
-                if (request->GetURL().ToString().find(kRedirectMarker) != std::string::npos) {
+                if (request->GetURL().ToString().contains(kRedirectMarker)) {
                     if (CefRefPtr<CefBrowserView> view = CefBrowserView::GetForBrowser(browser)) {
                         if (CefRefPtr<CefWindow> window = view->GetWindow()) {
                             window->Hide();
@@ -80,7 +80,7 @@ namespace Framework::External::Epic {
                 if (_handled || !frame->IsMain()) {
                     return;
                 }
-                if (frame->GetURL().ToString().find(kRedirectMarker) == std::string::npos) {
+                if (!frame->GetURL().ToString().contains(kRedirectMarker)) {
                     return;
                 }
                 _handled = true;

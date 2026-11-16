@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 #include <utils/package/package.h>
+#include <utils/streamed_assets/policy.h>
 #include <utils/vfs.h>
 
 #include <algorithm>
@@ -25,6 +26,10 @@ namespace Framework::Integrations::Client {
             }
             const auto size = file.tellg();
             if (size < 0) {
+                return false;
+            }
+            // A package is bounded; anything larger is not one, and is not read to find that out.
+            if (static_cast<uint64_t>(size) > Utils::Package::kMaxFileSize) {
                 return false;
             }
             file.seekg(0, std::ios::beg);
@@ -77,6 +82,17 @@ namespace Framework::Integrations::Client {
             return false;
         }
 
+        // The name comes from the server and becomes a file name under the cache and a mount point:
+        // anything but one plain name could address a file outside it.
+        if (!Utils::StreamedAssets::IsValidPackageName(resourceName)) {
+            outError = "the server announced a resource name that is not a valid package name";
+            return false;
+        }
+        if (!Utils::StreamedAssets::IsSha256(expectedHash)) {
+            outError = "the server announced a malformed package hash";
+            return false;
+        }
+
         const auto packagePath = std::filesystem::path(cacheRoot) / (resourceName + Utils::Package::kExtension);
 
         std::string blob;
@@ -110,7 +126,7 @@ namespace Framework::Integrations::Client {
             return false;
         }
 
-        if (std::find(_mounted.begin(), _mounted.end(), resourceName) == _mounted.end()) {
+        if (!std::ranges::contains(_mounted, resourceName)) {
             _mounted.push_back(resourceName);
         }
 
@@ -121,7 +137,7 @@ namespace Framework::Integrations::Client {
     void ResourcePackageMounter::Unmount(const std::string &cacheRoot, const std::string &resourceName) {
         (void)cacheRoot;
         Utils::Vfs::Get().Unmount(MountId(resourceName));
-        _mounted.erase(std::remove(_mounted.begin(), _mounted.end(), resourceName), _mounted.end());
+        std::erase(_mounted, resourceName);
     }
 
     void ResourcePackageMounter::Reset() {

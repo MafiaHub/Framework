@@ -130,8 +130,8 @@ MODULE(resource_package, {
         EQUALS(Framework::Utils::Package::IsEncrypted(blob), true);
 
         // The plaintext must not be recoverable by scanning the container.
-        EQUALS(blob.find("globalThis.x") == std::string::npos, true);
-        EQUALS(blob.find("<h1>hi</h1>") == std::string::npos, true);
+        EQUALS(!blob.contains("globalThis.x"), true);
+        EQUALS(!blob.contains("<h1>hi</h1>"), true);
 
         std::string zip, error;
         EQUALS(Framework::Utils::Package::Open(blob, &key, zip, error), true);
@@ -326,7 +326,7 @@ MODULE(resource_package, {
         // Derived from role: server scripts are absent.
         const auto shipped = cfg.GetShippedPaths();
         UEQUALS(shipped.size(), 3u);
-        EQUALS(std::find(shipped.begin(), shipped.end(), std::string("s1.js")) == shipped.end(), true);
+        EQUALS(!std::ranges::contains(shipped, std::string("s1.js")), true);
 
         // Legacy single entry points fold in ahead of any list, and clientFiles becomes files.
         nlohmann::json legacy = {
@@ -360,6 +360,29 @@ MODULE(resource_package, {
         STREQUALS(manifest.GetMafiaHubConfig().files[0].c_str(), "ok.js");
     });
 
+    IT("reads errorBehavior strictly, as stop unless it names another policy", {
+        using Framework::Scripting::ErrorBehavior;
+        Framework::Scripting::PackageManifest manifest;
+        const auto parse = [&manifest](nlohmann::json behavior) -> std::optional<ErrorBehavior> {
+            nlohmann::json json = {{"name", "demo"}, {"mafiahub", {{"server", "s.js"}}}};
+            if (!behavior.is_null()) {
+                json["mafiahub"]["errorBehavior"] = std::move(behavior);
+            }
+            if (!manifest.ParseJson(json)) {
+                return std::nullopt;
+            }
+            return manifest.GetMafiaHubConfig().errorBehavior;
+        };
+        EQUALS(parse(nullptr) == ErrorBehavior::Stop, true);
+        EQUALS(parse("stop") == ErrorBehavior::Stop, true);
+        EQUALS(parse("restart") == ErrorBehavior::Restart, true);
+        EQUALS(parse("continue") == ErrorBehavior::Continue, true);
+        // A misspelt or mistyped policy must not leave a failing resource running.
+        EQUALS(parse("Continue") == ErrorBehavior::Stop, true);
+        EQUALS(parse("contine") == ErrorBehavior::Stop, true);
+        EQUALS(parse(1) == ErrorBehavior::Stop, true);
+    });
+
     IT("ships shared scripts but never server scripts", {
         const auto root = std::filesystem::temp_directory_path() / "fwpak_ut_roles";
         std::filesystem::remove_all(root);
@@ -388,7 +411,7 @@ MODULE(resource_package, {
         Framework::Scripting::PackagedResource packaged;
         std::string error;
         EQUALS(Framework::Scripting::ResourcePackager::Package("roles", root.string(), manifest, &key, packaged, error), true);
-        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
 
         std::string zip;
         EQUALS(Framework::Utils::Package::Open(packaged.blob, &key, zip, error), true);
@@ -431,7 +454,7 @@ MODULE(resource_package, {
         Framework::Scripting::PackagedResource packaged;
         std::string error;
         EQUALS(Framework::Scripting::ResourcePackager::Package("demo", root.string(), manifest, &key, packaged, error), true);
-        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
 
         // Asserted through PhysicsFS, as the client sees it.
         std::string zip;
@@ -476,7 +499,7 @@ MODULE(resource_package, {
 
         // package.json, dist/client.js, ui/index.html -- and nothing else.
         UEQUALS(packaged.fileCount, 3u);
-        EQUALS(packaged.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!packaged.blob.contains("SECRET"), true);
 
         std::filesystem::remove_all(root);
     });
@@ -533,12 +556,101 @@ MODULE(resource_package, {
 
         // What resource discovery walks.
         const auto dirs = vfs.EnumerateDirectories("/resources");
-        EQUALS(std::find(dirs.begin(), dirs.end(), std::string("demo")) != dirs.end(), true);
+        EQUALS(std::ranges::contains(dirs, std::string("demo")), true);
 
         // Unmounting drops the bytes.
         mounter.Unmount(cacheRoot.string(), "demo");
         EQUALS(vfs.Contains("/resources/demo/dist/client.js"), false);
         EQUALS(mounter.GetMountedResources().empty(), true);
+
+        std::filesystem::remove_all(cacheRoot);
+    });
+
+    IT("refuses a resource name that is not one safe file name", {
+        const auto cacheRoot = std::filesystem::temp_directory_path() / "fwpak_ut_mount_names";
+        std::filesystem::remove_all(cacheRoot);
+        std::filesystem::create_directories(cacheRoot);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Utils::Package::Writer writer;
+        EQUALS(writer.Add("package.json", "{}"), true);
+        std::string blob;
+        EQUALS(writer.Build(&key, blob), true);
+        const auto hash = Framework::Utils::Crypto::Sha256Hex(blob);
+        {
+            std::ofstream out(cacheRoot / "demo.fwpak", std::ios::binary | std::ios::trunc);
+            out.write(blob.data(), static_cast<std::streamsize>(blob.size()));
+        }
+
+        Framework::Integrations::Client::ResourcePackageMounter mounter;
+        std::string error;
+        EQUALS(mounter.SetKey(Framework::Utils::Crypto::ToHex(key.data(), key.size())), true);
+
+        // A sibling directory holding the same valid package, reachable only by escaping the cache.
+        const auto outside = cacheRoot.parent_path() / "fwpak_ut_outside";
+        std::filesystem::remove_all(outside);
+        std::filesystem::create_directories(outside);
+        std::filesystem::copy_file(cacheRoot / "demo.fwpak", outside / "demo.fwpak");
+
+        for (const std::string &name : std::vector<std::string>{"../fwpak_ut_outside/demo", (outside / "demo").string(), "sub/demo", "sub\\demo", "..", ".", "", std::string(200, 'a')}) {
+            error.clear();
+            EQUALS(mounter.Mount(cacheRoot.string(), name, hash, error), false);
+            EQUALS(error.contains("name"), true);
+        }
+        EQUALS(mounter.GetMountedResources().empty(), true);
+
+        // The plain name still mounts.
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", hash, error), true);
+        mounter.Unmount(cacheRoot.string(), "demo");
+
+        std::filesystem::remove_all(outside);
+        std::filesystem::remove_all(cacheRoot);
+    });
+
+    IT("refuses a malformed announced hash", {
+        const auto cacheRoot = std::filesystem::temp_directory_path() / "fwpak_ut_mount_hash";
+        std::filesystem::remove_all(cacheRoot);
+        std::filesystem::create_directories(cacheRoot);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        Framework::Integrations::Client::ResourcePackageMounter mounter;
+        EQUALS(mounter.SetKey(Framework::Utils::Crypto::ToHex(key.data(), key.size())), true);
+
+        std::string error;
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", "abc", error), false);
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", std::string(63, 'a') + "g", error), false);
+        EQUALS(mounter.Mount(cacheRoot.string(), "demo", std::string(65, 'a'), error), false);
+
+        std::filesystem::remove_all(cacheRoot);
+    });
+
+    IT("refuses a package file larger than a package can be", {
+        const auto cacheRoot = std::filesystem::temp_directory_path() / "fwpak_ut_mount_big";
+        std::filesystem::remove_all(cacheRoot);
+        std::filesystem::create_directories(cacheRoot);
+
+        bool ok = false;
+        const auto key = Framework::Utils::Crypto::GenerateKey(&ok);
+        EQUALS(ok, true);
+
+        const auto path = cacheRoot / "huge.fwpak";
+        { std::ofstream out(path, std::ios::binary | std::ios::trunc); }
+        std::error_code ec;
+        std::filesystem::resize_file(path, Framework::Utils::Package::kMaxFileSize + 1, ec);
+        EQUALS(!ec, true);
+
+        Framework::Integrations::Client::ResourcePackageMounter mounter;
+        EQUALS(mounter.SetKey(Framework::Utils::Crypto::ToHex(key.data(), key.size())), true);
+
+        std::string error;
+        EQUALS(mounter.Mount(cacheRoot.string(), "huge", std::string(64, 'a'), error), false);
+        EQUALS(error.contains("unreadable"), true);
 
         std::filesystem::remove_all(cacheRoot);
     });
@@ -881,7 +993,7 @@ MODULE(resource_package, {
         // binary, so the script itself does not run here.
         const auto filtered = startPackaged({"ut_srv_core"});
         UEQUALS(filtered.first.size(), 0u);
-        EQUALS(filtered.second.find("depends on missing resource") == std::string::npos, true);
+        EQUALS(!filtered.second.contains("depends on missing resource"), true);
 
         engine.Shutdown();
         std::filesystem::remove_all(root);
@@ -917,7 +1029,7 @@ MODULE(resource_package, {
 
         const auto result = manager.StartAll();
         EQUALS(static_cast<bool>(result), false);
-        EQUALS(result.GetError().find("ut_broken") != std::string::npos, true);
+        EQUALS(result.GetError().contains("ut_broken"), true);
         UEQUALS(result.GetValue().size(), 0u);
         EQUALS(manager.IsResourceRunning("ut_broken"), false);
 
@@ -1048,7 +1160,7 @@ MODULE(resource_package, {
         STREQUALS(lean.sha256.c_str(), redundant.sha256.c_str());
 
         // Neither ships the server bundle.
-        EQUALS(lean.blob.find("SECRET") == std::string::npos, true);
+        EQUALS(!lean.blob.contains("SECRET"), true);
 
         std::filesystem::remove_all(root);
     });

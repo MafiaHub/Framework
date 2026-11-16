@@ -23,8 +23,11 @@ namespace Framework::Graphics {
         static constexpr UINT kExtraSrvSlots = 64;
 
       private:
+        // Valid only on the render thread, inside Present: the game can free its swapchain
+        // (exit, mode change) and keep ticking before a Present hands us the replacement.
         IDXGISwapChain3 *_swapChain             = nullptr;
         UINT _frameBufferCount                  = 0;
+        UINT _currentFrameIndex                 = 0;
         ID3D12DescriptorHeap *_rtvHeap          = nullptr;
         ID3D12DescriptorHeap *_srvHeap          = nullptr;
         ID3D12GraphicsCommandList *_commandList = nullptr;
@@ -54,6 +57,17 @@ namespace Framework::Graphics {
         ID3D12Resource *_currentBackBuffer = nullptr;
         D3D12Image _premultipliedImage;
 
+        // The swapchain's description, read on the render thread for the game thread.
+        struct BackBufferDesc {
+            DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+            UINT width         = 0;
+            UINT height        = 0;
+        };
+        BackBufferDesc _backBufferDesc;
+        mutable std::mutex _backBufferDescMutex;
+
+        void RefreshBackBufferDesc();
+
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         void Shutdown() override;
@@ -62,15 +76,13 @@ namespace Framework::Graphics {
         void End();
         int NumFramesInFlight() const;
 
-        // Repoint after the game recreates its swapchain (fullscreen / mode
-        // toggles). Assumes the same buffer count as Init — Begin() guards against
+        // Render thread only. Repoint after the game recreates its swapchain (fullscreen /
+        // mode toggles). Assumes the same buffer count as Init — Begin() guards against
         // a larger one rather than rebuilding the frame state.
         IDXGISwapChain3 *GetSwapChain() const {
             return _swapChain;
         }
-        void SetSwapChain(IDXGISwapChain3 *swapChain) {
-            _swapChain = swapChain;
-        }
+        void SetSwapChain(IDXGISwapChain3 *swapChain);
 
         // Bounded, shader-visible SRV slot pool shared with ImGui's heap (so handles
         // double as ImTextureID). AllocateSRVSlot returns -1 when exhausted; the
@@ -129,11 +141,14 @@ namespace Framework::Graphics {
             return _commandList;
         }
 
+        // The back buffer index the last Begin() read.
         UINT GetCurrentFrameIndex() const {
-            return _swapChain ? _swapChain->GetCurrentBackBufferIndex() : 0;
+            return _currentFrameIndex;
         }
 
+        // Any thread. As of the last Init, SetSwapChain or Begin; never reads the swapchain.
         DXGI_FORMAT GetBackBufferFormat() const;
+        bool GetBackBufferSize(UINT &width, UINT &height) const;
 
         D3D12Image &GetPremultipliedImage() {
             return _premultipliedImage;

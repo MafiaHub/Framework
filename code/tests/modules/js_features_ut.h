@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "scripting/node_engine.h"
 #include "scripting/builtins/builtins.h"
 #include "scripting/builtins/console.h"
@@ -704,14 +705,9 @@ MODULE(js_features, {
     });
 
     // ========================================
-    // ALLSETTLED AGGREGATION ROBUSTNESS
+    // EMISSION AGGREGATION
     // ========================================
-    // emit() aggregates via the script-mutable global Promise.allSettled, so its then-handler must
-    // not trust the record shape. These drive it with hostile shapes: pre-fix each aborts the
-    // process, post-fix each settles the emit() promise cleanly.
-
-    // Throwing `status` getter: pre-fix, Get("status").ToLocalChecked() aborts on the empty MaybeLocal.
-    IT("emit survives a Promise.allSettled whose records throw on access", {
+    IT("emit aggregates its handlers' failures without the script's Promise.allSettled", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
@@ -721,86 +717,25 @@ MODULE(js_features, {
         registerEvents(engine, manager);
 
         RunJS(engine, R"(
-            globalThis.__done = 0;
-            Promise.allSettled = function () {
-                return Promise.resolve([{ get status() { throw new Error('boom'); } }]);
-            };
-            Events.on('hostile', () => 1);
-            Events.emit('hostile').then(() => { globalThis.__done = 1; },
-                                             () => { globalThis.__done = 2; });
+            globalThis.__failed = 0;
+            Promise.allSettled = function () { throw new Error('not to be used'); };
+            Events.on('mixed', () => { throw new Error('sync failure'); });
+            Events.on('mixed', () => 1);
+            Events.on('mixed', async () => { await null; throw new Error('async failure'); });
+            Events.emit('mixed').then(() => { globalThis.__failed = -1; }, (error) => { globalThis.__failed = error instanceof AggregateError && error.errors[0].message === 'sync failure' && error.errors[1].message === 'async failure' ? error.errors.length : -2; });
             0
         )");
 
-        // Drain microtasks so the then-handler and the emit() continuation run.
         for (int i = 0; i < 8; ++i) engine.Tick();
 
-        // No crash, and the emit() promise settled — resolved, since no well-formed rejection.
-        EQUALS(RunJS(engine, "globalThis.__done"), 1);
+        EQUALS(RunJS(engine, "globalThis.__failed"), 2);
 
         cleanupResource(engine, manager);
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });
 
-    // Non-array settled value: pre-fix it reaches info[0].As<v8::Array>() + Array::Length() (UB).
-    IT("emit survives a Promise.allSettled that resolves with a non-array", {
-        EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
-        config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
-        registerEvents(engine, manager);
-
-        RunJS(engine, R"(
-            globalThis.__done2 = 0;
-            Promise.allSettled = function () { return Promise.resolve("not-an-array"); };
-            Events.on('hostile2', () => 1);
-            Events.emit('hostile2').then(() => { globalThis.__done2 = 1; },
-                                              () => { globalThis.__done2 = 2; });
-            0
-        )");
-
-        for (int i = 0; i < 8; ++i) engine.Tick();
-
-        EQUALS(RunJS(engine, "globalThis.__done2"), 1);
-
-        cleanupResource(engine, manager);
-        engine.Shutdown();
-        EventsTestHelper::Cleanup();
-    });
-
-    // Non-Promise return: pre-fix, allSettledResult.ToLocalChecked().As<v8::Promise>()->Then()
-    // runs on a non-Promise handle and aborts. Post-fix the IsPromise() guard soft-resolves.
-    IT("emit survives a Promise.allSettled that returns a non-Promise", {
-        EventsTestHelper::Setup();
-        NodeEngine engine({});
-        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
-        ResourceManagerConfig config;
-        config.resourcesPath = EventsTestHelper::GetTestPath();
-        ResourceManager manager(&engine, config);
-        registerEvents(engine, manager);
-
-        RunJS(engine, R"(
-            globalThis.__done3 = 0;
-            Promise.allSettled = function () { return 42; };
-            Events.on('hostile3', () => 1);
-            Events.emit('hostile3').then(() => { globalThis.__done3 = 1; },
-                                              () => { globalThis.__done3 = 2; });
-            0
-        )");
-
-        for (int i = 0; i < 8; ++i) engine.Tick();
-
-        EQUALS(RunJS(engine, "globalThis.__done3"), 1);
-
-        cleanupResource(engine, manager);
-        engine.Shutdown();
-        EventsTestHelper::Cleanup();
-    });
-
-    // Sanity: the hardening must not swallow genuine, well-formed rejections.
-    IT("emit still rejects when a handler rejects (real allSettled)", {
+    IT("emit still rejects when a handler rejects", {
         EventsTestHelper::Setup();
         NodeEngine engine({});
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
@@ -1070,12 +1005,12 @@ MODULE(js_features, {
 
         auto *manager = world.Manager();
         for (int i = 0; i < 10; ++i) {
-            manager->CreateEntity(world.targetType);
+            TestWorld::Make(manager, world.targetType);
         }
         const MafiaNet::RakNetGUID guid(0x2001);
-        auto *avatar      = manager->CreateEntity(world.targetType);
+        auto *avatar      = TestWorld::Make(manager, world.targetType);
         avatar->ownerGUID = MafiaNet::ToPeerGuid(guid);
-        manager->SetViewer(avatar->ownerGUID, avatar);
+        manager->SetViewer(avatar->ownerGUID, avatar->GetNetworkID());
         EQUALS(world.peer.AssignPlayerId(guid), 1u);
 
         NodeEngine engine({});
@@ -1139,13 +1074,18 @@ MODULE(js_features, {
             "{ hideFrom: [null] }",
             "{ hideFrom: [, 1] }",
             "{ hideForTarget: 1 }",
+            "{ font: 5 }",
+            "{ font: 'x'.repeat(65) }",
+            "{ minDrawDistance: -1 }",
+            "{ minFadeDistance: 'far' }",
         };
         for (const char *options : rejected) {
             STREQUALS(RunJSErrorName(engine, std::string("TextLabel.create(0, 0, 0, 'x', ") + options + ")").c_str(), "TypeError");
         }
 
         const std::string accepted = "TextLabel.create(0, 0, 0, 'x', { fontSize: 20, opacity: 0.5, outline: { width: 2 }, shadow: { blur: 4 }, background: true, sizeMode: 'world', "
-                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1), showTo: [], hideFrom: null, hideForTarget: true })";
+                                     "style: 'box', attachTo: 5, offset: [0, 0, 10], markup: true, align: 'left', anchor: 'bottom', color: new Color(1, 0, 0, 1), showTo: [], hideFrom: null, hideForTarget: true, "
+                                     "font: 'Inter', minDrawDistance: 2, minFadeDistance: 4 })";
         STREQUALS(RunJSErrorName(engine, accepted).c_str(), "Error");
         STREQUALS(RunJSErrorName(engine, "TextLabel.create(0, 0, 0, 'x', 18, 40)").c_str(), "Error");
 
@@ -1183,6 +1123,23 @@ MODULE(js_features, {
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x'); l.update({ attachTo: l.id })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const l = TextLabel.create(0, 0, 0, 'x', { maxSize: 10 }); l.update({ minSize: 20 })").c_str(), "TypeError");
         STREQUALS(RunJSErrorName(engine, "const t = TextLabel.create(0, 0, 0, 't'); TextLabel.create(0, 0, 0, 'x', { attachTo: t, minSize: 4, maxSize: 10 })").c_str(), "");
+        // A near edge at or past the far one is allowed (the label never draws), and a value that is not finite changes nothing.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 20 }); l.setMinDrawDistance(25); l.update({ ...l.getOptions(), text: 'hi', drawDistance: 24 }); "
+                                      "l.setMinDrawDistance(NaN); l.setMinFadeDistance(Infinity); return [l.text, l.drawDistance, l.minDrawDistance, l.minFadeDistance].join(); })()")
+                      .c_str(),
+            "hi,24,25,0");
+
+        // The near edge and the font read back through getOptions(), the properties and the setters.
+        STREQUALS(RunJSString(engine, "(() => { const l = TextLabel.create(0, 0, 0, 'x', { drawDistance: 20, minDrawDistance: 5, minFadeDistance: 7, font: 'Inter' }); const o = l.getOptions(); "
+                                      "const copy = TextLabel.create(0, 0, 0, 'y', o).getOptions(); l.setMinDrawDistance(3); l.setMinFadeDistance(4); l.update({ font: null }); "
+                                      "return [o.minDrawDistance, o.minFadeDistance, o.font, copy.minDrawDistance, copy.font, l.minDrawDistance, l.minFadeDistance, JSON.stringify(l.font)].join(); })()")
+                      .c_str(),
+            "5,7,Inter,5,Inter,3,4,\"\"");
+        // update() takes the label together with what it follows, before and after the options name it.
+        STREQUALS(RunJSErrorName(engine, "const t2 = TextLabel.create(0, 0, 0, 't'); const l2 = TextLabel.create(0, 0, 0, 'x'); l2.update({ attachTo: t2, offset: [0, 0, 2] }); if (l2.getOptions().attachTo !== t2.id) throw new RangeError('not attached'); "
+                                         "l2.update({ text: 'moved', hideForTarget: true }); if (l2.getOptions().attachTo !== t2.id || l2.getOptions().text !== 'moved') throw new RangeError('lost its target')")
+                      .c_str(),
+            "");
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -1196,11 +1153,11 @@ MODULE(js_features, {
         auto *manager = world.Manager();
         Framework::Networking::Replication::NetworkEntity *players[2];
         for (int i = 0; i < 2; ++i) {
-            players[i]            = manager->CreateEntity(world.targetType);
+            players[i]            = TestWorld::Make(manager, world.targetType);
             players[i]->ownerGUID = MafiaNet::ToPeerGuid(MafiaNet::RakNetGUID(71 + i));
-            manager->SetViewer(players[i]->ownerGUID, players[i]);
+            manager->SetViewer(players[i]->ownerGUID, players[i]->GetNetworkID());
         }
-        auto *npc           = manager->CreateEntity(world.targetType);
+        auto *npc           = TestWorld::Make(manager, world.targetType);
         const std::string a = std::to_string(players[0]->GetNetworkID());
         const std::string b = std::to_string(players[1]->GetNetworkID());
         const std::string n = std::to_string(npc->GetNetworkID());
@@ -1245,9 +1202,9 @@ MODULE(js_features, {
         // A player with no avatar stays hidden through a getOptions() round trip, old or new, and is
         // only left out of what getAudience() can show.
         RunJSString(engine, ("globalThis.kept = TextLabel.create(0, 0, 0, 'k', { hideFrom: [" + a + "] }); globalThis.snapshot = kept.getOptions(); 'x'").c_str());
-        const auto *kept = manager->GetEntityByNetworkID(std::stoull(RunJSString(engine, "String(kept.id)")));
+        const auto *kept = TestWorld::Find(manager, std::stoull(RunJSString(engine, "String(kept.id)")));
         const auto guidA = players[0]->ownerGUID;
-        manager->DestroyEntity(players[0]);
+        TestWorld::Destroy(manager, players[0]);
         STREQUALS(RunJSString(engine, "kept.update(snapshot); kept.update(kept.getOptions()); JSON.stringify(kept.getAudience().hideFrom)").c_str(), "[]");
         EQUALS(kept->streaming.Admits(guidA), false);
 
@@ -1549,8 +1506,8 @@ MODULE(js_features, {
             v8::Local<v8::Value> obj = v8::Script::Compile(context, objCode).ToLocalChecked()->Run(context).ToLocalChecked();
             std::string objResult = Console::FormatValue(isolate, obj);
             // JSON output should contain x and y
-            EQUALS(objResult.find("\"x\"") != std::string::npos, true);
-            EQUALS(objResult.find("\"y\"") != std::string::npos, true);
+            EQUALS(objResult.contains("\"x\""), true);
+            EQUALS(objResult.contains("\"y\""), true);
         }
 
         engine.Shutdown();

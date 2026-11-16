@@ -14,6 +14,12 @@ If you have something on your mind, that is compatible with project's philosophy
 
 If you feel up for it, feel free to code and pull request any changes you've made, that can be useful for the project. This is the best way to help us out and it is highly appreciated!
 
+Read [LICENSE.txt](../LICENSE.txt) before you start. You can fork, build and test the Framework to prepare a contribution for this repository. Send shared improvements back here so every project using the Framework can benefit.
+
+Contribution builds are for development and testing. Community servers and players must use official releases, including when a local build comes from unchanged source. Using the Framework for another project or building a custom launcher requires written permission from MafiaHub. Existing written permissions and permissions in project licenses still apply.
+
+Scripts, game modes and resources for official releases are permitted under clause 8. Keep the copyright, license and attribution notices when reusing the API declarations or examples, and submit contributions under this repository's license.
+
 ## Version changes
 
 We loosely follow semver to enforce build requirements between networked peers.

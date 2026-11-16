@@ -18,6 +18,7 @@
 #include <utils/profiler.h>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <thread>
 
@@ -33,6 +34,19 @@
 namespace {
     // Script started this close to the next tick could run into it.
     constexpr auto kRunMargin = std::chrono::milliseconds(1);
+
+    // The off-thread runtime of a thread that bound none.
+    constexpr std::string_view kDefaultOffThreadRuntime = "tick";
+    constexpr size_t kOffThreadRuntimesReserved         = 8;
+
+    // Which off-thread runtime this thread bound, and in which engine's set: an engine that went away, or shut down,
+    // leaves a set no later one has, so what is left here of it names nothing.
+    struct OffThreadBinding {
+        uint64_t set = 0;
+        size_t index = 0;
+    };
+    thread_local OffThreadBinding tOffThreadBinding;
+    std::atomic<uint64_t> gNextOffThreadSet {1};
 
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
     // Handles: backslash, single quote, newline, carriage return, and tab.
@@ -124,15 +138,15 @@ namespace Framework::Scripting {
             return ScriptingError::SCRIPTING_PLATFORM_INIT_FAILED;
         }
 
-        if (!CreateEnvironment()) {
-            return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
-        }
-
 #ifdef _WIN32
         if (_waitTimer == nullptr) {
             _waitTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
         }
 #endif
+
+        if (!CreateEnvironment()) {
+            return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
+        }
 
         _initialized = true;
         return ScriptingError::SCRIPTING_NONE;
@@ -157,6 +171,26 @@ namespace Framework::Scripting {
             _retiredRuntimes.pop_back();
             TeardownResourceRuntime(std::move(runtime));
         }
+
+        // An off-thread runtime goes like a resource's: out of the references, its bindings dropped, then freed.
+        while (!_offThreadRuntimes.empty()) {
+            {
+                const OffThreadRuntime &entry = _offThreadRuntimes.back();
+                v8::Isolate *offThread        = entry.runtime->GetIsolate();
+                {
+                    v8::Locker locker(offThread);
+                    v8::Isolate::Scope isolateScope(offThread);
+                    v8::HandleScope handleScope(offThread);
+                    v8::Context::Scope contextScope(entry.runtime->GetContext());
+                    _references->RemoveRuntime(entry.reference);
+                }
+                Builtins::UnregisterAll(offThread);
+            }
+            // Out of the list before it is freed: nothing looked up while it goes finds it half gone.
+            OffThreadRuntime last = std::move(_offThreadRuntimes.back());
+            _offThreadRuntimes.pop_back();
+        }
+        _offThreadSet = 0;
 
         v8::Isolate *isolate = _runtime->GetIsolate();
         {
@@ -215,7 +249,7 @@ namespace Framework::Scripting {
         }
 
         // Create MultiIsolatePlatform for Worker thread support
-        _platform = node::MultiIsolatePlatform::Create(4);
+        _platform = node::MultiIsolatePlatform::Create(std::max(_options.platformThreads, 1));
         v8::V8::InitializePlatform(_platform.get());
         v8::V8::Initialize();
 
@@ -247,6 +281,7 @@ namespace Framework::Scripting {
             return false;
         }
         _runtime->SetName("server");
+        _runtime->JoinSchedule(_schedule);
         _monitor.Track(_runtime->GetIsolate(), _runtime->GetName());
         ResourceMonitor::SetCurrent(&_monitor);
 
@@ -319,9 +354,13 @@ namespace Framework::Scripting {
             _references->ReleaseCollected();
         }
 
+#ifndef _WIN32
+        PollReadyLoops();
+#endif
+
         // A runtime that is executing further up this thread's stack is not ticked from inside itself: uv_run does
         // not nest.
-        if (!_runtime->GetIsolate()->IsInUse()) {
+        if (!_runtime->GetIsolate()->IsInUse() && HasWork(*_runtime)) {
             FW_PROFILE_SCOPE_N("Scripting::Runtime");
             FW_PROFILE_TEXT(_runtime->GetName().c_str(), _runtime->GetName().size());
             ResourceMonitor::Scope charged(_monitor, _runtime->GetIsolate());
@@ -358,7 +397,7 @@ namespace Framework::Scripting {
         for (auto it = _resourceRuntimes.begin(); it != _resourceRuntimes.end();) {
             ResourceRuntime &entry    = *it->second;
             const uint64_t generation = _runtimesGeneration;
-            if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse()) {
+            if (!entry.exited && !entry.runtime->GetIsolate()->IsInUse() && HasWork(*entry.runtime)) {
                 FW_PROFILE_SCOPE_N("Scripting::Runtime");
                 FW_PROFILE_TEXT(entry.resourceName.c_str(), entry.resourceName.size());
                 v8::Isolate *isolate = entry.runtime->GetIsolate();
@@ -379,44 +418,113 @@ namespace Framework::Scripting {
         }
     }
 
+    bool NodeEngine::HasWork(NodeRuntime &runtime) const {
+        if (runtime.WasEntered() || runtime.IsSignaled() || runtime.DueAt() <= std::chrono::steady_clock::now()) {
+            return true;
+        }
+#ifdef _WIN32
+        return false;
+#else
+        return std::ranges::contains(_ioReady, &runtime);
+#endif
+    }
+
+#ifndef _WIN32
+    void NodeEngine::PollReadyLoops() {
+        _ioReady.clear();
+        std::vector<pollfd> fds;
+        std::vector<NodeRuntime *> owners;
+        const auto add = [&](NodeRuntime &runtime) {
+            fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
+            owners.push_back(&runtime);
+        };
+        add(*_runtime);
+        for (const auto &[name, entry] : _resourceRuntimes) {
+            if (!entry->exited) {
+                add(*entry->runtime);
+            }
+        }
+        // One poll over every loop instead of a run of each; RunUntil reports a failing poll.
+        const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), 0);
+        if (ready < 0) {
+            // Which loops have I/O is unknown, so the tick runs them all.
+            _ioReady = std::move(owners);
+            return;
+        }
+        if (ready > 0) {
+            for (size_t i = 0; i < fds.size(); ++i) {
+                if (fds[i].revents != 0) {
+                    _ioReady.push_back(owners[i]);
+                }
+            }
+        }
+    }
+#endif
+
+    void NodeEngine::GateRelease() {
+        if (_runGate != nullptr && !_gateLost) {
+            _runGate->Release();
+        }
+    }
+
+    void NodeEngine::GateAcquire() {
+        if (_runGate != nullptr && !_gateLost && !_runGate->Acquire()) {
+            _gateLost = true;
+        }
+    }
+
     void NodeEngine::RunUntil(std::chrono::steady_clock::time_point deadline) {
         using Clock       = std::chrono::steady_clock;
+        _gateLost         = false;
         const auto stopAt = deadline - kRunMargin;
-        // Which runtimes have a timer, immediate or callback due now, and which loops to wait on for I/O until one
-        // does. Kept across rounds: on Windows there is one every millisecond.
+        // Which runtimes have work now: a completion on their loop, or a timer, immediate or callback due. Kept across
+        // rounds.
         std::vector<ResourceRuntime *> due;
-        std::vector<ResourceRuntime *> watched;
 #ifdef _WIN32
-        auto visited = Clock::now();
-#else
-        std::vector<pollfd> fds;
-#endif
-        while (_initialized && _runtime && _pendingErrors.empty() && Clock::now() < stopAt) {
+        while (_initialized && _runtime && _pendingErrors.empty() && !_gateLost) {
+            const auto now = Clock::now();
+            if (now >= stopAt) {
+                break;
+            }
             const uint64_t generation = _runtimesGeneration;
+            auto next                 = stopAt;
+            CollectReady(now, due, next);
+            // Each loop's watcher signals the schedule when a completion reaches the loop's port, so the wait is for
+            // that or the next timer. What woke it is found on the next round.
+            if (due.empty()) {
+                WaitForWork(next);
+                continue;
+            }
+            RunReady(due, generation, stopAt);
+        }
+#else
+        // Every loop's backend fd, readable while the loop has I/O to run.
+        std::vector<ResourceRuntime *> watched;
+        std::vector<pollfd> fds;
+        while (_initialized && _runtime && _pendingErrors.empty() && !_gateLost && Clock::now() < stopAt) {
+            const uint64_t generation = _runtimesGeneration;
+            const auto now            = Clock::now();
             // How long until the next runtime has something due, if nothing has now.
-            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - Clock::now()).count());
+            int64_t waitMs = std::max<int64_t>(0, std::chrono::ceil<std::chrono::milliseconds>(stopAt - now).count());
             due.clear();
             watched.clear();
-#ifndef _WIN32
             fds.clear();
-#endif
+            // Every loop's fd is polled on every wait here, so each runtime is asked in turn; one with nothing new
+            // answers from what its loop last said.
             const auto consider = [&](ResourceRuntime *entry, NodeRuntime &runtime) {
-                // uv_run does nothing for a loop with nothing referenced, whatever its timers or its fd say.
-                if (runtime.GetIsolate()->IsInUse() || !runtime.IsAlive()) {
+                if (runtime.GetIsolate()->IsInUse()) {
                     return;
                 }
-                const int64_t ms = runtime.MsUntilDue();
-                if (ms == 0) {
+                const auto dueAt = runtime.DueAt();
+                if (dueAt <= now) {
                     due.push_back(entry);
                     return;
                 }
-                if (ms > 0) {
-                    waitMs = std::min(waitMs, ms);
+                if (dueAt != Clock::time_point::max()) {
+                    waitMs = std::min<int64_t>(waitMs, std::chrono::ceil<std::chrono::milliseconds>(dueAt - now).count());
                 }
                 watched.push_back(entry);
-#ifndef _WIN32
                 fds.push_back({runtime.GetBackendFd(), POLLIN, 0});
-#endif
             };
             consider(nullptr, *_runtime);
             for (const auto &[name, entry] : _resourceRuntimes) {
@@ -427,17 +535,6 @@ namespace Framework::Scripting {
 
             // Wait only while nothing is ready; I/O is still picked up between rounds of a runtime that stays busy.
             const bool idle = due.empty();
-#ifdef _WIN32
-            // A Windows loop is a completion port, which cannot be waited on together with others or checked without
-            // taking its completions: visit the live loops every millisecond instead.
-            if (idle) {
-                SleepUntil(std::min(Clock::now() + std::chrono::milliseconds(watched.empty() ? waitMs : std::min<int64_t>(waitMs, 1)), stopAt));
-            }
-            if (Clock::now() - visited >= std::chrono::milliseconds(1)) {
-                visited = Clock::now();
-                due.insert(due.end(), watched.begin(), watched.end());
-            }
-#else
             // A loop's backend fd is readable while the loop has I/O to run, and polling it consumes nothing. With no
             // fd to wait on, sleep instead: some macOS releases return from poll() at once for zero fds.
             if (fds.empty()) {
@@ -446,7 +543,18 @@ namespace Framework::Scripting {
                 }
             }
             else {
+                // Only a wait gives the world up: a poll that returns at once is not worth the handoff.
+                const bool waits = idle && waitMs > 0;
+                if (waits) {
+                    GateRelease();
+                }
                 const int ready = poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? static_cast<int>(waitMs) : 0);
+                if (waits) {
+                    GateAcquire();
+                }
+                if (_gateLost) {
+                    return;
+                }
                 if (ready > 0) {
                     for (size_t i = 0; i < fds.size(); ++i) {
                         if (fds[i].revents != 0) {
@@ -468,10 +576,10 @@ namespace Framework::Scripting {
                     }
                 }
             }
-#endif
             RunReady(due, generation, stopAt);
         }
-        if (_pendingErrors.empty()) {
+#endif
+        if (_pendingErrors.empty() && !_gateLost) {
             SleepUntil(deadline);
         }
     }
@@ -481,6 +589,12 @@ namespace Framework::Scripting {
             return;
         }
         for (ResourceRuntime *entry : ready) {
+            // Between two runtimes nothing of a script is on the stack: where a waiting tick, or a thread that wants
+            // to run script itself, is let in. What it started or stopped shows in the generation below.
+            if (_gateLost || (_runGate != nullptr && !_runGate->Checkpoint())) {
+                _gateLost = true;
+                return;
+            }
             // Script started or stopped resources: whatever is still ready is found on the next pass.
             if (generation != _runtimesGeneration || std::chrono::steady_clock::now() >= stopAt) {
                 break;
@@ -489,8 +603,8 @@ namespace Framework::Scripting {
             if ((entry == nullptr || !entry->exited) && !runtime.GetIsolate()->IsInUse()) {
                 FW_PROFILE_SCOPE_N("Scripting::RunLoop");
                 FW_PROFILE_TEXT(runtime.GetName().c_str(), runtime.GetName().size());
-                // Charged as the tick's own loop run is. A live loop is visited every millisecond on Windows, so the
-                // charge is read back only when the visit itself lasted the slow threshold.
+                // Charged as the tick's own loop run is. A busy loop runs many times a tick, so the charge is read back
+                // only when the run itself lasted the slow threshold.
                 v8::Isolate *isolate = runtime.GetIsolate();
                 const auto start     = ResourceMonitor::Clock::now();
                 const double charged = _monitor.ChargedMs(isolate, start);
@@ -508,6 +622,16 @@ namespace Framework::Scripting {
     }
 
     void NodeEngine::SleepUntil(std::chrono::steady_clock::time_point until) {
+        if (std::chrono::steady_clock::now() >= until) {
+            return;
+        }
+        GateRelease();
+        struct Reacquire {
+            NodeEngine *engine;
+            ~Reacquire() {
+                engine->GateAcquire();
+            }
+        } reacquire {this};
 #ifdef _WIN32
         // The timer runs on another clock and can fire a little before `until`.
         for (auto now = std::chrono::steady_clock::now(); _waitTimer != nullptr && now < until; now = std::chrono::steady_clock::now()) {
@@ -520,6 +644,54 @@ namespace Framework::Scripting {
 #endif
         std::this_thread::sleep_until(until);
     }
+
+#ifdef _WIN32
+    void NodeEngine::WaitForWork(std::chrono::steady_clock::time_point until) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= until) {
+            return;
+        }
+        GateRelease();
+        struct Reacquire {
+            NodeEngine *engine;
+            ~Reacquire() {
+                engine->GateAcquire();
+            }
+        } reacquire {this};
+        LARGE_INTEGER due;
+        due.QuadPart = -static_cast<LONGLONG>(std::max<int64_t>(1, std::chrono::duration_cast<std::chrono::nanoseconds>(until - now).count() / 100));
+        if (!SetWaitableTimer(_waitTimer, &due, 0, nullptr, nullptr, FALSE)) {
+            WaitForSingleObject(_schedule.GetWakeEvent(), static_cast<DWORD>(std::chrono::ceil<std::chrono::milliseconds>(until - now).count()));
+            return;
+        }
+        const HANDLE handles[] = {_schedule.GetWakeEvent(), _waitTimer};
+        if (WaitForMultipleObjects(2, handles, FALSE, INFINITE) == WAIT_FAILED) {
+            // Not a wait the caller can loop on.
+            std::this_thread::sleep_until(until);
+        }
+    }
+
+    void NodeEngine::CollectReady(std::chrono::steady_clock::time_point now, std::vector<ResourceRuntime *> &due, std::chrono::steady_clock::time_point &next) {
+        _ready.clear();
+        next = std::min(next, _schedule.Collect(now, _ready));
+        due.clear();
+        for (NodeRuntime *runtime : _ready) {
+            ResourceRuntime *entry = nullptr;
+            if (runtime != _runtime.get()) {
+                const std::shared_lock guard(_runtimeByIsolateMutex);
+                const auto it = _runtimeByIsolate.find(runtime->GetIsolate());
+                if (it == _runtimeByIsolate.end() || it->second->exited || it->second->retired) {
+                    continue;
+                }
+                entry = it->second;
+            }
+            // One executing further up the stack cannot run its loop, and is not waited on either.
+            if (!runtime->GetIsolate()->IsInUse()) {
+                due.push_back(entry);
+            }
+        }
+    }
+#endif
 
     void NodeEngine::StopExitedResources() {
         std::vector<PendingExit> exits;
@@ -593,13 +765,104 @@ namespace Framework::Scripting {
         return Execute(code, absPathStr);
     }
 
+    bool NodeEngine::OffEngineThread() const {
+        if (_offThreadRuntimes.empty()) {
+            return false;
+        }
+        ScriptGate *gate = ScriptGate::Get();
+        return gate != nullptr && !gate->OnScriptThread();
+    }
+
+    NodeRuntime *NodeEngine::OffThreadRuntimeFor(v8::Isolate *current) const {
+        if (current != nullptr) {
+            for (const OffThreadRuntime &entry : _offThreadRuntimes) {
+                if (entry.runtime->GetIsolate() == current) {
+                    return entry.runtime.get();
+                }
+            }
+        }
+        if (!OffEngineThread()) {
+            return nullptr;
+        }
+        const OffThreadBinding &bound = tOffThreadBinding;
+        if (bound.set == _offThreadSet && bound.index < _offThreadRuntimes.size()) {
+            return _offThreadRuntimes[bound.index].runtime.get();
+        }
+        for (const OffThreadRuntime &entry : _offThreadRuntimes) {
+            if (entry.name == kDefaultOffThreadRuntime) {
+                return entry.runtime.get();
+            }
+        }
+        return nullptr;
+    }
+
+    bool NodeEngine::CreateOffThreadRuntime(std::string_view name) {
+        if (!_initialized) {
+            return false;
+        }
+        for (const OffThreadRuntime &entry : _offThreadRuntimes) {
+            if (entry.name == name) {
+                return true;
+            }
+        }
+        std::unique_ptr<NodeRuntime> runtime = CreateRuntime(_lastError);
+        if (!runtime) {
+            return false;
+        }
+        runtime->SetName(std::string(name));
+        v8::Isolate *isolate = runtime->GetIsolate();
+        // It never runs script on the engine's thread, so there is nothing to ask it a safe point for.
+        UnregisterIsolate(isolate);
+
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = runtime->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        if (_offThreadRuntimes.empty()) {
+            _offThreadSet = gNextOffThreadSet.fetch_add(1);
+            // Other threads read the list without a lock once they run, which is after the last of these was made;
+            // room up front keeps it where it is all the same.
+            _offThreadRuntimes.reserve(kOffThreadRuntimesReserved);
+        }
+        const uint32_t reference = _references->AddRuntime(isolate, context, std::string(name));
+        _offThreadRuntimes.push_back({std::string(name), std::move(runtime), reference});
+        // GetIsolate() names this runtime while it is entered, so the bindings land in it.
+        if (_runtimeSetupCallback) {
+            // Bindings are declared in catalogs every runtime shares.
+            const CatalogWriteLock registering;
+            _runtimeSetupCallback(this);
+        }
+        return true;
+    }
+
+    void NodeEngine::BindOffThreadRuntime(std::string_view name) {
+        for (size_t index = 0; index < _offThreadRuntimes.size(); ++index) {
+            if (_offThreadRuntimes[index].name == name) {
+                tOffThreadBinding = {_offThreadSet, index};
+                return;
+            }
+        }
+        tOffThreadBinding = {};
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("No off-thread scripting runtime is named '{}'; this thread uses '{}'", name, kDefaultOffThreadRuntime);
+    }
+
     v8::Isolate *NodeEngine::GetIsolate() const {
         if (!_runtime) {
             return nullptr;
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
-        if (current != nullptr && _runtimeByIsolate.contains(current)) {
-            return current;
+        // A resource's runtime the caller is inside comes first, on any thread: one started from the tick thread
+        // is set up there.
+        if (current != nullptr) {
+            const std::shared_lock guard(_runtimeByIsolateMutex);
+            if (_runtimeByIsolate.contains(current)) {
+                return current;
+            }
+        }
+        if (NodeRuntime *offThread = OffThreadRuntimeFor(current)) {
+            return offThread->GetIsolate();
         }
         return _runtime->GetIsolate();
     }
@@ -610,10 +873,19 @@ namespace Framework::Scripting {
         }
         v8::Isolate *current = v8::Isolate::TryGetCurrent();
         if (current != nullptr) {
-            const auto it = _runtimeByIsolate.find(current);
-            if (it != _runtimeByIsolate.end()) {
-                return it->second->runtime->GetContext();
+            // The caller is inside that runtime, so it is not freed under it once the table is let go.
+            ResourceRuntime *entered = nullptr;
+            {
+                const std::shared_lock guard(_runtimeByIsolateMutex);
+                const auto it = _runtimeByIsolate.find(current);
+                entered       = it != _runtimeByIsolate.end() ? it->second : nullptr;
             }
+            if (entered != nullptr) {
+                return entered->runtime->GetContext();
+            }
+        }
+        if (NodeRuntime *offThread = OffThreadRuntimeFor(current)) {
+            return offThread->GetContext();
         }
         return _runtime->GetContext();
     }
@@ -636,6 +908,7 @@ namespace Framework::Scripting {
             return false;
         }
         entry->runtime->SetName(resourceName);
+        entry->runtime->JoinSchedule(_schedule);
 
         ResourceRuntime *runtime = entry.get();
         v8::Isolate *isolate     = runtime->runtime->GetIsolate();
@@ -661,7 +934,10 @@ namespace Framework::Scripting {
             node::Stop(env);
         });
 
-        _runtimeByIsolate[isolate]      = runtime;
+        {
+            const std::unique_lock guard(_runtimeByIsolateMutex);
+            _runtimeByIsolate[isolate] = runtime;
+        }
         _resourceRuntimes[resourceName] = std::move(entry);
         ++_runtimesGeneration;
         _monitor.Track(isolate, resourceName);
@@ -674,6 +950,8 @@ namespace Framework::Scripting {
 
         // GetIsolate() names this runtime while it is entered, so the bindings land in it.
         if (_runtimeSetupCallback) {
+            // Bindings are declared in catalogs every runtime shares.
+            const CatalogWriteLock registering;
             _runtimeSetupCallback(this);
         }
         return true;
@@ -693,6 +971,7 @@ namespace Framework::Scripting {
         // its handlers. It is freed at the next tick, from the top. The name is free at once, so a restart can
         // create its next runtime.
         if (!CanTeardownNow(*runtime)) {
+            runtime->retired = true;
             _retiredRuntimes.push_back(std::move(runtime));
             return;
         }
@@ -718,7 +997,10 @@ namespace Framework::Scripting {
         }
         Builtins::UnregisterAll(isolate);
         ClearScriptingCatalog(isolate);
-        _runtimeByIsolate.erase(isolate);
+        {
+            const std::unique_lock guard(_runtimeByIsolateMutex);
+            _runtimeByIsolate.erase(isolate);
+        }
         _monitor.Untrack(isolate);
 
         // Frees the environment: its timers, handles and worker threads stop with it.
@@ -759,6 +1041,7 @@ namespace Framework::Scripting {
     }
 
     std::string NodeEngine::GetResourceForIsolate(v8::Isolate *isolate) const {
+        const std::shared_lock guard(_runtimeByIsolateMutex);
         const auto it = _runtimeByIsolate.find(isolate);
         return it != _runtimeByIsolate.end() ? it->second->resourceName : std::string();
     }
@@ -807,7 +1090,7 @@ namespace Framework::Scripting {
         auto *runtime = static_cast<ResourceRuntime *>(info.Data().As<v8::External>()->Value());
 
         // Queued for Tick()'s caller, like the engine's own errors.
-        runtime->engine->_pendingErrors.push_back({runtime->resourceName, ReadUncaughtError(info)});
+        runtime->engine->_pendingErrors.push_back({runtime->resourceName, ReadUncaughtError(info), runtime->serial});
     }
 
     void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -846,6 +1129,14 @@ namespace Framework::Scripting {
         std::vector<PendingUncaughtError> errors;
         errors.swap(_pendingErrors);
         return errors;
+    }
+
+    bool NodeEngine::IsFromCurrentRuntime(const PendingUncaughtError &error) const {
+        if (error.serial == 0) {
+            return true;
+        }
+        const auto it = _resourceRuntimes.find(error.resourceName);
+        return it != _resourceRuntimes.end() && it->second->serial == error.serial;
     }
 
     bool NodeEngine::ApplySandbox(v8::Local<v8::Context> context) {

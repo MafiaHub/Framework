@@ -8,6 +8,8 @@
 
 #include "instance.h"
 
+#include "external/sentry/crash_trail.h"
+
 #include "integrations/shared/rpc/emit_script_event.h"
 #include "integrations/shared/scripting/state_bag_events.h"
 #include "scripting/builtins/entity.h"
@@ -20,6 +22,7 @@
 #include "networking/rpc/server_resources.h"
 #include "networking/rpc/voice_settings.h"
 
+#include "integrations/client/scripting/builtins/fonts.h"
 #include "integrations/client/scripting/builtins/keybinds.h"
 
 #include "scripting/builtins/events.h"
@@ -27,6 +30,7 @@
 #include "scripting/resource/resource_manager.h"
 
 #include "networking/channels.h"
+#include "networking/replication/client_entities.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/state.h"
 
@@ -265,6 +269,10 @@ namespace Framework::Integrations::Client {
             }
         }
 
+        // The game's own C runtime started between the mod's entry point and here, and may have put its
+        // exception filter in front of crash reporting without chaining to it.
+        External::Sentry::CrashTrail::Reassert();
+
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
                 if (auto discordResult = _presence->Init(opts.discordAppId); !discordResult) {
@@ -349,6 +357,16 @@ namespace Framework::Integrations::Client {
 #endif
     }
 
+    bool Instance::IsTextInputActive() const {
+        if (_chatBox.IsInputActive()) {
+            return true;
+        }
+        if (_webManager && _webManager->IsAnyViewTextInputFocused()) {
+            return true;
+        }
+        return External::ImGUI::Wrapper::WantsTextInput();
+    }
+
     void Instance::InitProtocolHandler() {
 #ifdef _WIN32
         char urlBuffer[2048] = {};
@@ -405,6 +423,16 @@ namespace Framework::Integrations::Client {
                 if (auto imguiResult = _imguiApp->Init(imguiConfig); !imguiResult) {
                     Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init: {}", imguiResult.GetError().message);
                 }
+                else {
+                    auto *imgui = _imguiApp.get();
+                    Client::Scripting::Builtins::Fonts::SetTarget(
+                        [imgui](const std::string &family, External::ImGUI::FontFamilySource faces) {
+                            imgui->QueueFontFamily(family, std::move(faces));
+                        },
+                        [imgui]() {
+                            imgui->ClearFontFamilies();
+                        });
+                }
             }
         }
 
@@ -427,6 +455,7 @@ namespace Framework::Integrations::Client {
         // SRV callbacks, which read the heap and device off D3D12Backend. Shutdown()
         // nulls both, so freeing the atlas after it faults.
         if (_imguiApp && _imguiApp->IsInitialized()) {
+            Client::Scripting::Builtins::Fonts::SetTarget({}, {});
             _imguiApp->Shutdown();
             if (_imguiApp->IsInitialized()) {
                 // A failed GPU drain retains ImGui's resources. Keep their renderer
@@ -535,15 +564,16 @@ namespace Framework::Integrations::Client {
         {
             FW_PROFILE_SCOPE_N("Client::Voice");
 
-            // The chat box and web views belong to the framework, so it enforces this itself
-            // rather than trusting every mod to remember.
-            _voiceClient.SetInputSuppressed(_chatBox.IsInputActive() || (_webManager && _webManager->IsAnyViewFocused()));
+            // The chat box, web views and ImGui belong to the framework, so it enforces this itself
+            // rather than trusting every mod to remember. Typing only: a focused panel of buttons
+            // takes keys but types nothing, so push-to-talk keeps working over it.
+            _voiceClient.SetInputSuppressed(IsTextInputActive());
 
             // Speaker positions come from each player's avatar, as the server's voice router gets
             // them. Done here so a mod only has to supply the listener transform.
             if (auto *replication = _networkingEngine->GetNetworkClient()->GetReplicationManager()) {
                 _voiceClient.BeginSpeakerUpdate();
-                replication->ForEachAvatar([this](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
+                Framework::Networking::Replication::ClientEntities(*replication).ForEachAvatar([this](MafiaNet::PeerGuid guid, Framework::Networking::Replication::NetworkEntity *avatar) {
                     _voiceClient.SetSpeakerPosition(static_cast<uint64_t>(guid), avatar->position);
                 });
                 _voiceClient.EndSpeakerUpdate();
@@ -670,6 +700,9 @@ namespace Framework::Integrations::Client {
             _assetPaksDownloaded = false;
             _assetConsentBytes   = 0;
             AnnounceAssetPaks(_pendingServerResources, true);
+            if (!_opts.assetPakPolicy && !(_assetPaks.empty() && _deferredPaks.empty())) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("The server ships asset paks and InstanceOptions::assetPakPolicy is not set: their contents are not checked by the framework");
+            }
 
             // A server that predates encrypted resource packages writes a different layout, so the
             // key lands on whatever followed it and the rest of the stream is garbage. Fail here
@@ -744,11 +777,9 @@ namespace Framework::Integrations::Client {
                     _assetPaks.erase(paks, _assetPaks.end());
                     OnResourceAssetPaksChanged();
                 }
-                _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(),
-                                        [&res](const ResourceAssetPak &pak) {
-                                            return pak.resource == res.name;
-                                        }),
-                    _deferredPaks.end());
+                std::erase_if(_deferredPaks, [&res](const ResourceAssetPak &pak) {
+                    return pak.resource == res.name;
+                });
                 if (rm->IsResourceRunning(res.name)) {
                     auto result = rm->StopResource(res.name);
                     if (!result) {
@@ -1025,11 +1056,11 @@ namespace Framework::Integrations::Client {
             if (!holdDeferred && _deferredDownloader.IsRunning()) {
                 std::copy_if(_deferredPaks.begin(), _deferredPaks.end(), std::back_inserter(inFlight), ofResource);
             }
-            _assetPaks.erase(std::remove_if(_assetPaks.begin(), _assetPaks.end(), ofResource), _assetPaks.end());
-            _deferredPaks.erase(std::remove_if(_deferredPaks.begin(), _deferredPaks.end(), ofResource), _deferredPaks.end());
+            std::erase_if(_assetPaks, ofResource);
+            std::erase_if(_deferredPaks, ofResource);
             for (const auto &info : resource.assetPaks) {
-                // Untrusted: a lane or hash that could not name a cache file is dropped, and the
-                // mod's own validation decides what the rest may carry.
+                // Untrusted: a lane or hash that could not name a cache file is dropped here; what the
+                // rest may carry is checked against InstanceOptions::assetPakPolicy once downloaded.
                 if (!info.IsSane() || !Framework::Utils::StreamedAssets::IsSha256(info.sha256) || !Framework::Utils::StreamedAssets::IsValidResourceName(resource.name)) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Ignoring a malformed asset pak of '{}'", resource.name);
                     continue;
@@ -1093,6 +1124,13 @@ namespace Framework::Integrations::Client {
         // The server's download URLs first, without the token (it is only the game port's), then the game port.
         std::vector<AssetDownloader::Source> sources;
         for (const std::string &url : Framework::Utils::StreamedAssets::SplitUrlList(_downloadUrl)) {
+            if (sources.size() >= Framework::Utils::StreamedAssets::kMaxDownloadMirrors) {
+                break;
+            }
+            if (!_opts.allowPrivateDownloadMirrors && !Framework::Utils::StreamedAssets::IsAllowedMirrorUrl(url, _currentState.host)) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Skipping the download mirror '{}': not a public host or this server", url);
+                continue;
+            }
             sources.push_back({url, {}});
         }
         sources.push_back({fmt::format("http://{}:{}/files", _currentState.host, _currentState.port), _downloadToken});
@@ -1146,6 +1184,7 @@ namespace Framework::Integrations::Client {
             _deferredStatus.failure = "Some of the server's deferred assets could not be downloaded.";
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("{} deferred asset pak(s) did not land; the session runs without them", _deferredPaks.size());
         }
+        RefuseInvalidAssetPaks(landed);
         if (!landed.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("{} deferred asset pak(s) landed", landed.size());
             _assetPaks.insert(_assetPaks.end(), std::make_move_iterator(landed.begin()), std::make_move_iterator(landed.end()));
@@ -1163,6 +1202,28 @@ namespace Framework::Integrations::Client {
             }
         }
         return true;
+    }
+
+    size_t Instance::RefuseInvalidAssetPaks(std::vector<ResourceAssetPak> &paks) const {
+        if (!_opts.assetPakPolicy) {
+            return 0;
+        }
+        std::vector<Framework::Utils::StreamedAssets::PakArchive::Candidate> candidates;
+        candidates.reserve(paks.size());
+        for (const auto &pak : paks) {
+            candidates.push_back({pak.path, pak.resource, pak.info.lane});
+        }
+        std::vector<std::string> errors;
+        const auto refused = Framework::Utils::StreamedAssets::PakArchive::FindRefused(candidates, *_opts.assetPakPolicy, errors);
+        // Descending, so erasing one leaves the indices of the rest valid.
+        for (size_t i = refused.size(); i-- > 0;) {
+            const size_t index = refused[i];
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Refusing asset pak '{}' {}: {}", paks[index].resource, paks[index].info.lane, errors[i]);
+            std::error_code code;
+            std::filesystem::remove(paks[index].path, code);
+            paks.erase(paks.begin() + static_cast<std::ptrdiff_t>(index));
+        }
+        return refused.size();
     }
 
     void Instance::PruneAssetPaks(const std::string &cacheDir) const {
@@ -1449,12 +1510,13 @@ namespace Framework::Integrations::Client {
             if (scriptingModule && scriptingModule->GetScriptingEngine() && scriptingModule->GetScriptingEngine()->IsInitialized() && !_pendingRefreshResources.empty()) {
                 AnnounceAssetPaks(_pendingRefreshResources, false);
                 if (VerifyAssetPaks()) {
+                    RefuseInvalidAssetPaks(_assetPaks);
                     OnResourceAssetPaksChanged();
                 }
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     const auto failed = MountResourcePackages(_pendingRefreshResources);
                     for (const auto &res : _pendingRefreshResources) {
-                        if (std::find(failed.begin(), failed.end(), res.name) != failed.end() || res.packageHash.empty()) {
+                        if (std::ranges::contains(failed, res.name) || res.packageHash.empty()) {
                             continue;
                         }
                         // Newly started server-side: discover from cache first.
@@ -1485,6 +1547,12 @@ namespace Framework::Integrations::Client {
 
             if (!_resumingDeferredInitialAssetProcessing) {
                 if (!VerifyAssetPaks()) {
+                    (void)net->Disconnect();
+                    return false;
+                }
+                if (RefuseInvalidAssetPaks(_assetPaks) > 0) {
+                    // A blocking pak the mod's policy refuses: the session cannot be what the server
+                    // intended, and running without it is not this client's call to make.
                     (void)net->Disconnect();
                     return false;
                 }

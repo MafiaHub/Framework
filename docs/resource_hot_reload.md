@@ -97,12 +97,17 @@ auto-restart, or a newly started resource — the server notifies connected
 clients so they re-sync and apply it in place:
 
 1. Any `StartResource` after the initial boot fires
-   `ResourceManager::SetOnResourceStarted`; the server `Instance` reacts (boot
+   `ResourceManager::AddOnResourceStarted`; the server `Instance` reacts (boot
    starts are skipped — clients get the full list on connect).
-2. The server repackages and republishes the client files
-   (`PublishClientAssets`), so the refresh announces their new hashes.
-3. The server broadcasts a `ResourceRefresh` RPC (affected resource
-   names/versions), for resources with a client entry point.
+2. The server repackages the resource's client files on a background thread
+   (`RepublishClientResource`), beside the files clients are still being
+   served, so the tick is not held up by a large resource. A tick then puts
+   the new files in place and serves them. See `docs/server_threading.md`.
+3. In that same tick the server broadcasts a `ResourceRefresh` RPC (affected
+   resource names/versions and their new hashes), for resources with a client
+   entry point or asset paks: a resource that ships assets only hot-reloads
+   too. A resource changed again while it was being built is built
+   once more before anything is announced.
 4. The client re-runs a **targeted** HTTP download of the flagged resources
    (files whose cached hash still matches are skipped; unlike the connect-time
    download it does not stop all resources),
@@ -114,6 +119,14 @@ Symmetrically, when a client resource **stops** at runtime (operator `stop`,
 error-stop, or the transient stop within a reload), the server broadcasts a
 `ResourceStop` RPC and clients stop it — no files transfer. A reload therefore
 mirrors as stop-then-start on the client.
+A failed start and a runtime error with `errorBehavior` `stop` or `restart` notify the same way as a clean stop.
+Such a runtime error is a stop like any other: its dependents stop first, every resource receives `resourceStop`,
+and they start again with it when an error listener starts it, or under `restart` when its scheduled restart or an
+operator starts it before that restart runs. A dependent stopped again in the meantime stays stopped. Otherwise, with
+`stop` or once the restart limit is reached, they stay stopped and an operator starts each one. With `continue` the
+resource keeps running.
+`restart` restarts a resource at most three times in five minutes, however long each start ran; then it and its
+dependents stay stopped. An `errorBehavior` other than `stop`, `restart` or `continue` is logged and read as `stop`.
 
 Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
 — their initial asset sync already fetches the current files.

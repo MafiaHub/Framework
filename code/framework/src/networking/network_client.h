@@ -46,6 +46,12 @@ namespace Framework::Networking {
       public:
         NetworkClient();
 
+        using NetworkPeer::GetNetworkIDManager;
+        // A client's handlers take the payload and the packet. Protected in NetworkPeer so that a
+        // server cannot register this form; see NetworkPeer::RegisterRPC.
+        using NetworkPeer::RegisterRawRPC;
+        using NetworkPeer::RegisterRPC;
+
         // The local address the peer binds. The default binds every interface, which reaching a server on
         // another machine needs; one that only ever talks to a server on this machine binds "127.0.0.1" and
         // opens nothing on the network.

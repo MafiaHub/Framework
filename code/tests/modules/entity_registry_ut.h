@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "../replication_test_world.h"
 #include "networking/network_server.h"
 #include "networking/replication/entities/text_label_entity.h"
 #include "networking/replication/entity_registry.h"
@@ -56,22 +57,22 @@ MODULE(entity_registry, {
         EntityRegistry::Get().Register<Walker>(Walker::kTypeName);
         EntityRegistry::Get().Register<Prop>(Prop::kTypeName);
 
-        Walker *walker = manager->CreateEntity<Walker>();
-        Prop *prop     = manager->CreateEntity<Prop>();
+        Walker *walker = TestWorld::Make<Walker>(manager);
+        Prop *prop     = TestWorld::Make<Prop>(manager);
         NEQUALS(walker, nullptr);
         NEQUALS(prop, nullptr);
         EQUALS(walker->GetTypeId(), EntityTypeId<Walker>());
         NEQUALS(prop->GetTypeId(), EntityTypeId<Walker>());
-        EQUALS(manager->GetEntity<Walker>(walker->GetNetworkID()), walker);
-        EQUALS(manager->GetEntity<Prop>(walker->GetNetworkID()), nullptr);
+        EQUALS(TestWorld::Find<Walker>(manager, walker->GetNetworkID()), walker);
+        EQUALS(TestWorld::Find<Prop>(manager, walker->GetNetworkID()), nullptr);
 
         int walkers = 0;
-        manager->ForEach<Walker>([&walkers](Walker *) {
+        manager->GetWorld().ForEach<Walker>([&walkers](Framework::Networking::Replication::Ref<Walker> &) {
             ++walkers;
         });
         EQUALS(walkers, 1);
 
-        manager->DestroyEntity(walker);
-        manager->DestroyEntity(prop);
+        TestWorld::Destroy(manager, walker);
+        TestWorld::Destroy(manager, prop);
     });
 })

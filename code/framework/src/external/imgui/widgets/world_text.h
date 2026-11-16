@@ -38,6 +38,22 @@ namespace Framework::External::ImGUI::Widgets {
         return 1.0f - (distance - fadeStart) / (drawDistance - fadeStart);
     }
 
+    // The near edge: gone up to minDrawDistance, opaque from fadeEnd, so a minDrawDistance of 0
+    // fades in from the camera. A fadeEnd at or below minDrawDistance is a hard edge.
+    inline float WorldTextNearAlpha(float distance, float minDrawDistance, float fadeEnd = 0.0f) {
+        const float edge = minDrawDistance > 0.0f ? minDrawDistance : 0.0f; // NaN too
+        if (!(fadeEnd > edge)) {
+            return edge > 0.0f && distance <= edge ? 0.0f : 1.0f;
+        }
+        if (distance <= edge) {
+            return 0.0f;
+        }
+        if (distance >= fadeEnd) {
+            return 1.0f;
+        }
+        return (distance - edge) / (fadeEnd - edge);
+    }
+
     inline ImU32 WorldTextModulateAlpha(ImU32 color, float alpha) {
         alpha         = std::clamp(alpha, 0.0f, 1.0f);
         const ImU32 a = static_cast<ImU32>(static_cast<float>((color >> IM_COL32_A_SHIFT) & 0xFF) * alpha);

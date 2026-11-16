@@ -76,6 +76,16 @@ launcher did not claim the slot should retain the normal UCRT registration. Supp
 the mapped game's primary-thread TLS destructors are not run during process exit; thread
 attach/detach callbacks and normal execution are unaffected.
 
+Windows sends thread attach/detach only to the TLS callbacks of images it loaded itself, so a
+mapped game's TLS callbacks never see a thread start or exit. Protected images that keep
+per-thread state there fault on such threads. With `config.forwardThreadTlsCallbacks = true` the
+loader runs the process-attach pass under the loader lock and points `FrameworkLoaderData.dll` at
+the game's callback array before releasing it, and that DLL's own TLS callback relays both reasons
+to it for every later thread. Threads the game's callbacks start during that pass wait for the
+lock, as they would under the OS loader, so they get their attach too. The relay runs on every
+thread in the process, the Framework's own (CEF, the job system, networking) included, and a
+failure to set it up aborts the launch.
+
 ## When to Use Which Approach
 
 | Game Behavior | Approach | Config |
@@ -243,6 +253,21 @@ fw_set_binary_identity(KCDCClient PRODUCT "Kingdoms Connected" VERSION ${KCDC_VE
 
 `CompanyName` should match the subject of the certificate the release is signed with.
 
+### Stack reserve
+
+FrameworkLoader links every launcher with a 12 MB stack reserve. Windows gives that reserve to the
+main thread, which runs the game, and to every thread created without a size of its own: the
+thread pool, `std::thread`, input and audio helpers. In a 32-bit game that is a lot of address space
+for threads that touch a few KB, so a launcher can set its own, in bytes:
+
+```cmake
+# Mafia II asks for 1 MB itself; 2 MB leaves V8 and CEF room on the main thread.
+set_target_properties(M2OLauncher PROPERTIES FW_LAUNCHER_STACK_RESERVE 2097152)
+```
+
+The game's own `SizeOfStackReserve` is no guide to what the main thread needs once the mod runs
+on it too. Measure the threads' committed stacks before going below what the game declares.
+
 ## Launch Types
 
 `ProjectLaunchType::PE_LOADING` is the default and what every project uses. The cross-process
@@ -257,7 +282,7 @@ asking for it fails to compile.
 - `project.cpp` / `project.h` - Main launcher project class and configuration
 - `game_reserve.cpp` - the game reservation, compiled into each launcher and sized by `FW_LAUNCHER_GAME_RESERVE`
 - `loaders/exe_ldr.cpp` / `exe_ldr.h` - PE executable loader implementation
-- `data/tls.cpp` - TLS buffer for allocated slot approach (in FrameworkLoaderData.dll)
+- `data/tls.cpp` - TLS buffer for allocated slot approach, and the thread attach/detach relay to the game's TLS callbacks (in FrameworkLoaderData.dll)
 - `rgl_bypass.cpp` / `rgl_bypass.h` - Rockstar Games Launcher entry-stub decoding and signature-check bypasses; `ProcessMonitor` only with `FW_DLL_INJECTION`
 - `loaders/image_snapshot.cpp` / `image_snapshot.h` - capture and replay of the code a store wrapper decrypts at runtime
 - `loaders/image_snapshot_capture.cpp` / `image_snapshot_capture.h` - the authorised run the snapshot is captured from, linked only through `Platforms::Rockstar::Options::captureImage`

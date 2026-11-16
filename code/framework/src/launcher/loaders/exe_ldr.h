@@ -102,5 +102,8 @@ namespace Framework::Launcher::Loaders {
         void Protect() const;
         void LoadIntoModule(HMODULE module);
         void RunTLSCallbacks() const;
+
+        // The mapped image's null-terminated TLS callback array, or null when it has none
+        PIMAGE_TLS_CALLBACK *GetTLSCallbacks() const;
     };
 } // namespace Framework::Launcher::Loaders

@@ -10,6 +10,7 @@
 
 #include "callback_scope.h"
 #include "engine.h"
+#include "script_gate.h"
 
 #include <v8.h>
 
@@ -22,6 +23,10 @@ namespace Framework::Scripting {
     // context scope, in the order V8 requires, then the runtime's callback scope, so what the host
     // runs inside queues runs as the scope closes. Valid() is false, and nothing is entered, for a
     // null engine or one with no isolate yet; whether it must also be initialized is the caller's call.
+    //
+    // On a server, scripts run on a thread of their own, and off that thread engine->GetIsolate() is an isolate
+    // of the calling side's own: a scope opened on the tick thread waits for no script. Values built in it are
+    // copied to the script thread by whatever is given them (an emitted event, say).
     class EngineScope final {
       public:
         explicit EngineScope(Engine *engine) {
@@ -52,6 +57,8 @@ namespace Framework::Scripting {
         }
 
       private:
+        // First in, last out: nothing of V8 is entered before it or left after it.
+        RuntimeEntry _entry {RuntimeEntry::Into::OwnIsolate};
         v8::Isolate *_isolate = nullptr;
         // Declaration order is construction order; the optionals unwind in reverse, as V8 requires.
         std::optional<v8::Locker> _locker;

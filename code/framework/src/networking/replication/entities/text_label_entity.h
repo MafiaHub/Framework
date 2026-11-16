@@ -43,6 +43,7 @@ namespace Framework::Networking::Replication::Entities {
     // Limits on a label's look: the scripting API enforces them and the client renderer assumes them.
     inline constexpr float kTextLabelMaxOutlineWidth = 4.0f;
     inline constexpr float kTextLabelMaxShadowBlur   = 8.0f;
+    inline constexpr size_t kTextLabelMaxFontBytes   = 64; // a font family's name
 
     // A server-owned piece of world-space text, interest-streamed and drawn client-side as a screen
     // overlay. Mods register the type on both peers.
@@ -91,6 +92,13 @@ namespace Framework::Networking::Replication::Entities {
         float lineSpacing          = 1.0f;
         float maxWidth             = 0.0f; // wrap width in fontSize pixels; 0 = never
         bool occlusion             = true; // hidden behind world geometry
+
+        // The near edge, as fadeDistance is the far one: nothing up to minDrawDistance, opaque from
+        // minFadeDistance. A minFadeDistance at or below minDrawDistance is a hard edge.
+        float minDrawDistance = 0.0f;
+        float minFadeDistance = 0.0f;
+        // A family the viewer's client registered; empty, or one it never did, is the default font.
+        std::string font;
 
         // Not replicated: bumped whenever the label is constructed or updated, so a renderer can
         // keep its layout until something changes.
@@ -154,6 +162,9 @@ namespace Framework::Networking::Replication::Entities {
             fields.Field(lineSpacing);
             fields.Field(maxWidth);
             fields.Field(occlusion);
+            fields.Field(minDrawDistance);
+            fields.Field(minFadeDistance);
+            fields.Field(font);
 
             if (!fields.Writing()) {
                 style    = static_cast<TextLabelStyle>(styleRaw);

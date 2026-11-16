@@ -331,7 +331,7 @@ namespace Framework::Integrations::Client::Scripting::Builtins {
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkKey", v8pp::metadata::docs("string", {}, "Reads the push-to-talk binding.", "Canonical key name, e.g. \"v\".")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("setPushToTalkReleaseDelay",
             v8pp::metadata::docs("void", {v8pp::metadata::param("milliseconds", "number", false, "How long to keep transmitting after the key goes up. Clamped to 0..2000.")},
-                "Sets how long transmission continues after push-to-talk is released, so letting go slightly early does not clip the end of a word. Muting, turning voice off and losing input focus still stop it at once.")));
+                "Sets how long transmission continues after push-to-talk is released, so letting go slightly early does not clip the end of a word. Muting, turning voice off and starting to type into a text field still stop it at once.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("getPushToTalkReleaseDelay", v8pp::metadata::docs("number", {}, "Reads the push-to-talk release delay.", "Delay in milliseconds; 0 when transmission stops the moment the key is released.")));
         metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("isTalking", v8pp::metadata::docs("boolean", {}, "Checks whether the local player is speaking right now. The same state raises the voiceStart and voiceStop events.",
                                                                                            "True while push-to-talk is open -- held, or still inside the release delay -- and the microphone is producing audio.")));

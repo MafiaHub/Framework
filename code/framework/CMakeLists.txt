@@ -12,6 +12,10 @@ set(FRAMEWORK_SRC
     src/utils/persistent_config.cpp
     src/utils/interpolator.cpp
     src/utils/time.cpp
+    src/utils/fork_join_pool.cpp
+    src/utils/task_scheduler.cpp
+    src/utils/thread_budget.cpp
+    src/utils/world_lock.cpp
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/crypto.cpp
@@ -39,10 +43,12 @@ set(FRAMEWORK_SRC
     src/networking/replication/replication_manager.cpp
     src/networking/replication/replication_connection.cpp
     src/networking/replication/transform_batch.cpp
+    src/networking/replication/world.cpp
 
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
     src/scripting/engine.cpp
+    src/scripting/script_gate.cpp
     src/scripting/value_transfer.cpp
     src/scripting/function_references.cpp
     src/scripting/resource_monitor.cpp
@@ -76,11 +82,15 @@ set(FRAMEWORK_SERVER_SRC
     src/http/webserver.cpp
 
     src/networking/network_server.cpp
+    src/networking/packet_thread.cpp
 
     src/integrations/server/instance.cpp
     src/integrations/server/connection_gate.cpp
+    src/integrations/server/tick_breakdown.cpp
     src/integrations/server/asset_paks/asset_pak_builder.cpp
     src/integrations/server/asset_file_server.cpp
+    src/integrations/server/client_package.cpp
+    src/integrations/server/script_thread.cpp
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (server module)
@@ -122,6 +132,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/builtins/discord.cpp
     src/integrations/client/scripting/builtins/voice.cpp
     src/integrations/client/scripting/builtins/nametags.cpp
+    src/integrations/client/scripting/builtins/fonts.cpp
 
     src/utils/key_names.cpp
 
@@ -194,6 +205,7 @@ if(WIN32)
         src/launcher/platforms/platforms.cpp
         src/launcher/rgl_bypass.cpp
         src/launcher/swap_chain_upgrade.cpp
+        src/launcher/system_graphics.cpp
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/launcher/loaders/process_identity.cpp
@@ -209,7 +221,11 @@ if(WIN32)
         src/utils/hooking/pattern_table.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp)
-    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED)
+    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup /MANIFEST:EMBED)
+    # The image's stack reserve is the main thread's, and also every thread's created without a size of its own: the
+    # Windows thread pool, std::thread, input and audio helpers. 12 MB each is a lot of a 32-bit game's address space
+    # for threads that touch a few KB, so a launcher can set FW_LAUNCHER_STACK_RESERVE (bytes) to what its game needs.
+    target_link_options(FrameworkLoader PUBLIC "/STACK:$<IF:$<BOOL:$<TARGET_PROPERTY:FW_LAUNCHER_STACK_RESERVE>>,$<TARGET_PROPERTY:FW_LAUNCHER_STACK_RESERVE>,12000000>,4096")
 
     if(FW_DLL_INJECTION)
         target_compile_definitions(FrameworkLoader PUBLIC FW_DLL_INJECTION)
@@ -253,6 +269,15 @@ endif()
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
+# The headers need C++23, so the requirement travels with the targets: a consumer that sets
+# CXX_STANDARD lower on one of its own targets is raised to C++23 instead of slipping past
+# fw_sdk_check_abi(), which only sees the directory-wide CMAKE_CXX_STANDARD.
+foreach(_fw_lib Framework FrameworkClient FrameworkServer FrameworkLoader)
+    if(TARGET ${_fw_lib})
+        target_compile_features(${_fw_lib} PUBLIC cxx_std_23)
+    endif()
+endforeach()
+
 # The RPC identifier salt is a runtime value since the Framework ships prebuilt: a project hands it
 # to InstanceOptions::rpcIdentifierSalt from its own define (see networking/rpc/rpc_identifier.h).
 if(DEFINED FW_RPC_IDENTIFIER_SALT AND NOT FW_RPC_IDENTIFIER_SALT STREQUAL "")
@@ -275,7 +300,9 @@ macro(link_shared_deps target_name)
         ${Framework_SOURCE_DIR}/vendors/physfs/src
         ${Framework_SOURCE_DIR}/vendors/semver
         ${Framework_SOURCE_DIR}/vendors/ftl/include
+        ${FW_ASIO_INCLUDE_DIR}
     )
+    target_compile_definitions(${target_name} PRIVATE ASIO_STANDALONE ASIO_NO_DEPRECATED)
 
     # Required libraries for apple systems
     if(APPLE)
@@ -325,7 +352,7 @@ if(LIBNODE_AVAILABLE)
     if(WIN32)
         target_compile_definitions(FrameworkNodeEngine PRIVATE _USE_MATH_DEFINES NOMINMAX)
     endif()
-    target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
+    target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_23)
 
     # Node.js inspector: enabled via explicit option OR Debug builds
     target_compile_definitions(FrameworkNodeEngine PRIVATE
@@ -347,7 +374,7 @@ target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
 if(WIN32)
     target_compile_definitions(FrameworkV8Engine PRIVATE _USE_MATH_DEFINES NOMINMAX)
 endif()
-target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
+target_compile_features(FrameworkV8Engine PRIVATE cxx_std_23)
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
@@ -431,7 +458,7 @@ if(WIN32)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd winhttp crypt32)
     target_link_libraries(FrameworkLoaderData udis86 minhook::minhook)
     target_compile_definitions(FrameworkLoaderData PRIVATE _USE_MATH_DEFINES NOMINMAX)
-    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
+    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride /EXPORT:CoreRT_ForwardGameTlsCallbacks)
 
     # FrameworkLoader-specific includes
     target_include_directories(FrameworkLoader PRIVATE
@@ -473,6 +500,12 @@ if(WIN32)
         # Windowed subsystem (no black console window per CEF child) while keeping the int main() entry.
         LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
     )
+    # Every CEF child (renderer, GPU, utility) runs this exe. A 32-bit one without the flag gets 2 GB of
+    # address space instead of 4: a heavy page's renderer then dies with Chromium's out-of-memory code and
+    # CEF reloads the page from its first screen. 32-bit chrome.exe ships with it for the same reason.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_link_options(cef_subprocess PRIVATE /LARGEADDRESSAWARE)
+    endif()
     # Shared by every project, so it carries the Framework's identity rather than a mod's
     fw_set_binary_identity(cef_subprocess PRODUCT "MafiaHub Framework" VERSION ${FW_VERSION} COMPANY "MafiaHub" DESCRIPTION "MafiaHub Framework Web Helper")
     if(TARGET CEFCopyDlls)

@@ -45,13 +45,14 @@ namespace Framework::GUI::CEF {
         // Sent by our renderer process, not reachable from page script.
         if (name == "InputFocus") {
             auto args = message->GetArgumentList();
-            if (args->GetSize() < 1 || args->GetType(0) != VTYPE_BOOL) {
+            if (args->GetSize() < 2 || args->GetType(0) != VTYPE_BOOL || args->GetType(1) != VTYPE_BOOL) {
                 return true;
             }
             if (_onViewEvent) {
                 ViewEventData data;
-                data.event   = ViewEvent::InputFocusChange;
-                data.focused = args->GetBool(0);
+                data.event    = ViewEvent::InputFocusChange;
+                data.focused  = args->GetBool(0);
+                data.editable = args->GetBool(1);
                 _onViewEvent(data);
             }
             return true;

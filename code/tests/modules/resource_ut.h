@@ -217,8 +217,8 @@ MODULE(resource, {
         std::string clientEntry = resource.GetClientScripts().empty() ? std::string {} : resource.GetClientScripts().front();
 
         // Should contain the path
-        EQUALS(serverEntry.find("server/main.js") != std::string::npos, true);
-        EQUALS(clientEntry.find("client/main.js") != std::string::npos, true);
+        EQUALS(serverEntry.contains("server/main.js"), true);
+        EQUALS(clientEntry.contains("client/main.js"), true);
 
         TestResourceHelper::Cleanup();
     });
@@ -298,24 +298,6 @@ MODULE(resource, {
         resource.RecordRestartAttempt();
         resource.RecordRestartAttempt();
         EQUALS(resource.GetRestartAttemptCount(), 3);
-
-        TestResourceHelper::Cleanup();
-    });
-
-    IT("ClearRestartAttempts resets counter", {
-        TestResourceHelper::CreateTestResource("restart-test-2", R"({
-            "name": "restart-test-2",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-2");
-
-        resource.RecordRestartAttempt();
-        resource.RecordRestartAttempt();
-        EQUALS(resource.GetRestartAttemptCount(), 2);
-
-        resource.ClearRestartAttempts();
-        EQUALS(resource.GetRestartAttemptCount(), 0);
 
         TestResourceHelper::Cleanup();
     });

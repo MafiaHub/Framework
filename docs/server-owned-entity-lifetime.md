@@ -18,7 +18,7 @@ bool CanOwnerDestroy() const override {
 The server then refuses a destruction from the owner, as it already refuses
 one from any other client. It adds a restriction, never a permission.
 Clients still apply the server's destructions, and the server removes the
-entity as usual with `ReplicationManager::DestroyEntity(entity)`.
+entity as usual with `World::Destroy(id)`.
 
 Everything else a delegated entity needs is the delegation feature's: the
 simulator writes the fields it owns, and every server write is followed by

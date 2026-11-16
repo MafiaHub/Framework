@@ -11,11 +11,16 @@
 #include <core_modules.h>
 #include <networking/replication/network_entity.h>
 #include <networking/replication/replication_manager.h>
+#include <networking/replication/world.h>
 #include <scripting/engine_helpers.h>
 
 #include <v8.h>
 #include <v8pp/class.hpp>
 #include <v8pp/convert.hpp>
+
+#include <cstdint>
+#include <exception>
+#include <vector>
 
 namespace Framework::Scripting::Builtins {
 
@@ -40,31 +45,32 @@ namespace Framework::Scripting::Builtins {
       public:
         EntityCollection() = default;
 
-        template <typename Fn>
-        static void ForEachNative(Fn &&fn) {
+        // The ids of the category's entities as they are now. Each is held only while the filter
+        // looks at it: a script's callback is called with none held, and reaches the entity itself.
+        static std::vector<uint64_t> Ids() {
+            std::vector<uint64_t> ids;
             auto *repl = CoreModules::GetReplication();
             if (!repl) {
-                return;
+                return ids;
             }
             Predicate filter;
-            repl->ForEachEntity([&](Networking::Replication::NetworkEntity *e) {
-                auto *typed = Networking::Replication::CheckedEntityCast<NativeType>(e);
-                if (!typed) {
-                    return;
+            repl->GetWorld().template ForEach<NativeType>([&](Networking::Replication::Ref<NativeType> &e) {
+                if (filter(&*e)) {
+                    ids.push_back(e->GetNetworkID());
                 }
-                if (!filter(typed)) {
-                    return;
-                }
-                fn(typed);
             });
+            return ids;
+        }
+
+        template <typename Fn>
+        static void ForEachNative(Fn &&fn) {
+            for (const uint64_t id : Ids()) {
+                fn(id);
+            }
         }
 
         int GetLength(v8::Isolate *) const {
-            int count = 0;
-            ForEachNative([&count](NativeType *) {
-                count++;
-            });
-            return count;
+            return static_cast<int>(Ids().size());
         }
 
         // Per-iteration HandleScope so wrapper handles don't pile up across the sweep; retained results
@@ -72,7 +78,7 @@ namespace Framework::Scripting::Builtins {
         void ForEach(v8::Isolate *isolate, v8::Local<v8::Function> callback) {
             auto ctx          = isolate->GetCurrentContext();
             bool hadException = false;
-            ForEachNative([&](NativeType *e) {
+            ForEachNative([&](uint64_t e) {
                 if (hadException)
                     return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value>) {});
@@ -84,7 +90,7 @@ namespace Framework::Scripting::Builtins {
             bool hadException        = false;
             v8::Local<v8::Array> arr = v8::Array::New(isolate, 0);
             uint32_t outIndex        = 0;
-            ForEachNative([&](NativeType *e) {
+            ForEachNative([&](uint64_t e) {
                 if (hadException)
                     return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object> jsEntity, v8::Local<v8::Value> result) {
@@ -99,7 +105,7 @@ namespace Framework::Scripting::Builtins {
             auto ctx                   = isolate->GetCurrentContext();
             v8::Local<v8::Value> found = v8::Undefined(isolate);
             bool foundOne = false, hadException = false;
-            ForEachNative([&](NativeType *e) {
+            ForEachNative([&](uint64_t e) {
                 if (foundOne || hadException)
                     return;
                 hadException = !InvokeCallback<v8::EscapableHandleScope>(isolate, ctx, callback, e, [&](v8::EscapableHandleScope &scope, v8::Local<v8::Object> jsEntity, v8::Local<v8::Value> result) {
@@ -117,7 +123,7 @@ namespace Framework::Scripting::Builtins {
             bool hadException        = false;
             v8::Local<v8::Array> arr = v8::Array::New(isolate, 0);
             uint32_t outIndex        = 0;
-            ForEachNative([&](NativeType *e) {
+            ForEachNative([&](uint64_t e) {
                 if (hadException)
                     return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
@@ -130,7 +136,7 @@ namespace Framework::Scripting::Builtins {
         bool Some(v8::Isolate *isolate, v8::Local<v8::Function> callback) {
             auto ctx   = isolate->GetCurrentContext();
             bool found = false, hadException = false;
-            ForEachNative([&](NativeType *e) {
+            ForEachNative([&](uint64_t e) {
                 if (found || hadException)
                     return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
@@ -144,7 +150,7 @@ namespace Framework::Scripting::Builtins {
         bool Every(v8::Isolate *isolate, v8::Local<v8::Function> callback) {
             auto ctx      = isolate->GetCurrentContext();
             bool allMatch = true, hadException = false;
-            ForEachNative([&](NativeType *e) {
+            ForEachNative([&](uint64_t e) {
                 if (!allMatch || hadException)
                     return;
                 hadException = !InvokeCallback<v8::HandleScope>(isolate, ctx, callback, e, [&](v8::HandleScope &, v8::Local<v8::Object>, v8::Local<v8::Value> result) {
@@ -160,9 +166,17 @@ namespace Framework::Scripting::Builtins {
         // callback under a TryCatch and rethrows on script exception (returning false). visit runs
         // inside the iteration scope, which is passed through so Find can Escape its match.
         template <typename Scope, typename Visit>
-        static bool InvokeCallback(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Function> callback, NativeType *e, Visit &&visit) {
+        static bool InvokeCallback(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Function> callback, uint64_t e, Visit &&visit) {
             Scope iterationScope(isolate);
-            v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, new JsType(e->GetNetworkID()));
+            // Destroyed since the ids were taken, by an earlier callback or another thread: skipped.
+            JsType *wrapper = nullptr;
+            try {
+                wrapper = new JsType(e);
+            }
+            catch (const std::exception &) {
+                return true;
+            }
+            v8::Local<v8::Object> jsEntity = JsType::GetClass(isolate).import_external(isolate, wrapper);
             v8::Local<v8::Value> argv[1]   = {jsEntity};
             v8::TryCatch tryCatch(isolate);
             v8::Local<v8::Value> result;

@@ -10,6 +10,7 @@
 
 #include "policy.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -56,6 +57,19 @@ namespace Framework::Utils::StreamedAssets {
     // or commas, tried in order. Empty entries are dropped; what is not an http(s) URL is kept for
     // the caller to refuse.
     std::vector<std::string> SplitUrlList(std::string_view text);
+
+    /** At most this many mirrors of a server's list are used; the rest are ignored. */
+    inline constexpr std::size_t kMaxDownloadMirrors = 8;
+
+    /**
+     * Whether a download mirror a server announced may be requested. The server chooses the list, so
+     * it must not be able to aim a player's client at the player's own machine or network: a mirror
+     * is accepted when it is plain http(s) with no credentials, query or fragment, and its host is
+     * either the server's own (`serverHost`, what the player connected to) or not a loopback,
+     * private, link-local or unspecified address. Judged on the URL text alone; a name that
+     * resolves to a private address is not caught here.
+     */
+    bool IsAllowedMirrorUrl(std::string_view url, std::string_view serverHost);
 
     // A note beside a verified cache file (<path>.verified) with the size and write time it had when
     // its SHA-256 was last checked: a later check trusts the file as long as both still match.

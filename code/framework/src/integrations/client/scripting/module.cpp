@@ -24,6 +24,7 @@
 
 #include "builtins/chat.h"
 #include "builtins/discord.h"
+#include "builtins/fonts.h"
 #include "builtins/keybinds.h"
 #include "builtins/nametags.h"
 #include "builtins/voice.h"
@@ -167,6 +168,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Discord::Register(isolate, context, global, _resourceManager.get());
         Builtins::Voice::Register(isolate, context, global, _resourceManager.get());
         Builtins::Nametags::Register(isolate, context, global, _resourceManager.get());
+        Builtins::Fonts::Register(isolate, context, global, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
@@ -182,6 +184,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Keybinds::Shutdown();
         Builtins::Discord::Shutdown();
         Builtins::Nametags::Shutdown();
+        Builtins::Fonts::Shutdown();
 
         if (_engine) {
             Framework::Scripting::ClearScriptingCatalog(_engine->GetIsolate());
@@ -204,6 +207,7 @@ namespace Framework::Integrations::Client::Scripting {
         Builtins::Keybinds::Shutdown();
         Builtins::Discord::Shutdown();
         Builtins::Nametags::Shutdown();
+        Builtins::Fonts::Reset();
 
         if (_engine && _engine->IsInitialized()) {
             if (!_engine->ResetContext()) {

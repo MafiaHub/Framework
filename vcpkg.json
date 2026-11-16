@@ -5,6 +5,7 @@
   "description": "Third-party dependencies for the MafiaHub Framework.",
   "builtin-baseline": "d4c0a46cb8f63e5c9fa007d13baf1cb3e43bf7e3",
   "dependencies": [
+    "asio",
     "cxxopts",
     "function2",
     "glm",
@@ -38,11 +39,13 @@
       "platform": "windows"
     },
     {
+      "$comment": "FreeType, not stb_truetype, parses every font: servers send them, and stb_truetype does not bounds-check a file. FreeType comes from cmake/vcpkg-ports, without codecs.",
       "name": "imgui",
       "default-features": false,
       "features": [
         "dx9-binding",
         "dx11-binding",
+        "freetype",
         "win32-binding"
       ],
       "platform": "windows"

@@ -35,6 +35,11 @@ find_package(cppfs CONFIG REQUIRED)
 find_package(miniz CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
 find_package(function2 CONFIG REQUIRED)
+# Header-only, and only utils/task_scheduler.cpp includes it: the Framework targets take its include
+# directory privately, so the SDK neither ships nor asks a project for it.
+find_package(asio CONFIG REQUIRED)
+get_target_property(FW_ASIO_INCLUDE_DIR asio::asio INTERFACE_INCLUDE_DIRECTORIES)
+set(FW_ASIO_INCLUDE_DIR "${FW_ASIO_INCLUDE_DIR}" CACHE INTERNAL "Standalone Asio headers")
 find_package(sentry CONFIG REQUIRED)
 
 # The crashpad backend launches this helper out-of-process, so it has to sit next to the binaries.
@@ -103,6 +108,29 @@ endif()
 
 set(_mafianet_name "MafiaNet-${MAFIANET_PIN_VERSION}-${_mafianet_platform}")
 set(_mafianet_root "${CMAKE_BINARY_DIR}/mafianet/${_mafianet_name}")
+
+# A MafiaNet installed from a checkout (cmake --install, Release, the /MD runtime) instead of the
+# pinned archive, for a change that spans both repositories. Its version still has to satisfy the
+# pin, and whatever it is built from ships in the SDK, so never release with it set.
+# -DFW_MAFIANET_ROOT wins; the environment variable is read afresh on every configure and never
+# cached, so unsetting it goes back to the archive.
+set(FW_MAFIANET_ROOT "" CACHE PATH "MafiaNet install prefix to use instead of the pinned archive")
+set(_mafianet_override "${FW_MAFIANET_ROOT}")
+if(NOT _mafianet_override)
+    file(TO_CMAKE_PATH "$ENV{FW_MAFIANET_ROOT}" _mafianet_override)
+endif()
+if(_mafianet_override)
+    if(NOT EXISTS "${_mafianet_override}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
+        message(FATAL_ERROR "FW_MAFIANET_ROOT=${_mafianet_override} holds no MafiaNet package (lib/cmake/MafiaNet)")
+    endif()
+    message(WARNING "Building against the MafiaNet installed in ${_mafianet_override}, not the pinned ${MAFIANET_PIN_VERSION} archive")
+    set(_mafianet_root "${_mafianet_override}")
+endif()
+# find_package caches where it found the package; switching between the archive and an install
+# has to look again, or the build keeps the one it found first.
+if(NOT MafiaNet_DIR STREQUAL "${_mafianet_root}/lib/cmake/MafiaNet")
+    unset(MafiaNet_DIR CACHE)
+endif()
 
 if(NOT EXISTS "${_mafianet_root}/lib/cmake/MafiaNet/MafiaNetConfig.cmake")
     set(_mafianet_archive "${CMAKE_BINARY_DIR}/mafianet/${_mafianet_name}.${_mafianet_ext}")

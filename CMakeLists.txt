@@ -6,7 +6,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/VcpkgBootstrap.cmake)
 
 project(Framework CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
@@ -36,6 +36,24 @@ option(FW_PROFILING "Enable Tracy profiler instrumentation" ON)
 # OFF by default: every project PE-loads its game, and those imports alone get the
 # launcher flagged as a trojan by Windows Defender.
 option(FW_DLL_INJECTION "Build the launcher's DLL injection launch path" OFF)
+
+# Sanitizer build, for the tests: empty or "thread" (ThreadSanitizer, Linux and macOS). Set before
+# the vendors so those built from source are instrumented too. What comes prebuilt is not: the vcpkg
+# packages, libnode, and MafiaNet unless FW_MAFIANET_ROOT names a prefix built with
+# -DMAFIANET_SANITIZER=thread. Never install or release a tree configured with it.
+set(FW_SANITIZE "" CACHE STRING "Sanitizer to build with: empty or 'thread'")
+set_property(CACHE FW_SANITIZE PROPERTY STRINGS "" "thread")
+if(FW_SANITIZE)
+    if(NOT FW_SANITIZE STREQUAL "thread")
+        message(FATAL_ERROR "FW_SANITIZE=${FW_SANITIZE} is not supported; leave it empty or set 'thread'")
+    endif()
+    if(NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin)$" OR MSVC)
+        message(FATAL_ERROR "FW_SANITIZE=thread is supported on Linux and macOS only")
+    endif()
+    message(STATUS "Framework: building with -fsanitize=thread")
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=thread)
+endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
 

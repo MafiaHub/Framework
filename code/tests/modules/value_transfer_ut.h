@@ -167,7 +167,7 @@ MODULE(value_transfer, {
         // 40 levels of an array holding the same child twice: a few hundred bytes that would copy as 2^40 values.
         const std::string doubled = ValueTransferTest::Send(pair, "(() => { let tree = [1]; for (let i = 0; i < 40; ++i) tree = [tree, tree]; return tree; })()");
         EQUALS(doubled.rfind("Cannot copy value[", 0) == 0, true);
-        EQUALS(doubled.find("it is too large to copy") != std::string::npos, true);
+        EQUALS(doubled.contains("it is too large to copy"), true);
         STREQUALS(ValueTransferTest::Send(pair, "new Array(1e9)").c_str(), "Cannot copy value: it is too large to copy");
     });
 
@@ -193,5 +193,23 @@ MODULE(value_transfer, {
         };
         STREQUALS(ValueTransferTest::Send(pair, "{ callback() {} }", functions).c_str(), "");
         STREQUALS(NodeTest::Eval(*pair.target, "received.callback()").c_str(), "7");
+    });
+
+    IT("keeps every property of a value with more distinct names than are made once", {
+        ValueTransferTest::Pair pair;
+        STREQUALS(ValueTransferTest::Send(pair, "Object.fromEntries(Array.from({ length: 300 }, (_, i) => ['field' + i + 'withALongerName', i]))").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.target, "Object.keys(received).length + ':' + received.field0withALongerName + ':' + received.field299withALongerName").c_str(), "300:0:299");
+    });
+
+    IT("builds arrays nested in arrays and records that repeat their names", {
+        ValueTransferTest::Pair pair;
+        STREQUALS(ValueTransferTest::Send(pair, "[[1, [2, [3, []]]], Array.from({ length: 3 }, (_, i) => ({ id: i, tags: ['a', 'b'] }))]").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.target, "JSON.stringify(received)").c_str(), "[[1,[2,[3,[]]]],[{\"id\":0,\"tags\":[\"a\",\"b\"]},{\"id\":1,\"tags\":[\"a\",\"b\"]},{\"id\":2,\"tags\":[\"a\",\"b\"]}]]");
+    });
+
+    IT("replaces a lone surrogate and keeps every other character", {
+        ValueTransferTest::Pair pair;
+        STREQUALS(ValueTransferTest::Send(pair, "{ text: 'caf\\u00e9 \\ud83d\\ude00 \\ud800!', ['\\u00fcber']: 1 }").c_str(), "");
+        STREQUALS(NodeTest::Eval(*pair.target, "received.text === 'caf\\u00e9 \\ud83d\\ude00 \\ufffd!' && received['\\u00fcber'] === 1").c_str(), "true");
     });
 });

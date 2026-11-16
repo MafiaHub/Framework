@@ -13,6 +13,7 @@
 #include <core_modules.h>
 #include <networking/replication/replication_manager.h>
 
+#include <algorithm>
 #include <filesystem>
 
 namespace Framework::Scripting {
@@ -106,7 +107,7 @@ namespace Framework::Scripting {
 
     bool Resource::HasExport(std::string_view exportName) const {
         const auto &exports = _manifest.GetMafiaHubConfig().exports;
-        return std::find(exports.begin(), exports.end(), exportName) != exports.end();
+        return std::ranges::contains(exports, exportName);
     }
 
     bool Resource::DependsOn(std::string_view resourceName) const {
@@ -218,7 +219,7 @@ namespace Framework::Scripting {
 
     bool Resource::CanAutoRestart() const {
         const auto &config = _manifest.GetMafiaHubConfig();
-        if (config.errorBehavior != "restart") {
+        if (config.errorBehavior != ErrorBehavior::Restart) {
             return false;
         }
 
@@ -232,16 +233,9 @@ namespace Framework::Scripting {
 
         // Prune old attempts (older than 10 minutes)
         auto cutoff = std::chrono::system_clock::now() - std::chrono::minutes(10);
-        _restartAttempts.erase(std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
-                                   [&cutoff](const auto &t) {
-                                       return t < cutoff;
-                                   }),
-            _restartAttempts.end());
-    }
-
-    void Resource::ClearRestartAttempts() {
-        std::scoped_lock lock(_restartAttemptsMutex);
-        _restartAttempts.clear();
+        std::erase_if(_restartAttempts, [&cutoff](const auto &t) {
+            return t < cutoff;
+        });
     }
 
     int Resource::GetRestartBackoffMs() const {
@@ -339,7 +333,7 @@ namespace Framework::Scripting {
     }
 
     void Resource::DestroyOwnedEntities() {
-        // Swap out first: DestroyEntity re-enters UntrackEntity via the destroy hook.
+        // Swap out first: destroying re-enters UntrackEntity via the destroy hook.
         std::unordered_set<uint64_t> owned;
         {
             std::scoped_lock lock(_ownedEntitiesMutex);
@@ -351,9 +345,7 @@ namespace Framework::Scripting {
             return;
         }
         for (uint64_t networkId : owned) {
-            if (auto *entity = replication->GetEntityByNetworkID(networkId)) {
-                replication->DestroyEntity(entity);
-            }
+            replication->GetWorld().Destroy(networkId);
         }
     }
 

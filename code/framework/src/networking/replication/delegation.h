@@ -16,6 +16,8 @@
 #include <function2/function2.hpp>
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -153,6 +155,7 @@ namespace Framework::Networking::Replication {
         // job: often enough that walking into range feels immediate, rarely enough that the walk
         // over every delegated entity is not a per-tick cost.
         void SetUpdateInterval(uint32_t intervalMs) {
+            const std::lock_guard guard(_mutex);
             _intervalMs = intervalMs;
         }
 
@@ -160,6 +163,7 @@ namespace Framework::Networking::Replication {
         // true on XY (Z-up). ReplicationManager::SetInterestGroundPlaneXY forwards to this, so a
         // game that configures interest has configured delegation too.
         void SetGroundPlaneXY(bool groundXY) {
+            const std::lock_guard guard(_mutex);
             _groundXY = groundXY;
         }
 
@@ -167,6 +171,7 @@ namespace Framework::Networking::Replication {
         // its budget keeps what it has and takes nothing new, so the overflow goes to the next
         // nearest client rather than being dropped.
         void SetClientCapacity(uint32_t maxWeight) {
+            const std::lock_guard guard(_mutex);
             _defaultCapacity = maxWeight;
         }
 
@@ -184,23 +189,27 @@ namespace Framework::Networking::Replication {
         // Force this entity onto one client and keep it there, whatever the ranges say. What MTA's
         // persistent syncer is for: a scripted scene whose actor must be run by the player it is
         // being played to. Passing UNASSIGNED pins it to the server, i.e. keeps it dormant.
-        void Pin(NetworkEntity *entity, MafiaNet::PeerGuid guid);
-        void Unpin(NetworkEntity *entity);
-        bool IsPinned(const NetworkEntity *entity) const;
-        MafiaNet::PeerGuid PinnedTo(const NetworkEntity *entity) const;
+        // Entities are named by network id. Pin runs a pass, so not from inside a handle's scope.
+        void Pin(uint64_t networkId, MafiaNet::PeerGuid guid);
+        void Unpin(uint64_t networkId);
+        bool IsPinned(uint64_t networkId) const;
+        MafiaNet::PeerGuid PinnedTo(uint64_t networkId) const;
 
         // A client that cannot run this one entity now (its world lacks the floor under it, say: only
         // it can see that) is passed over for it alone until it withdraws that, streams the entity out, leaves, or the entity
         // goes. A pin overrides it without clearing it. A change asks for a pass (kDeclinedPassGapMs).
-        void SetDeclined(NetworkEntity *entity, MafiaNet::PeerGuid guid, bool declined);
-        bool IsDeclined(const NetworkEntity *entity, MafiaNet::PeerGuid guid) const;
+        // Looks the entity up itself, so not from inside a handle's scope.
+        void SetDeclined(uint64_t networkId, MafiaNet::PeerGuid guid, bool declined);
+        bool IsDeclined(uint64_t networkId, MafiaNet::PeerGuid guid) const;
 
         // One election pass, at most every interval. Driven from NetworkPeer::Update after the
         // interest rebuild, so it reads the positions this tick settled.
         void Update();
 
         // An immediate pass, ignoring the interval. Used when the world changed under the schedule:
-        // a client dropped, or the game wants an entity placed now.
+        // a client dropped, or the game wants an entity placed now. Takes each entity in turn, so
+        // not from inside a handle's scope. From inside a pass or a simulator-changed handler it
+        // runs nothing and asks for the next pass instead.
         void UpdateNow();
 
         // A client went away: everything it was simulating is re-elected on the spot rather than
@@ -212,9 +221,17 @@ namespace Framework::Networking::Replication {
         // games do not need to.
         void OnEntityDestroyed(uint64_t networkId);
 
-        // Raised after the ownership change has been applied and the forced state pushed, so a
-        // handler sees the entity in its new arrangement. `previous` is UNASSIGNED when the entity
-        // was dormant, and `current` is UNASSIGNED when it just became so.
+        // Raised after the ownership change has been applied and the forced state pushed.
+        // `previous` is UNASSIGNED when the entity was dormant, and `current` is UNASSIGNED when it
+        // just became so.
+        //
+        // When: once the pass that made the change (or the walk a disconnect makes) is over, on the
+        // thread that ran it, in the order the changes were made. The handler holds nothing: no
+        // entity, not ReplicaManager3's world, no lock of this class.
+        // What it may call: anything, the world included. It is given the entity's network id and
+        // asks the world for the entity; the entity may have changed again or be gone by then, so
+        // the id may not resolve. A pass it asks for (UpdateNow, Pin) is not run inside it: it is
+        // the next pass, at the next Update.
         //
         // Handles rather than one slot, for the same reason state-bag subscriptions are handles: a
         // game has more than one kind of delegated entity, and the second feature to want this must
@@ -222,7 +239,8 @@ namespace Framework::Networking::Replication {
         using SimulatorChangedHandle                                    = uint32_t;
         static constexpr SimulatorChangedHandle kInvalidSimulatorHandle = 0;
 
-        SimulatorChangedHandle AddSimulatorChangedHandler(fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const> callback);
+        using SimulatorChanged = fu2::function<void(uint64_t networkId, MafiaNet::PeerGuid previous, MafiaNet::PeerGuid current, DelegationChange change) const>;
+        SimulatorChangedHandle AddSimulatorChangedHandler(SimulatorChanged callback);
         void RemoveSimulatorChangedHandler(SimulatorChangedHandle handle);
 
         // What one client is currently carrying, in policy weight.
@@ -243,7 +261,8 @@ namespace Framework::Networking::Replication {
             // Handovers forced past a refusal because the grace ran out.
             uint64_t forced = 0;
         };
-        const Stats &GetStats() const {
+        Stats GetStats() const {
+            const std::lock_guard guard(_mutex);
             return _stats;
         }
 
@@ -263,13 +282,20 @@ namespace Framework::Networking::Replication {
         void CollectCandidates();
         DelegationCandidate *FindCandidate(MafiaNet::PeerGuid guid);
 
-        // Apply an elected result to one entity: ownership, forced state, bookkeeping, callback.
-        void Assign(NetworkEntity *entity, MafiaNet::PeerGuid next, DelegationChange change);
+        // Apply an elected result to one entity, which the caller holds: ownership, forced state,
+        // bookkeeping, callback.
+        void Assign(NetworkEntity &entity, MafiaNet::PeerGuid next, DelegationChange change);
+        // The pass itself, under ReplicaManager3's world.
+        void RunPass();
+        // Handovers a pass or walk on this thread made, kept until it is over, and their delivery.
+        struct Notice;
+        static std::vector<Notice> &Notices();
+        static void DeliverNotices();
+        uint32_t CapacityOf(MafiaNet::PeerGuid guid) const;
 
-        // The entry for an entity, created on demand. Entries are keyed by NetworkID rather than by
-        // pointer: an entity can be destroyed and its address reused between passes.
-        Entry &EntryFor(const NetworkEntity *entity);
-        const Entry *FindEntry(const NetworkEntity *entity) const;
+        // Guards everything below but the scratch of a pass. Taken last: never held while an entity
+        // is asked for or a callback runs.
+        mutable std::mutex _mutex;
 
         ReplicationManager *_manager = nullptr;
         bool _isServer               = false;
@@ -283,11 +309,12 @@ namespace Framework::Networking::Replication {
         std::unordered_map<MafiaNet::PeerGuid, uint32_t> _capacityOverrides;
         std::unordered_set<MafiaNet::PeerGuid> _suspended;
         std::unordered_map<uint64_t, Entry> _entries;
-        // Rebuilt per pass; the entities a pass has to look at.
-        std::vector<NetworkEntity *> _scan;
+        // Rebuilt per pass; the entities a pass has to look at. Like the candidates and the
+        // dispatch scratch, a pass's own: one runs at a time, under ReplicaManager3's world.
+        std::vector<uint64_t> _scan;
         // Keyed by handle, so a handler that unsubscribes during dispatch cannot invalidate what the
         // dispatch is walking.
-        std::unordered_map<SimulatorChangedHandle, fu2::function<void(NetworkEntity *, MafiaNet::PeerGuid, MafiaNet::PeerGuid, DelegationChange) const>> _simulatorChanged;
+        std::unordered_map<SimulatorChangedHandle, std::shared_ptr<const SimulatorChanged>> _simulatorChanged;
         SimulatorChangedHandle _nextSimulatorHandle = kInvalidSimulatorHandle;
         // Scratch for one dispatch, reused so a handover allocates nothing.
         std::vector<SimulatorChangedHandle> _dispatch;
