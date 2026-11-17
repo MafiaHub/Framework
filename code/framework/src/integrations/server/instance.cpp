@@ -217,6 +217,13 @@ namespace Framework::Integrations::Server {
         if (_opts.maxDownloading < 0) {
             return Error("max-downloading must be 0 or more (got " + std::to_string(_opts.maxDownloading) + ")");
         }
+        // 0 would turn MafiaNet's pool off and put waiting connections back on player slots.
+        if (_opts.pendingConnections < 1 || _opts.pendingConnections > 65535) {
+            return Error("pending-connections must be in the range 1-65535 (got " + std::to_string(_opts.pendingConnections) + ")");
+        }
+        if (_opts.pendingConnectionsPerAddress < 0 || _opts.pendingConnectionsPerAddress > 65535) {
+            return Error("pending-connections-per-address must be in the range 0-65535 (got " + std::to_string(_opts.pendingConnectionsPerAddress) + ")");
+        }
         if (_opts.bindPassword.size() > 255) {
             return Error("password must be at most 255 bytes (got " + std::to_string(_opts.bindPassword.size()) + ")");
         }
@@ -247,8 +254,8 @@ namespace Framework::Integrations::Server {
         // Initialize our networking engine
         // MafiaNet drops a request nobody answers; the gate always answers first, with a reason.
         Framework::Networking::AdmissionSettings admission;
-        admission.pendingConnections           = _opts.pendingConnections;
-        admission.pendingConnectionsPerAddress = _opts.pendingConnectionsPerAddress;
+        admission.pendingConnections           = static_cast<uint16_t>(_opts.pendingConnections);
+        admission.pendingConnectionsPerAddress = static_cast<uint16_t>(_opts.pendingConnectionsPerAddress);
         admission.sessionTimeoutMs             = static_cast<uint32_t>(std::max(_opts.admissionTimeoutMs, 1)) + kAdmissionTimeoutMarginMs;
         // Downloading connections live beside the player slots: the transport takes them all, the join
         // (ClientJoin) is where maxPlayers is enforced.
@@ -548,6 +555,8 @@ namespace Framework::Integrations::Server {
                 {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(opts.modConfigFile)}, {"t,server-token", "Masterlist push token; the server is announced only when this is set", cxxopts::value<std::string>()},
                 {"password", "Password players must give to join; empty lets anyone in", cxxopts::value<std::string>()}, {"download-url", "http(s) base URLs clients fetch resource files from before the game port, separated by spaces or commas", cxxopts::value<std::string>()},
                 {"max-downloading", "Connections admitted beyond maxplayers while they download; 0 keeps downloads on player slots", cxxopts::value<int32_t>()},
+                {"pending-connections", "Connections that may wait on playerConnecting at once, beside the player slots", cxxopts::value<int32_t>()},
+                {"pending-connections-per-address", "Of the waiting connections, how many one IP address may hold; 0 for no bound", cxxopts::value<int32_t>()},
                 {"package-secret", "Secret the resource package key is derived from; defaults to the server token", cxxopts::value<std::string>()},
                 {"replication-threads", "Threads sharing the replication pass with the tick thread; -1 sizes them to the host, 0 uses none", cxxopts::value<int32_t>()},
                 {"background-threads", "Threads for blocking work taken off the tick thread; -1 sizes them to the host, 0 runs it inline", cxxopts::value<int32_t>()}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
@@ -568,6 +577,8 @@ namespace Framework::Integrations::Server {
         read("password", opts.bindPassword);
         read("download-url", opts.assetDownloadUrl);
         read("max-downloading", opts.maxDownloading);
+        read("pending-connections", opts.pendingConnections);
+        read("pending-connections-per-address", opts.pendingConnectionsPerAddress);
         read("package-secret", opts.packageSecret);
         read("slow-script-ms", opts.slowScriptWarnMs);
         read("slow-packet-handler-ms", opts.slowPacketHandlerWarnMs);
@@ -590,6 +601,8 @@ namespace Framework::Integrations::Server {
         read("password", opts.bindPassword);
         read("download-url", opts.assetDownloadUrl);
         read("max-downloading", opts.maxDownloading);
+        read("pending-connections", opts.pendingConnections);
+        read("pending-connections-per-address", opts.pendingConnectionsPerAddress);
         read("package-secret", opts.packageSecret);
         read("replication-threads", opts.replicationThreads);
         read("background-threads", opts.backgroundThreads);
@@ -681,6 +694,8 @@ namespace Framework::Integrations::Server {
         frameworkKeys["password"]        = _opts.bindPassword;
         frameworkKeys["download-url"]    = _opts.assetDownloadUrl;
         frameworkKeys["max-downloading"] = _opts.maxDownloading;
+        frameworkKeys["pending-connections"]             = _opts.pendingConnections;
+        frameworkKeys["pending-connections-per-address"] = _opts.pendingConnectionsPerAddress;
         frameworkKeys["package-secret"]  = _opts.packageSecret;
         frameworkKeys["slow-script-ms"]  = _opts.slowScriptWarnMs;
         frameworkKeys["slow-packet-handler-ms"] = _opts.slowPacketHandlerWarnMs;

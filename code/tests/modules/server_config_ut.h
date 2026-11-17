@@ -206,6 +206,26 @@ MODULE(server_config, {
         EQUALS(resolve({{"slow-packet-handler-ms", 25}}, {}).slowPacketHandlerWarnMs, 25);
     });
 
+    IT("reads the pending-connection pool from the document and the command line", {
+        const auto defaults = resolve(nlohmann::json::object(), {});
+        EQUALS(defaults.pendingConnections, 32);
+        EQUALS(defaults.pendingConnectionsPerAddress, 4);
+
+        const auto fromFile = resolve({{"pending-connections", 64}, {"pending-connections-per-address", 0}}, {});
+        EQUALS(fromFile.pendingConnections, 64);
+        EQUALS(fromFile.pendingConnectionsPerAddress, 0);
+
+        const auto fromLine = resolve({{"pending-connections", 64}}, {"--pending-connections", "128", "--pending-connections-per-address", "8"});
+        EQUALS(fromLine.pendingConnections, 128);
+        EQUALS(fromLine.pendingConnectionsPerAddress, 8);
+    });
+
+    // Init refuses these; read into MafiaNet's 16 bits, 70000 would have become 4464.
+    IT("keeps an out-of-range pool size as written", {
+        EQUALS(resolve({{"pending-connections", 70000}}, {}).pendingConnections, 70000);
+        EQUALS(resolve({{"pending-connections-per-address", -1}}, {}).pendingConnectionsPerAddress, -1);
+    });
+
     IT("leaves the thread counts to the machine unless the operator pins them", {
         const auto defaults = resolve(nlohmann::json::object(), {});
         EQUALS(defaults.replicationThreads, -1);
