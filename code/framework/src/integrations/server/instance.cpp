@@ -25,6 +25,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 
 #include "core_modules.h"
 
@@ -77,6 +78,9 @@ namespace Framework::Integrations::Server {
         // How much longer MafiaNet keeps a waiting connection request than the gate takes to time it
         // out, so the player always gets the gate's reason rather than a silent drop.
         constexpr uint32_t kAdmissionTimeoutMarginMs = 15000;
+
+        // MafiaNet keeps the pending pool's sizes in 16 bits.
+        constexpr uint16_t kMaxPendingConnections = 65535;
 
         // How long one write of an asset file may block on its receiver before the transfer is cut.
         constexpr std::chrono::seconds kAssetWriteTimeout {120};
@@ -218,10 +222,10 @@ namespace Framework::Integrations::Server {
             return Error("max-downloading must be 0 or more (got " + std::to_string(_opts.maxDownloading) + ")");
         }
         // 0 would turn MafiaNet's pool off and put waiting connections back on player slots.
-        if (_opts.pendingConnections < 1 || _opts.pendingConnections > 65535) {
+        if (_opts.pendingConnections < 1 || _opts.pendingConnections > kMaxPendingConnections) {
             return Error("pending-connections must be in the range 1-65535 (got " + std::to_string(_opts.pendingConnections) + ")");
         }
-        if (_opts.pendingConnectionsPerAddress < 0 || _opts.pendingConnectionsPerAddress > 65535) {
+        if (_opts.pendingConnectionsPerAddress < 0 || _opts.pendingConnectionsPerAddress > kMaxPendingConnections) {
             return Error("pending-connections-per-address must be in the range 0-65535 (got " + std::to_string(_opts.pendingConnectionsPerAddress) + ")");
         }
         if (_opts.bindPassword.size() > 255) {
@@ -568,6 +572,19 @@ namespace Framework::Integrations::Server {
                 field = document.at(key).get<std::decay_t<decltype(field)>>();
             }
         };
+        // Checked as written: get<int32_t> would wrap 4294967297 to 1, which Init then accepts.
+        const auto readPoolSize = [&document](const char *key, int32_t &field, int32_t min) {
+            if (!document.contains(key)) {
+                return;
+            }
+            const nlohmann::json &value = document.at(key);
+            const bool fits             = value.is_number_unsigned() ? value.get<uint64_t>() <= kMaxPendingConnections : value.is_number_integer();
+            const int64_t count         = fits ? value.get<int64_t>() : -1;
+            if (count < min || count > kMaxPendingConnections) {
+                throw std::out_of_range(std::string(key) + " must be in the range " + std::to_string(min) + "-65535 (got " + value.dump() + ")");
+            }
+            field = static_cast<int32_t>(count);
+        };
 
         read("host", opts.bindHost);
         read("port", opts.bindPort);
@@ -577,8 +594,8 @@ namespace Framework::Integrations::Server {
         read("password", opts.bindPassword);
         read("download-url", opts.assetDownloadUrl);
         read("max-downloading", opts.maxDownloading);
-        read("pending-connections", opts.pendingConnections);
-        read("pending-connections-per-address", opts.pendingConnectionsPerAddress);
+        readPoolSize("pending-connections", opts.pendingConnections, 1);
+        readPoolSize("pending-connections-per-address", opts.pendingConnectionsPerAddress, 0);
         read("package-secret", opts.packageSecret);
         read("slow-script-ms", opts.slowScriptWarnMs);
         read("slow-packet-handler-ms", opts.slowPacketHandlerWarnMs);

@@ -13,6 +13,7 @@
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -220,10 +221,24 @@ MODULE(server_config, {
         EQUALS(fromLine.pendingConnectionsPerAddress, 8);
     });
 
-    // Init refuses these; read into MafiaNet's 16 bits, 70000 would have become 4464.
-    IT("keeps an out-of-range pool size as written", {
-        EQUALS(resolve({{"pending-connections", 70000}}, {}).pendingConnections, 70000);
-        EQUALS(resolve({{"pending-connections-per-address", -1}}, {}).pendingConnectionsPerAddress, -1);
+    // Narrowed first, 4294967297 would have become 1 and passed Init's check.
+    IT("refuses a pool size in the document that MafiaNet cannot hold", {
+        const auto refuses = [&](const nlohmann::json &document) {
+            try {
+                resolve(document, {});
+            }
+            catch (const std::out_of_range &) {
+                return true;
+            }
+            return false;
+        };
+        EQUALS(refuses(nlohmann::json::parse(R"({"pending-connections": 4294967297})")), true);
+        EQUALS(refuses(nlohmann::json::parse(R"({"pending-connections-per-address": 18446744073709551615})")), true);
+        EQUALS(refuses({{"pending-connections", 70000}}), true);
+        EQUALS(refuses({{"pending-connections", 0}}), true);
+        EQUALS(refuses({{"pending-connections", 2.5}}), true);
+        EQUALS(refuses({{"pending-connections-per-address", -1}}), true);
+        EQUALS(refuses({{"pending-connections", 65535}, {"pending-connections-per-address", 0}}), false);
     });
 
     IT("leaves the thread counts to the machine unless the operator pins them", {
