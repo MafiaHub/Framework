@@ -172,8 +172,9 @@ namespace Framework::Integrations::Server {
         // Connections waiting on playerConnecting are held by MafiaNet in a pool of their own, beside
         // the maxPlayers slots: they take no player slot and are not counted as online. The pool bounds
         // how many may wait at once, and how many of those one IP address may hold (0: unbounded).
-        uint16_t pendingConnections           = 32;
-        uint16_t pendingConnectionsPerAddress = 4;
+        // Wider than MafiaNet's 16 bits so Init can refuse a value past them instead of wrapping it.
+        int32_t pendingConnections           = 32;
+        int32_t pendingConnectionsPerAddress = 4;
 
         // MafiaHub Services
         struct Services {

@@ -136,6 +136,10 @@ namespace Framework::Networking {
         if (maxPlayers <= 0 || maxPlayers > 65535) {
             return Error("Invalid maxPlayers: " + std::to_string(maxPlayers));
         }
+        // The peer is started with both, and MafiaNet numbers its peers in 16 bits.
+        if (admission.pendingConnections == 0 || maxPlayers + admission.pendingConnections > 65535) {
+            return Error("Invalid pendingConnections: " + std::to_string(admission.pendingConnections) + " beside " + std::to_string(maxPlayers) + " connection slots");
+        }
         // Every connection request waits for the admission gate. Waiting ones are MafiaNet pending
         // sessions: a pool beside the players' slots, so the peer is started with room for both.
         _peer->SetSessionConfigInteractive(true);
