@@ -44,6 +44,7 @@ namespace Framework::Networking::Replication::Entities {
     inline constexpr float kTextLabelMaxOutlineWidth = 4.0f;
     inline constexpr float kTextLabelMaxShadowBlur   = 8.0f;
     inline constexpr size_t kTextLabelMaxFontBytes   = 64; // a font family's name
+    inline constexpr size_t kTextLabelMaxBoneBytes   = 64; // a bone or socket name
 
     // A server-owned piece of world-space text, interest-streamed and drawn client-side as a screen
     // overlay. Mods register the type on both peers.
@@ -63,6 +64,9 @@ namespace Framework::Networking::Replication::Entities {
         // Follow another entity at an offset; 0 keeps the label at its own position.
         uint64_t attachNetworkId = 0;
         glm::vec3 attachOffset   = glm::vec3(0.0f);
+        // A bone or socket on the target to follow instead of the game's reference point; the client
+        // resolves it each frame and adds attachOffset in world space. Empty follows the entity.
+        std::string attachBone;
 
         // Server only: the label's own position and virtual world while it is attached. The server
         // moves it with the target, so it streams from there, but peers draw at the target and are
@@ -165,6 +169,7 @@ namespace Framework::Networking::Replication::Entities {
             fields.Field(minDrawDistance);
             fields.Field(minFadeDistance);
             fields.Field(font);
+            fields.Field(attachBone);
 
             if (!fields.Writing()) {
                 style    = static_cast<TextLabelStyle>(styleRaw);
