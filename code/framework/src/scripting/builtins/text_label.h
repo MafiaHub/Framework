@@ -40,6 +40,7 @@ namespace Framework::Scripting::Builtins {
         static constexpr float kDefaultMetres = 30.0f;
         static constexpr float kMaxDrawMetres = 1000.0f;
         static constexpr size_t kMaxFontBytes = Networking::Replication::Entities::kTextLabelMaxFontBytes;
+        static constexpr size_t kMaxBoneBytes = Networking::Replication::Entities::kTextLabelMaxBoneBytes;
 
         TextLabel(uint64_t networkId): Entity(networkId) {}
 
@@ -97,13 +98,15 @@ namespace Framework::Scripting::Builtins {
         std::string GetFont() const;
         void SetFont(const std::string &family);
 
+        std::string GetAttachBone() const;
+
         uint32_t GetStyle() const;
         void SetStyle(uint32_t style);
 
         // Follows another live entity; false (and nothing changed) for a missing one or the label
         // itself. The label then streams from where the target is and moves into its virtual world,
-        // and is destroyed with it.
-        bool AttachTo(uint64_t networkId, const glm::vec3 &offset);
+        // and is destroyed with it. A bone (or socket) makes clients follow that bone of the target.
+        bool AttachTo(uint64_t networkId, const glm::vec3 &offset, const std::string &bone = {});
         // Back to the label's own position and virtual world.
         void Detach();
         bool CanAttachTo(uint64_t networkId) const;
