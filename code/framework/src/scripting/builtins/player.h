@@ -43,7 +43,12 @@ namespace Framework::Scripting::Builtins {
         // Server-only; payloadJson is JSON.parsed on the client (pass JSON text, empty = no data).
         void Emit(const std::string &eventName, const std::string &payloadJson);
 
+        // The account the player proved when they connected (networking/account_key.h): the one
+        // identifier a script may key ownership or permissions on. Server-only; empty when gone.
+        std::string GetAccountId() const;
+
         // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
+        // Scripts read these as player.unverified.*, never as proof of who the player is.
         std::string GetSteamId() const;
         std::string GetEpicId() const;
         std::string GetDiscordId() const;
@@ -74,6 +79,18 @@ namespace Framework::Scripting::Builtins {
         std::string ToString() const override;
 
         static v8pp::class_<Player> &GetClass(v8::Isolate *isolate);
+
+        // Scripts' view of the claims in an identity: a frozen UnverifiedIdentity. A null identity
+        // gives every field empty.
+        static v8::Local<v8::Object> NewUnverifiedIdentity(v8::Isolate *isolate, v8::Local<v8::Context> context, const Networking::RPC::ClientIdentity *identity);
+
+        // The UnverifiedIdentity catalog type, recorded once per isolate by whoever registers first.
+        static void DocumentUnverifiedIdentity(v8::Isolate *isolate);
+
+        // The identifiers that moved into UnverifiedIdentity. A getter for each throws, naming what
+        // replaced it, so a script that trusted one fails where it reads it.
+        static constexpr const char *kMovedIdentityFields[] = {"steamId", "epicId", "discordId", "discordName", "hardwareId"};
+        static v8::Local<v8::FunctionTemplate> MovedIdentityGetter(v8::Isolate *isolate, const char *field);
 
         // Publish the Player constructor on a target object, like Entity::Register /
         // TextLabel::Register. Games opt in; the framework itself exposes Player lazily

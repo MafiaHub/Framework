@@ -23,7 +23,8 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
     //
     // Its methods reach the ConnectionGate through CoreModules and address the connection by its
     // guid, so an object kept past its decision (or its player leaving) simply stops doing
-    // anything, as a stale handle does everywhere else.
+    // anything, as a stale handle does everywhere else. It crosses to other resources as a host
+    // type, rebuilt whole there, so its frozen claims and the getters guarding the old names survive.
     class PendingConnection final {
       public:
         // Declares the type and the playerConnecting event in the catalog; installs no global.
