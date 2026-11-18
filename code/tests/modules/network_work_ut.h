@@ -592,6 +592,27 @@ MODULE(network_work, {
         EQUALS(probe->stateSends[viewer], 1);
     });
 
+    IT("constructs and updates an entity streamed to one viewer whatever world either is in", {
+        NetworkWorkTest::Server server;
+        MafiaNet::Connection_RM3 *target    = server.Connect(231, 0, 1000);
+        MafiaNet::Connection_RM3 *bystander = server.Connect(232, 0, 1000);
+        auto *probe                         = server.Probe(0);
+        // The moment between moving the entity and moving its target: the grid already offers it.
+        probe->SetVirtualWorld(5);
+        server.manager->SetStreamTarget(*probe, MafiaNet::ToPeerGuid(target->GetRakNetGUID()));
+        EQUALS(probe->QueryConstruction(target, TestWorld::Rm3(server.manager)), MafiaNet::RM3CS_SEND_CONSTRUCTION);
+        server.manager->RebuildInterest();
+        server.Pass(3);
+        EQUALS(target->HasReplicaConstructed(probe), true);
+        EQUALS(bystander->HasReplicaConstructed(probe), false);
+
+        probe->Forget();
+        probe->value = 7;
+        server.Pass();
+        EQUALS(probe->stateSends[target], 1);
+        EQUALS(probe->QueryDestruction(target, TestWorld::Rm3(server.manager)) == MafiaNet::RM3DS_SEND_DESTRUCTION, false);
+    });
+
     IT("follows an entity out of a viewer's interest and back, and past a closed connection", {
         NetworkWorkTest::Server server;
         MafiaNet::Connection_RM3 *nearViewer = server.Connect(221, 0, 200);

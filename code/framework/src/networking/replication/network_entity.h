@@ -537,10 +537,14 @@ namespace Framework::Networking::Replication {
             MafiaNet::PeerGuid owner       = MafiaNet::UNASSIGNED_PEER_GUID;
             MafiaNet::VirtualWorldId world = MafiaNet::VIRTUAL_WORLD_DEFAULT;
             glm::vec3 position             = glm::vec3(0.0f);
+            MafiaNet::PeerGuid target      = MafiaNet::UNASSIGNED_PEER_GUID;
             bool unthrottled               = false; // always visible, or streamed to one connection
         };
         PassView _pass;
         friend class ReplicationConnection;
+
+        // Server: whether a connection may hold this entity, by world or as its stream target.
+        static bool SeenFrom(MafiaNet::VirtualWorldId world, MafiaNet::PeerGuid target, MafiaNet::Connection_RM3 *destinationConnection);
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).
