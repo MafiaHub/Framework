@@ -43,6 +43,20 @@ namespace Framework::Utils::Crypto {
     // Empty on failure.
     std::string Sha256FileHex(const std::string &path);
 
+    // Ed25519 (RFC 8032). The private key is the 32-byte seed; the public key is derived from it.
+    inline constexpr size_t kSigningSeedSize = 32;
+    inline constexpr size_t kPublicKeySize   = 32;
+    inline constexpr size_t kSignatureSize   = 64;
+
+    using SigningSeed = std::array<uint8_t, kSigningSeedSize>;
+    using PublicKey   = std::array<uint8_t, kPublicKeySize>;
+    using Signature   = std::array<uint8_t, kSignatureSize>;
+
+    bool DerivePublicKey(const SigningSeed &seed, PublicKey &outPublicKey);
+    bool Sign(const SigningSeed &seed, const void *message, size_t len, Signature &outSignature);
+    // False for a malformed key as well as a signature that does not match.
+    bool Verify(const PublicKey &publicKey, const void *message, size_t len, const Signature &signature);
+
     bool ConstantTimeEquals(const std::string &a, const std::string &b);
 
     std::string ToHex(const void *data, size_t len);
