@@ -40,6 +40,7 @@
 #include <cppfs/fs.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <iterator>
 #include <limits>
@@ -382,6 +383,26 @@ namespace Framework::Integrations::Client {
             return _opts.cacheRoot;
         }
         return fmt::format("{}\\MafiaHubIntegration", Framework::Utils::GetAppDataPathA());
+    }
+
+    std::filesystem::path Instance::GetAccountKeyPath() const {
+        if (!_opts.accountKeyPath.empty()) {
+            return _opts.accountKeyPath;
+        }
+        return std::filesystem::path(GetCacheRoot()) / "account.key";
+    }
+
+    std::string Instance::GetAccountId() {
+        if (!_accountKey) {
+            std::string error;
+            _accountKey = Framework::Networking::AccountKey::LoadOrCreate(GetAccountKeyPath(), error);
+            if (!_accountKey) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Account key unavailable: {}", error);
+                return {};
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Account {} (key at {})", _accountKey->AccountId(), Framework::Networking::AccountKeyPathText(GetAccountKeyPath()));
+        }
+        return _accountKey->AccountId();
     }
 
     void Instance::InitCacheAssetFolders() {
@@ -949,6 +970,18 @@ namespace Framework::Integrations::Client {
         identity.discordName = _presence ? _presence->GetUsername() : "";
         identity.hardwareId  = Framework::Utils::GetHardwareId();
         identity.ticket      = _currentState.ticket;
+
+        // Signed last, over every field above: what the server lets in is the account that signed.
+        // No key, no connection -- the server would refuse an unsigned request anyway.
+        if (GetAccountId().empty()) {
+            SetConnectionPhase(ConnectionPhase::Disconnected);
+            return Error(fmt::format("Your account key at {} could not be read. Restore it from a backup, or move it away to start a new account.", Framework::Networking::AccountKeyPathText(GetAccountKeyPath())));
+        }
+        const auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        if (!_accountKey->Sign(identity, static_cast<uint64_t>(now))) {
+            SetConnectionPhase(ConnectionPhase::Disconnected);
+            return Error("Could not sign the connection request with your account key.");
+        }
 
         _admitted = false;
         _admissionStatus.clear();

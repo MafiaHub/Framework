@@ -32,6 +32,7 @@ set(FRAMEWORK_SRC
     src/external/sentry/wrapper.cpp
     src/external/sentry/crash_trail.cpp
 
+    src/networking/account_key.cpp
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 

@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <networking/account_key.h>
 #include <networking/replication/replication_manager.h>
 #include <networking/rpc/rpc_identifier.h>
 
@@ -32,7 +33,9 @@
 #include "voice/client/voice_client.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -60,6 +63,11 @@ namespace Framework::Integrations::Client {
         // `servers/`). Empty keeps the legacy %APPDATA%\MafiaHubIntegration; a mod that must not write
         // outside its own folder points this inside it.
         std::string cacheRoot;
+
+        // The player's account key (networking/account_key.h), created on the first connection.
+        // It IS the account on every server: losing it loses them, so keep it out of anything a
+        // player clears to fix a download. Empty puts it at <cacheRoot>/account.key.
+        std::filesystem::path accountKeyPath;
 
         // A first download whose missing asset paks exceed this waits for GrantAssetConsent().
         uint64_t assetConsentThreshold = ~0ull;
@@ -265,6 +273,9 @@ namespace Framework::Integrations::Client {
         // Last line the server's gate sent while this connection waited; cleared on admission.
         std::string _admissionStatus;
 
+        // Loaded on first use; see InstanceOptions::accountKeyPath.
+        std::optional<Framework::Networking::AccountKey> _accountKey;
+
         // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
         int _readyEventId {};
         float _serverTickRate {};
@@ -397,6 +408,13 @@ namespace Framework::Integrations::Client {
         [[nodiscard]] Utils::Result<void, Error> RenderInit();
 
         [[nodiscard]] Utils::Result<void, Error> ConnectToServer(const std::string &host, int32_t port, const std::string &password = "");
+
+        // The account this client proves to every server it joins, as scripts there read it in
+        // player.accountId. Loads or creates the key on first call; empty when it cannot (logged).
+        std::string GetAccountId();
+
+        // Where the account key lives: InstanceOptions::accountKeyPath or its default.
+        std::filesystem::path GetAccountKeyPath() const;
 
         void DownloadsAssetsFromConnectedServer();
         void SignalConnectionSpawnReady();

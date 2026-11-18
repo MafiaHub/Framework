@@ -851,6 +851,7 @@ namespace Framework::Integrations::Server {
             data.guid        = peerGuid;
             data.playerIndex = guid.systemIndex;
             data.nickname    = identity.name;
+            data.accountId   = Framework::Networking::AccountIdOf(identity.publicKey);
             data.hardwareID  = identity.hardwareId;
             data.steamId     = identity.steamId;
             data.epicId      = identity.epicId;
@@ -969,6 +970,16 @@ namespace Framework::Integrations::Server {
             return;
         }
 
+        // The account first, on the request exactly as it arrived: sanitizing below rewrites fields
+        // the signature covers. Nothing about a request that fails is worth a script's time.
+        const auto now          = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+        const auto accountProof = _accountProofs.Verify(*request, now);
+        if (accountProof != Framework::Networking::AccountProofResult::Valid) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing a connection request from guid {}: account proof failed ({})", guid.g, static_cast<int>(accountProof));
+            net->RejectSession(guid, Framework::Networking::AccountProofVerifier::RefusalFor(accountProof, *request, now).c_str());
+            return;
+        }
+
         // Sanitize before retention: nickname length-capped, ids digit strings or dropped, a ticket too
         // long to be one dropped rather than cut.
         auto identity = *request;
@@ -996,7 +1007,7 @@ namespace Framework::Integrations::Server {
         }
         net->SetPeerIdentity(guid, identity);
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {} is connecting", identity.name, guid.g, identity.hardwareId);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} account {} is connecting", identity.name, guid.g, Framework::Networking::AccountIdOf(identity.publicKey));
         // playerConnecting is raised where scripts run; the request waits in MafiaNet's pool meanwhile.
         PostToScripts([this, guid, identity, address = net->GetAddress(guid)] {
             if (!_connectionGate.Begin(guid, identity, address)) {

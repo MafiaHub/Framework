@@ -38,6 +38,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/cef_runtime_files_ut.h"
 #include "modules/client_package_ut.h"
 #include "modules/connection_admission_ut.h"
+#include "modules/account_key_ut.h"
 #include "modules/connection_gate_ut.h"
 #include "modules/delegation_ut.h"
 #include "modules/entity_registry_ut.h"
@@ -200,6 +201,7 @@ int main() {
     UNIT_MODULE(run_until);
     UNIT_MODULE(js_features);
     UNIT_MODULE(timer_context);
+    UNIT_MODULE(account_key);
     UNIT_MODULE(connection_gate);
     UNIT_MODULE(cef_runtime_files);
     UNIT_MODULE(connection_admission);

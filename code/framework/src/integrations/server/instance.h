@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <networking/account_key.h>
 #include <networking/packet_thread.h>
 #include <networking/replication/replication_manager.h>
 #include <networking/rpc/rpc_identifier.h>
@@ -214,11 +215,13 @@ namespace Framework::Integrations::Server {
 
     // Connection metadata handed to the player-connect callback so the game can create and fully
     // populate the player's avatar (nickname, slot index, identity ids) instead of leaving spawn-time
-    // fields at their defaults. Ids are client-reported and unverified; empty when absent.
+    // fields at their defaults. accountId is proven (networking/account_key.h); every other id is
+    // client-reported and unverified, and empty when absent.
     struct PlayerConnectionData {
         MafiaNet::PeerGuid guid {};
         uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
         std::string nickname;
+        std::string accountId;
         std::string hardwareID;
         std::string steamId;
         std::string epicId;
@@ -287,6 +290,8 @@ namespace Framework::Integrations::Server {
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;
+        // Checks the account signature on every connection request, before the gate sees it.
+        Framework::Networking::AccountProofVerifier _accountProofs;
         // Reused every tick so the drain never allocates.
         std::vector<AdmissionDecision> _admissionDecisions;
 
