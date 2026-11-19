@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <utils/path.h>
 #include <fstream>
 #include <unordered_set>
 
@@ -51,7 +52,7 @@ namespace Framework::Utils::StreamedAssets {
 
         bool ReadFile(const std::string &path, std::vector<unsigned char> &out, std::string &error) {
             std::error_code code;
-            const std::uintmax_t size = std::filesystem::file_size(path, code);
+            const std::uintmax_t size = std::filesystem::file_size(Utils::PathFromUtf8(path), code);
             if (code) {
                 error = "cannot read the size of " + path;
                 return false;
@@ -61,7 +62,7 @@ namespace Framework::Utils::StreamedAssets {
                 return false;
             }
             out.resize(static_cast<std::size_t>(size));
-            std::ifstream file(path, std::ios::binary);
+            std::ifstream file(Utils::PathFromUtf8(path), std::ios::binary);
             if (!file || (size > 0 && !file.read(reinterpret_cast<char *>(out.data()), static_cast<std::streamsize>(size)))) {
                 error = "cannot read " + path;
                 return false;
@@ -127,8 +128,8 @@ namespace Framework::Utils::StreamedAssets {
         }
 
         std::error_code code;
-        std::filesystem::create_directories(std::filesystem::path(outputPath).parent_path(), code);
-        std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
+        std::filesystem::create_directories(Utils::PathFromUtf8(outputPath).parent_path(), code);
+        std::ofstream out(Utils::PathFromUtf8(outputPath), std::ios::binary | std::ios::trunc);
         if (!out) {
             error = "cannot create " + outputPath;
             return false;
@@ -239,13 +240,13 @@ namespace Framework::Utils::StreamedAssets {
         entries.clear();
 
         std::error_code code;
-        const std::uintmax_t fileSize = std::filesystem::file_size(pakPath, code);
+        const std::uintmax_t fileSize = std::filesystem::file_size(Utils::PathFromUtf8(pakPath), code);
         if (code || fileSize == 0 || fileSize > kMaxPakSize) {
             error = "the pak is missing, empty or 2 GB or larger";
             return false;
         }
 
-        std::FILE *file = std::fopen(pakPath.c_str(), "rb");
+        std::FILE *file = Utils::OpenFileUtf8(pakPath, "rb");
         if (file == nullptr) {
             error = "cannot open the pak";
             return false;
@@ -348,11 +349,11 @@ namespace Framework::Utils::StreamedAssets {
         offsets.clear();
 
         std::error_code code;
-        const std::uintmax_t fileSize = std::filesystem::file_size(pakPath, code);
+        const std::uintmax_t fileSize = std::filesystem::file_size(Utils::PathFromUtf8(pakPath), code);
         if (code || fileSize == 0 || fileSize > kMaxPakSize) {
             return false;
         }
-        std::FILE *file = std::fopen(pakPath.c_str(), "rb");
+        std::FILE *file = Utils::OpenFileUtf8(pakPath, "rb");
         if (file == nullptr) {
             return false;
         }

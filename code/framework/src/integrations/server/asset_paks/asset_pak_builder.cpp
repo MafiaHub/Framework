@@ -12,6 +12,7 @@
 
 #include <logging/logger.h>
 #include <utils/crypto.h>
+#include <utils/path.h>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
@@ -127,11 +128,11 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: {}: {}; the lane is not shipped", resource, lane, relative, reason);
                 return LaneResult::None;
             }
-            if (!_policy->ShouldShip(lane, resource, normalized, entry.path().string(), reason)) {
+            if (!_policy->ShouldShip(lane, resource, normalized, Utils::PathToUtf8(entry.path()), reason)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("'{}' {}: {} is not shipped: {}", resource, lane, relative, reason);
                 continue;
             }
-            entries.push_back({normalized, entry.path().string()});
+            entries.push_back({normalized, Utils::PathToUtf8(entry.path())});
         }
         // A folder that could not be walked is not a folder with nothing in it.
         if (code) {
@@ -147,8 +148,8 @@ namespace Framework::Integrations::Server {
         });
         std::string fingerprint = "format " + std::to_string(kPakFormat) + "\n";
         for (const Utils::StreamedAssets::PakSourceEntry &entry : entries) {
-            const auto size     = std::filesystem::file_size(entry.sourceFile, code);
-            const auto modified = std::filesystem::last_write_time(entry.sourceFile, code).time_since_epoch().count();
+            const auto size     = std::filesystem::file_size(Utils::PathFromUtf8(entry.sourceFile), code);
+            const auto modified = std::filesystem::last_write_time(Utils::PathFromUtf8(entry.sourceFile), code).time_since_epoch().count();
             fingerprint += fmt::format("{}|{}|{}\n", entry.path, size, modified);
         }
         const std::string fingerprintHash = Utils::Crypto::Sha256Hex(fingerprint);
@@ -159,7 +160,7 @@ namespace Framework::Integrations::Server {
             std::vector<Utils::StreamedAssets::PakEntry> listed;
             // Checked against the policy the client applies, whether just built or reused, so a pak
             // the client would refuse is never announced.
-            if (!Utils::StreamedAssets::PakArchive::Validate(path.string(), *_policy, lane, resource, listed, error)) {
+            if (!Utils::StreamedAssets::PakArchive::Validate(Utils::PathToUtf8(path), *_policy, lane, resource, listed, error)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: the pak fails validation: {}", resource, lane, error);
                 return LaneResult::None;
             }
@@ -196,12 +197,12 @@ namespace Framework::Integrations::Server {
 
         const std::filesystem::path building = _stagingDir / (resource + "." + lane + ".building");
         std::string error;
-        if (!Utils::StreamedAssets::PakArchive::Write(building.string(), entries, *_policy, error)) {
+        if (!Utils::StreamedAssets::PakArchive::Write(Utils::PathToUtf8(building), entries, *_policy, error)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: {}", resource, lane, error);
             std::filesystem::remove(building, code);
             return LaneResult::Failed;
         }
-        const std::string sha256 = Utils::Crypto::Sha256FileHex(building.string());
+        const std::string sha256 = Utils::Crypto::Sha256FileHex(Utils::PathToUtf8(building));
         if (sha256.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("'{}' {}: cannot hash the built pak", resource, lane);
             std::filesystem::remove(building, code);

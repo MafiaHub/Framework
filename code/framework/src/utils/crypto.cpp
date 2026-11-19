@@ -9,6 +9,7 @@
 #include "crypto.h"
 
 #include <logging/logger.h>
+#include <utils/path.h>
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -218,7 +219,7 @@ namespace Framework::Utils::Crypto {
     }
 
     std::string Sha256FileHex(const std::string &path) {
-        std::ifstream file(path, std::ios::binary);
+        std::ifstream file(Utils::PathFromUtf8(path), std::ios::binary);
         if (!file.is_open()) {
             return {};
         }
