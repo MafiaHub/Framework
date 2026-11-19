@@ -125,23 +125,36 @@ namespace Framework::Networking {
 #endif
         }
 
-        // Moves the staged key into place only if there is no key there yet, in one step: the first key
-        // to land is the account, whoever wrote it. Exists when another process got there first.
-        // Commits a directory's entries, so a name just made in it survives a crash. fsync() on a file
-        // does not. Windows has no equivalent to call: its write-through move commits the entry itself.
-        bool SyncDirectory([[maybe_unused]] const std::filesystem::path &directory) {
+        // Commits the key's name, and the name of every folder above it, so none of them is lost to a
+        // crash: fsync() on a file does not commit its directory entry. Run after creating a key, and
+        // again on every load, so a name whose earlier sync failed is committed by the next start.
+        // Windows has nothing to call: its write-through move commits the entry itself.
+        bool SyncKeyPath([[maybe_unused]] const std::filesystem::path &path) {
 #ifdef _WIN32
             return true;
 #else
-            const int handle = open(directory.empty() ? "." : directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-            if (handle < 0) {
+            std::error_code code;
+            auto folder = std::filesystem::absolute(path, code).parent_path();
+            if (code) {
                 return false;
             }
-            const bool synced = fsync(handle) == 0;
-            return close(handle) == 0 && synced;
+            bool synced = true;
+            for (;;) {
+                const int handle = open(folder.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+                synced           = handle >= 0 && fsync(handle) == 0 && synced;
+                if (handle >= 0) {
+                    close(handle);
+                }
+                if (folder == folder.parent_path()) {
+                    return synced;
+                }
+                folder = folder.parent_path();
+            }
 #endif
         }
 
+        // Moves the staged key into place only if there is no key there yet, in one step: the first key
+        // to land is the account, whoever wrote it. Exists when another process got there first.
         WriteResult Publish(const std::filesystem::path &staging, const std::filesystem::path &path) {
 #ifdef _WIN32
             // Without MOVEFILE_REPLACE_EXISTING the move fails on an existing target; the DACL moves with it.
@@ -151,10 +164,9 @@ namespace Framework::Networking {
             const DWORD error = GetLastError();
             return error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS ? WriteResult::Exists : WriteResult::Failed;
 #else
-            // link() never replaces; there is no fallback to rename(), which would. The new name is only
-            // durable once its directory is synced: a crash before that would cost the player the account.
+            // link() never replaces; there is no fallback to rename(), which would.
             if (link(staging.c_str(), path.c_str()) == 0) {
-                return SyncDirectory(path.parent_path()) ? WriteResult::Written : WriteResult::Failed;
+                return WriteResult::Written;
             }
             return errno == EEXIST ? WriteResult::Exists : WriteResult::Failed;
 #endif
@@ -165,24 +177,10 @@ namespace Framework::Networking {
         WriteResult WriteKeyFile(const std::filesystem::path &path, const Utils::Crypto::SigningSeed &seed, std::string &outError) {
             std::error_code code;
             if (path.has_parent_path()) {
-                // Each folder this creates is a new entry in its parent, synced there like the key itself.
-                std::vector<std::filesystem::path> created;
-                for (auto folder = path.parent_path(); !folder.empty() && !std::filesystem::exists(folder, code); folder = folder.parent_path()) {
-                    created.push_back(folder);
-                    if (folder == folder.parent_path()) {
-                        break;
-                    }
-                }
                 std::filesystem::create_directories(path.parent_path(), code);
                 if (code) {
                     outError = fmt::format("could not create {}: {}", AccountKeyPathText(path.parent_path()), code.message());
                     return WriteResult::Failed;
-                }
-                for (const auto &folder : created) {
-                    if (!SyncDirectory(folder.parent_path())) {
-                        outError = fmt::format("could not commit {} to disk", AccountKeyPathText(folder));
-                        return WriteResult::Failed;
-                    }
                 }
             }
 
@@ -208,6 +206,13 @@ namespace Framework::Networking {
             std::filesystem::remove(staging, ignored);
             if (published == WriteResult::Failed) {
                 outError = fmt::format("could not put the new key in place at {}", AccountKeyPathText(path));
+                return published;
+            }
+            // A key this process made must be durable before it is used. The key is in place either way,
+            // so a retry loads it, and that load commits it again.
+            if (published == WriteResult::Written && !SyncKeyPath(path)) {
+                outError = fmt::format("could not commit the new key at {} to disk", AccountKeyPathText(path));
+                return WriteResult::Failed;
             }
             return published;
         }
@@ -259,6 +264,9 @@ namespace Framework::Networking {
             if (!read()) {
                 return std::nullopt;
             }
+            // Best effort: commits a name an earlier run made but could not sync. Not a reason to refuse
+            // a key that reads, which a filesystem without directory sync would otherwise do forever.
+            SyncKeyPath(path);
         }
         else {
             if (!Utils::Crypto::RandomBytes(seed.data(), seed.size())) {
@@ -269,6 +277,9 @@ namespace Framework::Networking {
             if (written == WriteResult::Failed || (written == WriteResult::Exists && !read())) {
                 Utils::Crypto::SecureZero(seed.data(), seed.size());
                 return std::nullopt;
+            }
+            if (written == WriteResult::Exists) {
+                SyncKeyPath(path); // theirs, best effort, as for any key that was already there
             }
         }
 
