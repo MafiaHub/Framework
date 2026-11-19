@@ -130,6 +130,8 @@ namespace ServerPacketThreadTest {
         std::atomic<bool> claimForDemo {false};
         // Set before Start to replace the script-event limits: rate, burst, flood rate, flood burst.
         double eventLimits[4] = {-1.0, -1.0, -1.0, -1.0};
+        // Connection requests one address may make at once; high, since every test client shares one.
+        double attemptBurst = 1000.0;
         // Client script events that got past the limit to where scripts handle them.
         std::atomic<int> clientEvents {0};
 
@@ -372,7 +374,7 @@ namespace ServerPacketThreadTest {
             opts.backgroundThreads  = 1;
             // Several clients of the storm come from this one address at once.
             opts.pendingConnectionsPerAddress = 16;
-            opts.connectionAttemptBurst       = 1000.0;
+            opts.connectionAttemptBurst       = attemptBurst;
             if (eventLimits[0] >= 0.0) {
                 opts.clientEventRate       = eventLimits[0];
                 opts.clientEventBurst      = eventLimits[1];
@@ -455,6 +457,13 @@ namespace ServerPacketThreadTest {
                 ++acknowledged;
                 return true;
             });
+        }
+
+        // Sends these bytes as the session payload, identity or not.
+        bool ConnectRaw(int32_t port, const std::string &payload) {
+            connected = disconnected = joined = ready = readySignalled = false;
+            readyEvent                                                 = -1;
+            return static_cast<bool>(net.Connect("127.0.0.1", port, "", payload));
         }
 
         // Sends exactly this identity, signed or not: what a modified client can put on the wire.
@@ -702,6 +711,28 @@ namespace ServerPacketThreadTest {
 MODULE(server_packet_thread, {
     using namespace ServerPacketThreadTest;
     using namespace std::chrono_literals;
+
+    IT("counts a request against its address before reading it, malformed or not", {
+        Server server;
+        server.attemptBurst = 1.0;
+        const bool up       = server.Start("fw_packet_thread_attempt_limit");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        const auto refused = [&] {
+            Client client;
+            if (!client.ConnectRaw(server.port, "not an identity")) {
+                return std::string("(could not connect)");
+            }
+            Pump(server, {&client}, [&] {
+                return client.disconnected || client.connected;
+            });
+            return client.connected ? std::string("(admitted)") : client.disconnectReason;
+        };
+        STREQUALS(refused().c_str(), "Your client could not be identified. Update it and try again.");
+        STREQUALS(refused().c_str(), "Too many connection attempts from your address. Wait a minute and try again.");
+    });
 
     // The reported exploit: a client that writes someone else's ids into its connection request.
     IT("refuses a request that does not prove its account, before any script hears of it", {
