@@ -12,6 +12,12 @@
 #include "networking/rpc/client_identity.h"
 #include "utils/crypto.h"
 
+#ifdef _WIN32
+#include <utils/safe_win32.h>
+
+#include <aclapi.h>
+#endif
+
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -51,6 +57,24 @@ class AccountKeyTestRig {
             std::filesystem::remove_all(path, code);
         }
     };
+
+    // Created owner-only: a protected DACL on Windows, so nothing the folder grants is inherited;
+    // mode 0600 elsewhere, whatever the umask.
+    static bool OwnerOnly(const std::filesystem::path &path) {
+#ifdef _WIN32
+        PSECURITY_DESCRIPTOR descriptor = nullptr;
+        if (GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, nullptr, nullptr, &descriptor) != ERROR_SUCCESS) {
+            return false;
+        }
+        SECURITY_DESCRIPTOR_CONTROL control = 0;
+        DWORD revision                      = 0;
+        const bool isProtected              = GetSecurityDescriptorControl(descriptor, &control, &revision) && (control & SE_DACL_PROTECTED) != 0;
+        LocalFree(descriptor);
+        return isProtected;
+#else
+        return std::filesystem::status(path).permissions() == (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
+#endif
+    }
 
     static std::string ReadFile(const std::filesystem::path &path) {
         std::ifstream in(path, std::ios::binary);
@@ -203,6 +227,43 @@ MODULE(account_key, {
         EQUALS(verifier.Verify(identity, kNow + AccountProofVerifier::kMaxClockSkewSeconds + 1) == AccountProofResult::ClockBehind, true);
     });
 
+    IT("refuses as busy rather than forget a request that could still be replayed", {
+        const auto key = AccountKey::FromSeed(Rig::Seed(7));
+        const auto sign = [&](uint64_t at) {
+            auto identity = Rig::Identity();
+            key->Sign(identity, at);
+            return identity;
+        };
+        AccountProofVerifier verifier(2);
+        const auto first = sign(kNow);
+        EQUALS(verifier.Verify(first, kNow) == AccountProofResult::Valid, true);
+        EQUALS(verifier.Verify(sign(kNow), kNow) == AccountProofResult::Valid, true);
+
+        // Full of live requests: a new one is turned away, and the old ones are still recognised.
+        EQUALS(verifier.Verify(sign(kNow), kNow) == AccountProofResult::Busy, true);
+        EQUALS(verifier.Verify(first, kNow + 1) == AccountProofResult::Replayed, true);
+        STREQUALS(AccountProofVerifier::RefusalFor(AccountProofResult::Busy, first, kNow).c_str(), "The server is busy checking connections. Try again in a minute.");
+
+        // Once they could no longer pass the clock check, they make room.
+        const uint64_t later = kNow + AccountProofVerifier::kMaxClockSkewSeconds + 1;
+        EQUALS(verifier.Verify(sign(later), later) == AccountProofResult::Valid, true);
+    });
+
+    IT("forgets requests in the order they expire, not the order they arrived", {
+        const auto key = AccountKey::FromSeed(Rig::Seed(7));
+        const auto sign = [&](uint64_t at) {
+            auto identity = Rig::Identity();
+            key->Sign(identity, at);
+            return identity;
+        };
+        AccountProofVerifier verifier(2);
+        // Arrives first, expires last.
+        EQUALS(verifier.Verify(sign(kNow), kNow) == AccountProofResult::Valid, true);
+        // Arrives second, signed by a clock 200 s slow: expires 200 s sooner.
+        EQUALS(verifier.Verify(sign(kNow - 200), kNow) == AccountProofResult::Valid, true);
+        EQUALS(verifier.Verify(sign(kNow + 150), kNow + 150) == AccountProofResult::Valid, true);
+    });
+
     IT("creates an account key once and reads the same account back", {
         Rig::TempDir dir;
         const auto path = dir.path / "nested" / "account.key";
@@ -216,6 +277,14 @@ MODULE(account_key, {
         const auto loaded = AccountKey::LoadOrCreate(path, error);
         EQUALS(loaded.has_value(), true);
         STREQUALS(loaded->AccountId().c_str(), created->AccountId().c_str());
+
+        // Only the staged file was ever written; nothing is left beside the key.
+        size_t files = 0;
+        for ([[maybe_unused]] const auto &entry : std::filesystem::directory_iterator(path.parent_path())) {
+            ++files;
+        }
+        EQUALS(files, size_t {1});
+        EQUALS(Rig::OwnerOnly(path), true);
     });
 
     IT("refuses a damaged key file and leaves it as it was", {

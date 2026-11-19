@@ -15,6 +15,17 @@
 #include <fstream>
 #include <sstream>
 #include <system_error>
+#include <vector>
+
+#ifdef _WIN32
+#include <utils/safe_win32.h>
+
+#include <sddl.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace Framework::Networking {
     namespace {
@@ -52,6 +63,86 @@ namespace Framework::Networking {
             Exists
         };
 
+        // A new file only its owner can open, created with that protection rather than given it after
+        // the seed is in: a protected DACL on Windows, mode 0600 on POSIX, whatever the umask.
+        bool WriteOwnerOnly(const std::filesystem::path &staging, const std::string &contents) {
+#ifdef _WIN32
+            // Protected (no inherited entries), full access for this user and SYSTEM only. The user by
+            // SID rather than as the file's owner: an elevated run makes Administrators the owner, and
+            // the same user's next, unelevated run could not read its own account.
+            std::wstring user;
+            {
+                HANDLE token = nullptr;
+                if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+                    return false;
+                }
+                DWORD size = 0;
+                GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+                std::vector<uint8_t> buffer(size);
+                LPWSTR sid    = nullptr;
+                const bool ok = size > 0 && GetTokenInformation(token, TokenUser, buffer.data(), size, &size) && ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER *>(buffer.data())->User.Sid, &sid);
+                CloseHandle(token);
+                if (!ok) {
+                    return false;
+                }
+                user = sid;
+                LocalFree(sid);
+            }
+            PSECURITY_DESCRIPTOR descriptor = nullptr;
+            const std::wstring sddl         = L"D:P(A;;FA;;;" + user + L")(A;;FA;;;SY)";
+            if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &descriptor, nullptr)) {
+                return false;
+            }
+            SECURITY_ATTRIBUTES attributes {sizeof(attributes), descriptor, FALSE};
+            const HANDLE file = CreateFileW(staging.c_str(), GENERIC_WRITE, 0, &attributes, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+            LocalFree(descriptor);
+            if (file == INVALID_HANDLE_VALUE) {
+                return false;
+            }
+            DWORD written = 0;
+            const bool ok = WriteFile(file, contents.data(), static_cast<DWORD>(contents.size()), &written, nullptr) && written == contents.size() && FlushFileBuffers(file);
+            CloseHandle(file);
+            return ok;
+#else
+            const int file = open(staging.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+            if (file < 0) {
+                return false;
+            }
+            size_t done = 0;
+            while (done < contents.size()) {
+                const ssize_t written = write(file, contents.data() + done, contents.size() - done);
+                if (written < 0 && errno == EINTR) {
+                    continue;
+                }
+                if (written <= 0) {
+                    break;
+                }
+                done += static_cast<size_t>(written);
+            }
+            const bool ok = done == contents.size() && fsync(file) == 0;
+            return close(file) == 0 && ok;
+#endif
+        }
+
+        // Moves the staged key into place only if there is no key there yet, in one step: the first key
+        // to land is the account, whoever wrote it. Exists when another process got there first.
+        WriteResult Publish(const std::filesystem::path &staging, const std::filesystem::path &path) {
+#ifdef _WIN32
+            // Without MOVEFILE_REPLACE_EXISTING the move fails on an existing target; the DACL moves with it.
+            if (MoveFileExW(staging.c_str(), path.c_str(), MOVEFILE_WRITE_THROUGH)) {
+                return WriteResult::Written;
+            }
+            const DWORD error = GetLastError();
+            return error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS ? WriteResult::Exists : WriteResult::Failed;
+#else
+            // link() never replaces; there is no fallback to rename(), which would.
+            if (link(staging.c_str(), path.c_str()) == 0) {
+                return WriteResult::Written;
+            }
+            return errno == EEXIST ? WriteResult::Exists : WriteResult::Failed;
+#endif
+        }
+
         // Written beside the target and moved into place, so an interrupted write never leaves half a
         // key. Exists when another process created the key meanwhile: theirs is kept, ours dropped.
         WriteResult WriteKeyFile(const std::filesystem::path &path, const Utils::Crypto::SigningSeed &seed, std::string &outError) {
@@ -71,40 +162,23 @@ namespace Framework::Networking {
             }
             std::filesystem::path staging = path;
             staging += "." + Utils::Crypto::ToHex(suffix, sizeof(suffix)) + ".new";
-            std::string line = fmt::format("{} {}\n", kKeyFileTag, Utils::Crypto::ToHex(seed.data(), seed.size()));
-            {
-                std::ofstream out(staging, std::ios::binary | std::ios::trunc);
-                out.write(line.data(), static_cast<std::streamsize>(line.size()));
-                out.flush();
-                const bool written = out.good();
-                out.close();
-                Utils::Crypto::SecureZero(line.data(), line.size());
-                if (!written) {
-                    std::filesystem::remove(staging, code);
-                    outError = fmt::format("could not write {}", AccountKeyPathText(staging));
-                    return WriteResult::Failed;
-                }
-            }
-            // A hard link fails on an existing target where a rename would replace it: the first key
-            // to land is the account, whoever wrote it.
+            std::string line   = fmt::format("{} {}\n", kKeyFileTag, Utils::Crypto::ToHex(seed.data(), seed.size()));
+            const bool written = WriteOwnerOnly(staging, line);
+            Utils::Crypto::SecureZero(line.data(), line.size());
             std::error_code ignored;
-            std::filesystem::create_hard_link(staging, path, code);
-            if (!code) {
+            if (!written) {
                 std::filesystem::remove(staging, ignored);
-                return WriteResult::Written;
-            }
-            if (std::filesystem::exists(path, ignored)) {
-                std::filesystem::remove(staging, ignored);
-                return WriteResult::Exists;
-            }
-            // A volume without hard links: a rename, which can only lose a race nobody is running.
-            std::filesystem::rename(staging, path, code);
-            if (code) {
-                std::filesystem::remove(staging, ignored);
-                outError = fmt::format("could not move the new key to {}", AccountKeyPathText(path));
+                outError = fmt::format("could not write {}", AccountKeyPathText(staging));
                 return WriteResult::Failed;
             }
-            return WriteResult::Written;
+
+            const WriteResult published = Publish(staging, path);
+            // Gone after a move, still there after a link or a failure.
+            std::filesystem::remove(staging, ignored);
+            if (published == WriteResult::Failed) {
+                outError = fmt::format("could not move the new key to {}", AccountKeyPathText(path));
+            }
+            return published;
         }
     } // namespace
 
@@ -229,19 +303,18 @@ namespace Framework::Networking {
         if (_seen.contains(key)) {
             return AccountProofResult::Replayed;
         }
-        if (_order.size() >= kMaxRemembered) {
-            _seen.erase(_order.front().key);
-            _order.pop_front();
+        if (_seen.size() >= _capacity) {
+            return AccountProofResult::Busy;
         }
         _seen.insert(key);
-        _order.push_back({identity.issuedAt + kMaxClockSkewSeconds, std::move(key)});
+        _byExpiry.emplace(identity.issuedAt + kMaxClockSkewSeconds, std::move(key));
         return AccountProofResult::Valid;
     }
 
     void AccountProofVerifier::Forget(uint64_t nowUnix) {
-        while (!_order.empty() && _order.front().expiresAt < nowUnix) {
-            _seen.erase(_order.front().key);
-            _order.pop_front();
+        while (!_byExpiry.empty() && _byExpiry.begin()->first < nowUnix) {
+            _seen.erase(_byExpiry.begin()->second);
+            _byExpiry.erase(_byExpiry.begin());
         }
     }
 
@@ -255,6 +328,7 @@ namespace Framework::Networking {
             return fmt::format("Your computer's clock is {} minute{} {}. Set it to the correct time and try again.", minutes, minutes == 1 ? "" : "s", result == AccountProofResult::ClockAhead ? "fast" : "slow");
         }
         case AccountProofResult::Replayed: return "This connection request was already used. Try again.";
+        case AccountProofResult::Busy: return "The server is busy checking connections. Try again in a minute.";
         case AccountProofResult::Missing:
         case AccountProofResult::Malformed:
         case AccountProofResult::BadSignature: break;

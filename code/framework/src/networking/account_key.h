@@ -14,8 +14,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <filesystem>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -79,6 +79,7 @@ namespace Framework::Networking {
         ClockAhead,   // issued further in the future than the skew allows
         ClockBehind,  // issued longer ago than the skew allows
         Replayed,     // this exact request was already let through
+        Busy,         // every remembered request is still live: taking another would forget one
     };
 
     // The server's half. Thread-safe.
@@ -88,9 +89,12 @@ namespace Framework::Networking {
         // and so how long its nonce is remembered.
         static constexpr uint64_t kMaxClockSkewSeconds = 300;
 
-        // Requests remembered at most; past it the oldest are forgotten first. Only requests with a
-        // valid signature are remembered, and each is forgotten after twice the skew anyway.
+        // Requests remembered by default. Only requests with a valid signature are remembered, each
+        // until it could no longer pass the clock check. A request is never forgotten earlier, since
+        // that would let it in again: a verifier full of live ones refuses new requests as Busy.
         static constexpr std::size_t kMaxRemembered = 65536;
+
+        explicit AccountProofVerifier(std::size_t capacity = kMaxRemembered): _capacity(capacity) {}
 
         AccountProofResult Verify(const RPC::ClientIdentity &identity, uint64_t nowUnix);
 
@@ -98,15 +102,11 @@ namespace Framework::Networking {
         static std::string RefusalFor(AccountProofResult result, const RPC::ClientIdentity &identity, uint64_t nowUnix);
 
       private:
-        struct Remembered {
-            uint64_t expiresAt;
-            std::string key;
-        };
-
         void Forget(uint64_t nowUnix);
 
+        const std::size_t _capacity;
         std::mutex _mutex;
         std::unordered_set<std::string> _seen;
-        std::deque<Remembered> _order;
+        std::multimap<uint64_t, std::string> _byExpiry; // the last second each request could pass
     };
 } // namespace Framework::Networking
