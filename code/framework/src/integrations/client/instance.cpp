@@ -34,10 +34,6 @@
 #include "networking/replication/replication_manager.h"
 #include "networking/state.h"
 
-#include <cppfs/FileHandle.h>
-#include <cppfs/FilePath.h>
-#include <cppfs/cppfs.h>
-#include <cppfs/fs.h>
 
 #include <algorithm>
 #include <chrono>
@@ -389,7 +385,7 @@ namespace Framework::Integrations::Client {
         if (!_opts.accountKeyPath.empty()) {
             return _opts.accountKeyPath;
         }
-        return std::filesystem::path(GetCacheRoot()) / "account.key";
+        return Utils::PathFromUtf8(GetCacheRoot()) / "account.key";
     }
 
     std::string Instance::GetAccountId() {
@@ -407,7 +403,7 @@ namespace Framework::Integrations::Client {
 
     void Instance::InitCacheAssetFolders() {
         std::error_code code;
-        std::filesystem::create_directories(std::filesystem::path(GetCacheRoot()) / "servers", code);
+        std::filesystem::create_directories(Utils::PathFromUtf8(GetCacheRoot()) / "servers", code);
     }
 
     Utils::Result<void, Error> Instance::RenderInit() {
@@ -1022,16 +1018,17 @@ namespace Framework::Integrations::Client {
         // Pre-packaging builds left plaintext resource directories here, which discovery would
         // still pick up and run unverified. Only .fwpak containers belong in the cache.
         PurgeLegacyPlaintextCache(cacheDir);
-        auto cacheDirHandle = cppfs::fs::open(cacheDir);
+        const std::filesystem::path cacheDirPath = Utils::PathFromUtf8(cacheDir);
 
         // The server has pushed a new list; also before the bail below, so a failed cache dir
         // doesn't leave a transfer running.
         _assetDownloader.Cancel();
         _downloadStatus = {};
 
-        if (!cacheDirHandle.exists()) {
+        std::error_code cacheDirError;
+        if (!std::filesystem::is_directory(cacheDirPath, cacheDirError)) {
             InitCacheAssetFolders();
-            if (cacheDirHandle.createDirectory()) {
+            if (std::filesystem::create_directory(cacheDirPath, cacheDirError)) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", _currentState.serverIDHash);
             }
             else {
@@ -1052,9 +1049,9 @@ namespace Framework::Integrations::Client {
         uint64_t missing = 0;
         for (std::vector<ResourceAssetPak> *list : {&_assetPaks, &_deferredPaks}) {
             for (auto &pak : *list) {
-                pak.path = (std::filesystem::path(cacheDir) / Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256)).string();
+                pak.path = Utils::PathToUtf8(Utils::PathFromUtf8(cacheDir) / Framework::Utils::StreamedAssets::PakFileName(pak.resource, pak.info.lane, pak.info.sha256));
                 std::error_code code;
-                if (std::filesystem::file_size(pak.path, code) != pak.info.size || code) {
+                if (std::filesystem::file_size(Utils::PathFromUtf8(pak.path), code) != pak.info.size || code) {
                     missing += pak.info.size;
                 }
             }
@@ -1102,7 +1099,7 @@ namespace Framework::Integrations::Client {
                 pak.resource = resource.name;
                 pak.info     = info;
                 if (!GetAssetCachePath().empty()) {
-                    pak.path = (std::filesystem::path(GetAssetCachePath()) / Framework::Utils::StreamedAssets::PakFileName(resource.name, info.lane, info.sha256)).string();
+                    pak.path = Utils::PathToUtf8(Utils::PathFromUtf8(GetAssetCachePath()) / Framework::Utils::StreamedAssets::PakFileName(resource.name, info.lane, info.sha256));
                 }
                 const bool stillInFlight = std::any_of(inFlight.begin(), inFlight.end(), [&info](const ResourceAssetPak &deferred) {
                     return deferred.info.lane == info.lane && deferred.info.sha256 == info.sha256;
@@ -1131,25 +1128,25 @@ namespace Framework::Integrations::Client {
         std::error_code code;
         // Earlier versions of the same lane: <resource>.<lane>.<otherhash>.pak beside it.
         const std::string prefix = stem.substr(0, lastDot + 1);
-        for (const auto &entry : std::filesystem::directory_iterator(std::filesystem::path(path).parent_path(), code)) {
+        for (const auto &entry : std::filesystem::directory_iterator(Utils::PathFromUtf8(path).parent_path(), code)) {
             const std::string name = entry.path().filename().string();
             if (name != fileName && entry.path().extension() == ".pak" && name.rfind(prefix, 0) == 0) {
-                candidates.push_back(entry.path().string());
+                candidates.push_back(Utils::PathToUtf8(entry.path()));
             }
         }
         // The same pak fetched for another server: its name carries its hash, so it is the same bytes.
-        const std::filesystem::path servers = std::filesystem::path(GetCacheRoot()) / "servers";
+        const std::filesystem::path servers = Utils::PathFromUtf8(GetCacheRoot()) / "servers";
         for (const auto &server : std::filesystem::directory_iterator(servers, code)) {
             const std::filesystem::path other = server.path() / fileName;
-            if (server.is_directory(code) && other.string() != path && std::filesystem::exists(other, code)) {
-                candidates.push_back(other.string());
+            if (server.is_directory(code) && Utils::PathToUtf8(other) != path && std::filesystem::exists(other, code)) {
+                candidates.push_back(Utils::PathToUtf8(other));
             }
         }
         return candidates;
     }
 
     AssetDownloader::Job Instance::MakeJob(const std::string &fileName, const std::string &sha256, uint64_t size) const {
-        const std::string path = (std::filesystem::path(GetAssetCachePath()) / fileName).string();
+        const std::string path = Utils::PathToUtf8(Utils::PathFromUtf8(GetAssetCachePath()) / fileName);
         return {fileName, path, sha256, size, ReuseCandidates(fileName, path)};
     }
 
@@ -1229,7 +1226,7 @@ namespace Framework::Integrations::Client {
     bool Instance::VerifyAssetPaks() const {
         for (const auto &pak : _assetPaks) {
             std::error_code code;
-            if (pak.path.empty() || std::filesystem::file_size(pak.path, code) != pak.info.size || code) {
+            if (pak.path.empty() || std::filesystem::file_size(Utils::PathFromUtf8(pak.path), code) != pak.info.size || code) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Asset pak '{}' {} is missing or incomplete after the download", pak.resource, pak.info.lane);
                 return false;
             }
@@ -1253,7 +1250,7 @@ namespace Framework::Integrations::Client {
             const size_t index = refused[i];
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Refusing asset pak '{}' {}: {}", paks[index].resource, paks[index].info.lane, errors[i]);
             std::error_code code;
-            std::filesystem::remove(paks[index].path, code);
+            std::filesystem::remove(Utils::PathFromUtf8(paks[index].path), code);
             paks.erase(paks.begin() + static_cast<std::ptrdiff_t>(index));
         }
         return refused.size();
@@ -1292,14 +1289,14 @@ namespace Framework::Integrations::Client {
         }
 
         std::error_code code;
-        for (const auto &entry : std::filesystem::directory_iterator(cacheDir, code)) {
+        for (const auto &entry : std::filesystem::directory_iterator(Utils::PathFromUtf8(cacheDir), code)) {
             const std::string name      = entry.path().filename().string();
             const std::string extension = entry.path().extension().string();
             std::error_code removeError;
             if (extension == ".pak") {
                 if (paks.count(name) == 0) {
                     std::filesystem::remove(entry.path(), removeError);
-                    Framework::Utils::StreamedAssets::RemoveVerifiedNote(entry.path().string());
+                    Framework::Utils::StreamedAssets::RemoveVerifiedNote(Utils::PathToUtf8(entry.path()));
                 }
             }
             else if (extension == ".part" || extension == ".done") {
@@ -1445,7 +1442,7 @@ namespace Framework::Integrations::Client {
         // left by an older build (including server bundles that predate the packaging fix) would
         // otherwise sit on disk until the user happened to reconnect to that exact server.
         std::error_code ec;
-        const auto serversRoot = std::filesystem::path(cacheDir).parent_path();
+        const auto serversRoot = Utils::PathFromUtf8(cacheDir).parent_path();
 
         std::vector<std::filesystem::path> roots;
         if (!serversRoot.empty() && std::filesystem::exists(serversRoot, ec) && !ec) {
@@ -1459,7 +1456,7 @@ namespace Framework::Integrations::Client {
             }
         }
         if (roots.empty()) {
-            roots.emplace_back(cacheDir);
+            roots.push_back(Utils::PathFromUtf8(cacheDir));
         }
 
         size_t removed = 0;
@@ -1478,7 +1475,7 @@ namespace Framework::Integrations::Client {
                 std::error_code removeError;
                 const auto count = std::filesystem::remove_all(entry.path(), removeError);
                 if (removeError) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not remove legacy plaintext resource cache '{}': {}", entry.path().string(), removeError.message());
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not remove legacy plaintext resource cache '{}': {}", Utils::PathToUtf8(entry.path()), removeError.message());
                     continue;
                 }
                 removed += static_cast<size_t>(count);
@@ -1772,11 +1769,11 @@ namespace Framework::Integrations::Client {
         // comes from the per-server asset cache, so a resource can ship its own
         // pages. Reconnecting elsewhere moves that cache under the same origin.
         if (!_resourceProvider) {
-            _resourceProvider = std::make_shared<Framework::GUI::Resources::DirectoryProvider>(GetAssetCachePath());
+            _resourceProvider = std::make_shared<Framework::GUI::Resources::DirectoryProvider>(Utils::PathFromUtf8(GetAssetCachePath()));
             _resourceProvider->SetVirtualPrefix(Framework::Utils::Vfs::kResourceMountRoot);
         }
         else {
-            _resourceProvider->SetRoot(GetAssetCachePath());
+            _resourceProvider->SetRoot(Utils::PathFromUtf8(GetAssetCachePath()));
         }
 
         if (_resourceSchemeRegistered) {

@@ -12,6 +12,7 @@
 
 #include <scripting/resource/resource_packager.h>
 #include <utils/package/package.h>
+#include <utils/path.h>
 
 #include <fstream>
 #include <iterator>
@@ -69,7 +70,7 @@ namespace Framework::Integrations::Server {
         package.fileCount = packaged.fileCount;
 
         std::error_code code;
-        if (std::filesystem::exists(package.served, code) && !code && Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(package.served.string()), packaged.sha256)) {
+        if (std::filesystem::exists(package.served, code) && !code && Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(Utils::PathToUtf8(package.served)), packaged.sha256)) {
             // The same bytes are served already; only a missing chunk list is made up for.
             if (!AssetFileServer::HasCurrentChunkList(package.served)) {
                 AssetFileServer::WriteChunkList(package.served, AssetFileServer::ChunkListPath(package.served));

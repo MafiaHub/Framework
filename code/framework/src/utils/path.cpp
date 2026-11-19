@@ -25,6 +25,23 @@
 #endif
 
 namespace Framework::Utils {
+    std::filesystem::path PathFromUtf8(std::string_view utf8) {
+        return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+    }
+
+    std::string PathToUtf8(const std::filesystem::path &path) {
+        const std::u8string utf8 = path.u8string();
+        return std::string(utf8.begin(), utf8.end());
+    }
+
+    std::FILE *OpenFileUtf8(std::string_view utf8, const char *mode) {
+#ifdef WIN32
+        const std::wstring wideMode(mode, mode + std::char_traits<char>::length(mode));
+        return _wfopen(PathFromUtf8(utf8).c_str(), wideMode.c_str());
+#else
+        return std::fopen(std::string(utf8).c_str(), mode);
+#endif
+    }
     std::wstring GetAbsolutePathW(const std::wstring &relative) {
 #ifdef WIN32
         static wchar_t executable_path[MAX_PATH] = {'\0'};
@@ -134,11 +151,8 @@ namespace Framework::Utils {
 
     std::string GetAppDataPathA() {
 #ifdef WIN32
-        char path[MAX_PATH];
-        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
-            return std::string(path);
-        }
-        return std::string();
+        const std::wstring path = GetAppDataPathW();
+        return path.empty() ? std::string() : PathToUtf8(path);
 #else
         // On non-Windows platforms, typically use $HOME/.config or $XDG_CONFIG_HOME
         const char *configDir = getenv("XDG_CONFIG_HOME");

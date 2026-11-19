@@ -17,6 +17,7 @@
 #include <charconv>
 #include <chrono>
 #include <filesystem>
+#include <utils/path.h>
 #include <fstream>
 
 namespace Framework::Utils::StreamedAssets {
@@ -133,7 +134,7 @@ namespace Framework::Utils::StreamedAssets {
         }
 
         std::int64_t WriteTimeTicks(const std::string &path, std::error_code &code) {
-            const auto time = std::filesystem::last_write_time(path, code);
+            const auto time = std::filesystem::last_write_time(Utils::PathFromUtf8(path), code);
             return code ? 0 : static_cast<std::int64_t>(time.time_since_epoch().count());
         }
 
@@ -142,7 +143,7 @@ namespace Framework::Utils::StreamedAssets {
         // Strictly increasing, from 0 to |size|.
         std::vector<std::uint64_t> ChunkBoundaries(const std::string &path, std::uint64_t size) {
             std::vector<std::uint64_t> cuts;
-            if (std::filesystem::path(path).extension() == ".pak" && !PakArchive::EntryOffsets(path, cuts)) {
+            if (Utils::PathFromUtf8(path).extension() == ".pak" && !PakArchive::EntryOffsets(path, cuts)) {
                 cuts.clear();
             }
             cuts.push_back(0);
@@ -167,11 +168,11 @@ namespace Framework::Utils::StreamedAssets {
     std::vector<Chunk> HashFileChunks(const std::string &path) {
         std::vector<Chunk> chunks;
         std::error_code code;
-        const std::uint64_t size = std::filesystem::file_size(path, code);
+        const std::uint64_t size = std::filesystem::file_size(Utils::PathFromUtf8(path), code);
         if (code || size == 0) {
             return chunks;
         }
-        std::ifstream file(path, std::ios::binary);
+        std::ifstream file(Utils::PathFromUtf8(path), std::ios::binary);
         if (!file.is_open()) {
             return chunks;
         }
@@ -344,7 +345,7 @@ namespace Framework::Utils::StreamedAssets {
     }
 
     bool IsVerified(const std::string &path, std::string_view sha256) {
-        std::ifstream note(VerifiedNotePath(path));
+        std::ifstream note(Utils::PathFromUtf8(VerifiedNotePath(path)));
         if (!note.is_open()) {
             return false;
         }
@@ -356,7 +357,7 @@ namespace Framework::Utils::StreamedAssets {
             return false;
         }
         std::error_code code;
-        const auto actualSize = std::filesystem::file_size(path, code);
+        const auto actualSize = std::filesystem::file_size(Utils::PathFromUtf8(path), code);
         if (code || actualSize != size) {
             return false;
         }
@@ -366,7 +367,7 @@ namespace Framework::Utils::StreamedAssets {
 
     void WriteVerifiedNote(const std::string &path, std::string_view sha256) {
         std::error_code code;
-        const auto size = std::filesystem::file_size(path, code);
+        const auto size = std::filesystem::file_size(Utils::PathFromUtf8(path), code);
         if (code) {
             return;
         }
@@ -374,12 +375,12 @@ namespace Framework::Utils::StreamedAssets {
         if (code) {
             return;
         }
-        std::ofstream note(VerifiedNotePath(path), std::ios::trunc);
+        std::ofstream note(Utils::PathFromUtf8(VerifiedNotePath(path)), std::ios::trunc);
         note << size << ' ' << ticks << ' ' << sha256 << '\n';
     }
 
     void RemoveVerifiedNote(const std::string &path) {
         std::error_code code;
-        std::filesystem::remove(VerifiedNotePath(path), code);
+        std::filesystem::remove(Utils::PathFromUtf8(VerifiedNotePath(path)), code);
     }
 } // namespace Framework::Utils::StreamedAssets

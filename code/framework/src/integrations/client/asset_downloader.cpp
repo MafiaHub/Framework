@@ -10,6 +10,7 @@
 
 #include <logging/logger.h>
 #include <utils/crypto.h>
+#include <utils/path.h>
 #include <utils/streamed_assets/transfer.h>
 
 #include <httplib.h>
@@ -79,13 +80,13 @@ namespace Framework::Integrations::Client {
         // hash when the file has not been touched since it was last checked.
         bool IsCached(const AssetDownloader::Job &job) {
             std::error_code code;
-            if (!std::filesystem::exists(job.path, code)) {
+            if (!std::filesystem::exists(Utils::PathFromUtf8(job.path), code)) {
                 return false;
             }
             if (Utils::StreamedAssets::IsVerified(job.path, job.sha256)) {
                 return true;
             }
-            const auto size = std::filesystem::file_size(job.path, code);
+            const auto size = std::filesystem::file_size(Utils::PathFromUtf8(job.path), code);
             if (!code && size == job.size && Utils::Crypto::ConstantTimeEquals(Utils::Crypto::Sha256FileHex(job.path), job.sha256)) {
                 Utils::StreamedAssets::WriteVerifiedNote(job.path, job.sha256);
                 return true;
@@ -114,7 +115,7 @@ namespace Framework::Integrations::Client {
 
         std::set<std::string> ReadAssemblyNote(const std::string &path) {
             std::set<std::string> lines;
-            std::ifstream note(path);
+            std::ifstream note(Utils::PathFromUtf8(path));
             std::string line;
             while (std::getline(note, line)) {
                 if (!line.empty() && line.back() == '\r') {
@@ -453,10 +454,10 @@ namespace Framework::Integrations::Client {
     }
 
     AssetDownloader::Attempt AssetDownloader::Fetch(Transfer &transfer, const Source &source, const Job &job) {
-        const std::filesystem::path partial = PartialPath(job);
+        const std::filesystem::path partial = Utils::PathFromUtf8(PartialPath(job));
         std::error_code code;
         // A partial of a chunked assembly is not a prefix of the file; it is not resumed as one.
-        std::filesystem::remove(AssemblyNotePath(job), code);
+        std::filesystem::remove(Utils::PathFromUtf8(AssemblyNotePath(job)), code);
 
         // What an earlier attempt left is asked for no more; a partial as long as the file or longer is
         // not one this downloader wrote, and starts over.
@@ -517,7 +518,7 @@ namespace Framework::Integrations::Client {
                         return false;
                     }
                     if (!output.is_open()) {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not open '{}' for writing", partial.string());
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not open '{}' for writing", Utils::PathToUtf8(partial));
                     }
                     return output.is_open();
                 },
@@ -573,7 +574,7 @@ namespace Framework::Integrations::Client {
             corrupted.retry = true;
             return corrupted;
         }
-        if (!VerifyFile(transfer, job, partial.string())) {
+        if (!VerifyFile(transfer, job, Utils::PathToUtf8(partial))) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' does not match the hash the server announced{}", job.fileName, resumed ? " (resumed); fetching it whole" : "");
             std::filesystem::remove(partial, code);
             Attempt corrupted;
@@ -583,7 +584,7 @@ namespace Framework::Integrations::Client {
         if (resumed) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Resumed '{}'", job.fileName);
         }
-        return Install(transfer, job, partial.string());
+        return Install(transfer, job, Utils::PathToUtf8(partial));
     }
 
     bool AssetDownloader::VerifyFile(Transfer &transfer, const Job &job, const std::string &partial) {
@@ -598,14 +599,14 @@ namespace Framework::Integrations::Client {
             return {};
         }
         Utils::StreamedAssets::RemoveVerifiedNote(job.path);
-        std::filesystem::remove(job.path, code);
-        std::filesystem::rename(partial, job.path, code);
+        std::filesystem::remove(Utils::PathFromUtf8(job.path), code);
+        std::filesystem::rename(Utils::PathFromUtf8(partial), Utils::PathFromUtf8(job.path), code);
         if (code) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not move '{}' into the cache: {}", job.fileName, code.message());
-            std::filesystem::remove(partial, code);
+            std::filesystem::remove(Utils::PathFromUtf8(partial), code);
             return {};
         }
-        std::filesystem::remove(AssemblyNotePath(job), code);
+        std::filesystem::remove(Utils::PathFromUtf8(AssemblyNotePath(job)), code);
         Utils::StreamedAssets::WriteVerifiedNote(job.path, job.sha256);
         Attempt done;
         done.done = true;
@@ -694,7 +695,7 @@ namespace Framework::Integrations::Client {
         // place. A partial of another shape is an unfinished whole-file read, and starts over here.
         std::vector<bool> done(chunks.size(), false);
         bool resumed = false;
-        if (std::filesystem::exists(partial, code) && !code && std::filesystem::file_size(partial, code) == job.size && std::filesystem::exists(note, code)) {
+        if (std::filesystem::exists(Utils::PathFromUtf8(partial), code) && !code && std::filesystem::file_size(Utils::PathFromUtf8(partial), code) == job.size && std::filesystem::exists(Utils::PathFromUtf8(note), code)) {
             const std::set<std::string> noted = ReadAssemblyNote(note);
             for (size_t i = 0; i < chunks.size(); ++i) {
                 if (noted.count(NoteLine(chunks[i])) != 0) {
@@ -705,17 +706,17 @@ namespace Framework::Integrations::Client {
             }
         }
         else {
-            std::filesystem::remove(partial, code);
-            std::filesystem::remove(note, code);
-            std::ofstream(partial, std::ios::binary | std::ios::trunc).close();
-            std::filesystem::resize_file(partial, job.size, code);
+            std::filesystem::remove(Utils::PathFromUtf8(partial), code);
+            std::filesystem::remove(Utils::PathFromUtf8(note), code);
+            std::ofstream(Utils::PathFromUtf8(partial), std::ios::binary | std::ios::trunc).close();
+            std::filesystem::resize_file(Utils::PathFromUtf8(partial), job.size, code);
             if (code) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not reserve '{}' for '{}': {}", partial, job.fileName, code.message());
                 return {};
             }
         }
-        std::fstream output(partial, std::ios::binary | std::ios::in | std::ios::out);
-        std::ofstream noteOut(note, std::ios::app);
+        std::fstream output(Utils::PathFromUtf8(partial), std::ios::binary | std::ios::in | std::ios::out);
+        std::ofstream noteOut(Utils::PathFromUtf8(note), std::ios::app);
         if (!output.is_open() || !noteOut.is_open()) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Could not open '{}' for writing", partial);
             return {};
@@ -734,7 +735,7 @@ namespace Framework::Integrations::Client {
             std::unordered_map<std::string, std::pair<std::string, uint64_t>> known;
             for (const std::string &older : job.reuse) {
                 // The stale copy at job.path is read here and replaced only once the assembly verifies.
-                if (older == partial || !std::filesystem::exists(older, code)) {
+                if (older == partial || !std::filesystem::exists(Utils::PathFromUtf8(older), code)) {
                     continue;
                 }
                 transfer.Touch();
@@ -760,7 +761,7 @@ namespace Framework::Integrations::Client {
                     olderPath = have->second.first;
                     older.close();
                     older.clear();
-                    older.open(olderPath, std::ios::binary);
+                    older.open(Utils::PathFromUtf8(olderPath), std::ios::binary);
                 }
                 buffer.resize(static_cast<size_t>(chunk.length));
                 older.clear();
@@ -932,7 +933,7 @@ namespace Framework::Integrations::Client {
         // between the data and the note, a disk fault. Those come again from the network. If every
         // chunk still is as the list says, the list is not the file's, and the file is read whole.
         std::error_code code;
-        std::ifstream in(partial, std::ios::binary);
+        std::ifstream in(Utils::PathFromUtf8(partial), std::ios::binary);
         std::vector<char> buffer;
         std::string good;
         size_t bad = 0;
@@ -951,14 +952,14 @@ namespace Framework::Integrations::Client {
         transfer.Touch();
         if (bad == 0) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' assembled from its chunk list does not match the hash the server announced; fetching it whole", job.fileName);
-            std::filesystem::remove(partial, code);
-            std::filesystem::remove(note, code);
+            std::filesystem::remove(Utils::PathFromUtf8(partial), code);
+            std::filesystem::remove(Utils::PathFromUtf8(note), code);
             Attempt mislisted;
             mislisted.fallback = true;
             return mislisted;
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("'{}' does not match the hash the server announced; {} chunk(s) in place are not as written and come again", job.fileName, bad);
-        std::ofstream(note, std::ios::trunc) << good;
+        std::ofstream(Utils::PathFromUtf8(note), std::ios::trunc) << good;
         Attempt corrupted;
         corrupted.retry = true;
         return corrupted;

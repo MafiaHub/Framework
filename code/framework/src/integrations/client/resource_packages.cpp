@@ -11,6 +11,7 @@
 #include <logging/logger.h>
 #include <utils/package/package.h>
 #include <utils/streamed_assets/policy.h>
+#include <utils/path.h>
 #include <utils/vfs.h>
 
 #include <algorithm>
@@ -93,7 +94,7 @@ namespace Framework::Integrations::Client {
             return false;
         }
 
-        const auto packagePath = std::filesystem::path(cacheRoot) / (resourceName + Utils::Package::kExtension);
+        const auto packagePath = Utils::PathFromUtf8(cacheRoot) / (resourceName + Utils::Package::kExtension);
 
         std::string blob;
         if (!ReadWholeFile(packagePath, blob)) {

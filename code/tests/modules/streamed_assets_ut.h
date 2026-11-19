@@ -112,6 +112,42 @@ MODULE(streamed_assets, {
         std::filesystem::remove_all(root);
     });
 
+    IT("writes, validates and verifies a pak under a folder named outside ASCII", {
+        // A Windows profile named in Cyrillic puts the client's asset cache under it. Paths are
+        // UTF-8 strings; one read in the process code page names no file and the join fails.
+        using Framework::Utils::PathFromUtf8;
+        using Framework::Utils::PathToUtf8;
+        using Framework::Utils::StreamedAssets::PakArchive;
+        TestPolicy policy;
+        const auto base = Scratch("fw_pak_utf8");
+        const std::string root = PathToUtf8(base) + "/\xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD Cl\xC3\xA9ment"; // "Иван Clément"
+        std::filesystem::create_directories(PathFromUtf8(root));
+        EQUALS(std::filesystem::is_directory(base / std::u8string(u8"Иван Clément")), true);
+        WriteBytes(PathFromUtf8(root + "/a.txt"), 5000, 1);
+
+        const std::string pak = root + "/demo.stream.pak";
+        std::string error;
+        EQUALS(PakArchive::Write(pak, {{"a.txt", root + "/a.txt"}}, policy, error), true);
+        std::vector<Framework::Utils::StreamedAssets::PakEntry> listed;
+        EQUALS(PakArchive::Validate(pak, policy, "stream", "demo", listed, error), true);
+        UEQUALS(listed.size(), 1u);
+        std::vector<std::uint64_t> offsets;
+        EQUALS(PakArchive::EntryOffsets(pak, offsets), true);
+
+        const std::string sha256 = Framework::Utils::Crypto::Sha256FileHex(pak);
+        UEQUALS(sha256.size(), 64u);
+        EQUALS(Framework::Utils::StreamedAssets::HashFileChunks(pak).empty(), false);
+        Framework::Utils::StreamedAssets::WriteVerifiedNote(pak, sha256);
+        EQUALS(Framework::Utils::StreamedAssets::IsVerified(pak, sha256), true);
+
+        std::FILE *file = Framework::Utils::OpenFileUtf8(pak, "rb");
+        EQUALS(file != nullptr, true);
+        if (file) {
+            std::fclose(file);
+        }
+        std::filesystem::remove_all(base);
+    });
+
     IT("finds no refused pak among valid ones", {
         using Framework::Utils::StreamedAssets::PakArchive;
         TestPolicy policy;
