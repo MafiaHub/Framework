@@ -112,19 +112,18 @@ waits up to two minutes for an answer; it is always the server that decides.
 |---|---|
 | `nickname` | the name the player asked to join under |
 | `accountId` | the account the player **proved** (section 5); the same value `player.accountId` reads once they are in |
-| `unverified` | frozen `{ steamId, epicId, discordId, discordName, hardwareId }`, as reported by the client; empty strings when absent |
+| `steamId`, `epicId`, `discordId`, `discordName`, `hardwareId` | as reported by the client; empty when absent |
 | `ticket` | the `ticket` of the client's launch link, untouched |
 | `ip` | remote address, no port |
 | `reject(reason?)` | refuse; reason up to 512 bytes |
 | `update(message)` | status line up to 256 bytes; restarts the timeout |
 | `isPending()` | false once decided or the player left |
 
-**Only `accountId` is verified.** Everything under `unverified` is what the
-client said about itself: `steamId` is read from an environment variable the
-launcher sets and is not checked against Steam, and a Discord id is public, so a
-modified client can claim anyone's. Reading the old flat names
-(`connection.discordId`, `player.steamId`, ...) throws, pointing at
-`accountId`, so a script written against them fails where it trusted one.
+**Only `accountId` is verified.** Every other identifier is what the client
+said about itself: `steamId` is read from an environment variable the launcher
+sets and is not checked against Steam, and a Discord id is public, so a modified
+client can claim anyone's. Key bans, whitelists, saved data and permissions on
+`accountId`; the others are for display and logs.
 
 ---
 

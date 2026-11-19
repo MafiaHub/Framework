@@ -141,7 +141,6 @@ is copied out of one isolate and rebuilt in the other:
 | `Date`, `Map`, `Set`, `ArrayBuffer`, typed arrays | copies |
 | framework value types (`Vector3`, `Quaternion`, `Color`, ...) | the same type, by value |
 | framework entities (`Player`, ...) | the same entity, wrapped again |
-| `PendingConnection` (`playerConnecting`) | the same connection, built again: its methods answer the one request |
 | functions | a callable reference into the owning resource |
 | instances of a resource's own classes | plain objects; the prototype does not cross |
 | symbols, promises, cycles, weak collections | refused, with the path to the value |
@@ -207,7 +206,7 @@ that is executing and values built in the host are copied into resources:
   class after its base; anything else with `ValueTransfer::RegisterHostType`.
   Unregistered, a handle derived from `Player` or `Entity` arrives as the
   framework base class. The framework's value types and `Entity`, `Player`,
-  `TextLabel`, `StateBag` and `PendingConnection` are registered already.
+  `TextLabel` and `StateBag` are registered already.
 - Per-isolate state must really be per isolate. A class cache held in a single
   static (one `v8pp::class_<T>` for the whole server) breaks the first time a
   resource's runtime registers bindings; key it by isolate.
