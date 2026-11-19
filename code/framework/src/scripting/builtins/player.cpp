@@ -7,16 +7,20 @@
  */
 
 #include "player.h"
+#include "../engine_helpers.h"
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
 #include <integrations/shared/rpc/emit_script_event.h>
+#include <networking/account_key.h>
 #include <networking/network_peer.h>
 #include <networking/replication/nametag_state.h>
 #include <networking/rpc/client_identity.h>
 #include <utils/string_utils.h>
 
+#include <algorithm>
 #include <sstream>
+#include <utility>
 
 namespace Framework::Scripting::Builtins {
     void Player::Kick(const std::string &reason) {
@@ -46,6 +50,56 @@ namespace Framework::Scripting::Builtins {
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
         ev.FromParameters(eventName, payloadJson);
         peer->SendRPC(ev, MafiaNet::ToGuid(owner));
+    }
+
+    std::string Player::GetAccountId() const {
+        const auto identity = ResolveIdentity();
+        return identity ? Networking::AccountIdOf(identity->publicKey) : "";
+    }
+
+    v8::Local<v8::Object> Player::NewUnverifiedIdentity(v8::Isolate *isolate, v8::Local<v8::Context> context, const Networking::RPC::ClientIdentity *identity) {
+        v8::EscapableHandleScope scope(isolate);
+        v8::Local<v8::Object> claims = v8::Object::New(isolate);
+        const std::string empty;
+        const std::pair<const char *, const std::string *> fields[] = {
+            {"steamId", identity ? &identity->steamId : &empty},
+            {"epicId", identity ? &identity->epicId : &empty},
+            {"discordId", identity ? &identity->discordId : &empty},
+            {"discordName", identity ? &identity->discordName : &empty},
+            {"hardwareId", identity ? &identity->hardwareId : &empty},
+        };
+        for (const auto &[name, value] : fields) {
+            claims->CreateDataProperty(context, v8pp::to_v8(isolate, name), v8pp::to_v8(isolate, *value)).Check();
+        }
+        claims->SetIntegrityLevel(context, v8::IntegrityLevel::kFrozen).Check();
+        return scope.Escape(claims);
+    }
+
+    void Player::DocumentUnverifiedIdentity(v8::Isolate *isolate) {
+        auto &type = GetScriptingCatalog(isolate).data_type("UnverifiedIdentity", "What a player's client says about itself. The client writes every field and anyone can put anything here: Discord ids are public, and a modified client sends whichever it likes. "
+                                                                                  "Show them, log them, or link them to an account the player proved some other way. Never key ownership, bans or permissions on them; that is `accountId`.");
+        if (std::ranges::any_of(type.properties, [](const auto &property) {
+                return property.name == "steamId";
+            })) {
+            return;
+        }
+        type.add_property("steamId", "string", "Steam identifier the client reported, or an empty string.", true);
+        type.add_property("epicId", "string", "Epic Games account identifier the client reported, or an empty string.", true);
+        type.add_property("discordId", "string", "Discord user identifier the client reported, or an empty string.", true);
+        type.add_property("discordName", "string", "Discord username the client reported, or an empty string.", true);
+        type.add_property("hardwareId", "string", "Framework hardware identifier the client reported, or an empty string.", true);
+    }
+
+    v8::Local<v8::FunctionTemplate> Player::MovedIdentityGetter(v8::Isolate *isolate, const char *field) {
+        return v8::FunctionTemplate::New(
+            isolate,
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                v8::Isolate *isolate      = info.GetIsolate();
+                const std::string field   = v8pp::from_v8<std::string>(isolate, info.Data());
+                const std::string message = field + " is not proof of who a player is: any client can report any value. Key ownership and permissions on accountId, and read the reported value as unverified." + field + ".";
+                ThrowError(isolate, message.c_str());
+            },
+            v8pp::to_v8(isolate, field));
     }
 
     std::string Player::GetSteamId() const {
@@ -191,11 +245,27 @@ namespace Framework::Scripting::Builtins {
                 cls->function("setNametagText", &Player::SetNametagText,
                     v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name.")}, "Overrides the text drawn on this player's nametag."));
                 cls->function("setNametagColor", &Player::SetNametagColor, v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")}, "Tints the text on this player's nametag."));
-                cls->property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."));
-                cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable."));
-                cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
-                cls->property("discordName", &Player::GetDiscordName, v8pp::metadata::property_docs("string", "Discord username the client reported, not verified by the server, or an empty string when unavailable."));
-                cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
+                cls->property("accountId", &Player::GetAccountId,
+                    v8pp::metadata::property_docs("string", "The account this player proved when they connected: 32 hex characters, the same on every server and in every session, that no other client can claim. Key saved data, ownership, bans and permissions on it. "
+                                                            "It stands for a key the player's client keeps on their computer, so a player who loses that file starts a new account. Empty once the player has left."));
+                DocumentUnverifiedIdentity(isolate);
+                {
+                    auto unverifiedGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                        v8::Isolate *isolate = info.GetIsolate();
+                        auto *self           = v8pp::class_<Player>::unwrap_object(isolate, info.This());
+                        if (!self) {
+                            return;
+                        }
+                        const auto identity = self->ResolveIdentity();
+                        info.GetReturnValue().Set(NewUnverifiedIdentity(isolate, isolate->GetCurrentContext(), identity ? &*identity : nullptr));
+                    });
+                    cls->accessor_property("unverified", unverifiedGetter, v8::Local<v8::FunctionTemplate>(),
+                        v8pp::metadata::property_docs("UnverifiedIdentity", "The Steam, Epic and Discord ids, Discord name and hardware id this player's client reported. Not proof of anything: see UnverifiedIdentity, and recognise a player by accountId."));
+                }
+                // Left out of the catalog: they exist only to fail loudly in a script written against the old names.
+                for (const char *field : kMovedIdentityFields) {
+                    cls->class_function_template()->PrototypeTemplate()->SetAccessorProperty(v8pp::to_v8(isolate, field).As<v8::Name>(), MovedIdentityGetter(isolate, field), v8::Local<v8::FunctionTemplate>(), v8::DontEnum);
+                }
                 cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));
                 cls->property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
             }

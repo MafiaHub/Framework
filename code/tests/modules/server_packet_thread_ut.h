@@ -12,6 +12,7 @@
 
 #include "integrations/server/instance.h"
 #include "integrations/shared/rpc/emit_script_event.h"
+#include "networking/account_key.h"
 #include "networking/network_client.h"
 #include "networking/network_server.h"
 #include "networking/replication/client_entities.h"
@@ -38,6 +39,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -128,6 +130,8 @@ namespace ServerPacketThreadTest {
         std::atomic<bool> claimForDemo {false};
         // Set before Start to replace the script-event limits: rate, burst, flood rate, flood burst.
         double eventLimits[4] = {-1.0, -1.0, -1.0, -1.0};
+        // Connection requests one address may make at once; high, since every test client shares one.
+        double attemptBurst = 1000.0;
         // Client script events that got past the limit to where scripts handle them.
         std::atomic<int> clientEvents {0};
 
@@ -370,6 +374,7 @@ namespace ServerPacketThreadTest {
             opts.backgroundThreads  = 1;
             // Several clients of the storm come from this one address at once.
             opts.pendingConnectionsPerAddress = 16;
+            opts.connectionAttemptBurst       = attemptBurst;
             if (eventLimits[0] >= 0.0) {
                 opts.clientEventRate       = eventLimits[0];
                 opts.clientEventBurst      = eventLimits[1];
@@ -454,11 +459,35 @@ namespace ServerPacketThreadTest {
             });
         }
 
+        // Sends these bytes as the session payload, identity or not.
+        bool ConnectRaw(int32_t port, const std::string &payload) {
+            connected = disconnected = joined = ready = readySignalled = false;
+            readyEvent                                                 = -1;
+            return static_cast<bool>(net.Connect("127.0.0.1", port, "", payload));
+        }
+
+        // Sends exactly this identity, signed or not: what a modified client can put on the wire.
+        bool ConnectAs(int32_t port, Framework::Networking::RPC::ClientIdentity identity) {
+            connected = disconnected = joined = ready = readySignalled = false;
+            readyEvent                                                 = -1;
+            return static_cast<bool>(net.Connect("127.0.0.1", port, "", identity.Encode()));
+        }
+
         bool Connect(int32_t port, const char *name = "tester") {
             connected = disconnected = joined = ready = readySignalled = false;
             readyEvent                                                 = -1;
             Framework::Networking::RPC::ClientIdentity identity;
             identity.name = name;
+            // Signed as a real client signs it, or the server refuses the request before any handler.
+            Framework::Utils::Crypto::SigningSeed seed {};
+            for (size_t i = 0; i < seed.size(); ++i) {
+                seed[i] = static_cast<uint8_t>(name[i % std::max<size_t>(1, std::strlen(name))]);
+            }
+            const auto key = Framework::Networking::AccountKey::FromSeed(seed);
+            const auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            if (!key || !key->Sign(identity, static_cast<uint64_t>(now))) {
+                return false;
+            }
             return static_cast<bool>(net.Connect("127.0.0.1", port, "", identity.Encode()));
         }
 
@@ -682,6 +711,66 @@ namespace ServerPacketThreadTest {
 MODULE(server_packet_thread, {
     using namespace ServerPacketThreadTest;
     using namespace std::chrono_literals;
+
+    IT("counts a request against its address before reading it, malformed or not", {
+        Server server;
+        server.attemptBurst = 1.0;
+        const bool up       = server.Start("fw_packet_thread_attempt_limit");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        const auto refused = [&] {
+            Client client;
+            if (!client.ConnectRaw(server.port, "not an identity")) {
+                return std::string("(could not connect)");
+            }
+            Pump(server, {&client}, [&] {
+                return client.disconnected || client.connected;
+            });
+            return client.connected ? std::string("(admitted)") : client.disconnectReason;
+        };
+        STREQUALS(refused().c_str(), "Your client could not be identified. Update it and try again.");
+        STREQUALS(refused().c_str(), "Too many connection attempts from your address. Wait a minute and try again.");
+    });
+
+    // The reported exploit: a client that writes someone else's ids into its connection request.
+    IT("refuses a request that does not prove its account, before any script hears of it", {
+        Server server;
+        const bool up = server.Start("fw_packet_thread_account_proof", "Events.on(\"playerConnecting\", () => require(\"fs\").writeFileSync(\"$ROOT/connecting\", \"1\"));");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        const auto refused = [&](Framework::Networking::RPC::ClientIdentity identity) {
+            Client client;
+            if (!client.ConnectAs(server.port, std::move(identity))) {
+                return std::string("(could not connect)");
+            }
+            Pump(server, {&client}, [&] {
+                return client.disconnected || client.connected;
+            });
+            return client.connected ? std::string("(admitted)") : client.disconnectReason;
+        };
+
+        Framework::Networking::RPC::ClientIdentity unsigned_;
+        unsigned_.name      = "spoofer";
+        unsigned_.discordId = "123456789012345678";
+        STREQUALS(refused(unsigned_).c_str(), "Your client could not prove its account. Update it and try again.");
+
+        Framework::Utils::Crypto::SigningSeed seed {};
+        seed.fill(0x42);
+        const auto attacker = Framework::Networking::AccountKey::FromSeed(seed);
+        Framework::Networking::RPC::ClientIdentity tampered;
+        tampered.name  = "spoofer";
+        const auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        EQUALS(attacker->Sign(tampered, static_cast<uint64_t>(now)), true);
+        tampered.discordId = "123456789012345678";
+        STREQUALS(refused(tampered).c_str(), "Your client could not prove its account. Update it and try again.");
+
+        EQUALS(std::filesystem::exists(server.root / "connecting"), false);
+        EQUALS(server.GetNetworkingEngine()->GetNetworkServer()->GetPlayerCount(), 0u);
+    });
 
     IT("runs a handler off the tick thread", {
         Server server;

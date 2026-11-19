@@ -10,7 +10,7 @@ another name.
 ```js
 Events.on("playerConnecting", async (connection) => {
     connection.update("Checking the whitelist...");
-    const entry = await whitelist.lookup(connection.steamId);   // DB, HTTP, anything async
+    const entry = await whitelist.lookup(connection.accountId); // DB, HTTP, anything async
     if (!entry) {
         return connection.reject("You are not on the whitelist. Apply at example.org");
     }
@@ -26,6 +26,7 @@ Events.on("playerConnecting", async (connection) => {
 client                                        server
   | -- connect (transport, join password) ------>|  MafiaNet: a pending-session slot, not a player slot
   | -- ID_SESSION_CONFIG_REQUEST (identity) ---->|  interactive: surfaced to the framework
+  |                                               |  account signature checked; a bad one is refused here
   |                                               |  playerConnecting ... handlers settle
   |<-- ID_SESSION_CONFIG_STATUS (update(), 0..n) -|  restarts the session timeout on both ends
   |<-- ID_SESSION_CONFIG (session config) --------|  AcceptSession: the connection now exists
@@ -33,8 +34,9 @@ client                                        server
   | -- build challenge, resource list, download, ClientJoin: unchanged
 ```
 
-The identity (`RPC::ClientIdentity`: nickname, ids, ticket) is the client's
-MafiaNet **session payload**, carried in the connection request itself. The
+The identity (`RPC::ClientIdentity`: nickname, ids, ticket, account proof) is
+the client's MafiaNet **session payload**, carried in the connection request
+itself. The
 server's session config (the replicated `server.json` subset) is the accept's
 payload, so a client only learns the level and the mod config once it is let
 in.
@@ -86,6 +88,11 @@ and the request waits for all of them:
 | Handlers not settled within `admissionTimeoutMs` (30 s) | refused: "The server did not answer in time. Try again later." |
 | The player gives up, or the transport drops | `ID_SESSION_CONFIG_ABANDONED`; forgotten, `isPending()` turns false |
 | The request carried no identity (another build) | refused: "Your client could not be identified. Update it and try again." |
+| The account proof is missing, malformed or does not verify | refused: "Your client could not prove its account. Update it and try again." -- before any script runs |
+| The request was signed more than 5 minutes from the server's clock | refused, telling the player how far their clock is off |
+| The same signed request arrives twice | refused: "This connection request was already used. Try again." |
+| One IP address asks more than `connectionAttemptBurst` (16) times at once, then more than `connectionAttemptRate` (0.2) a second | refused: "Too many connection attempts from your address. Wait a minute and try again." -- before the signature is checked |
+| The server already remembers 65536 requests still inside their 5 minutes | refused: "The server is busy checking connections. Try again in a minute." -- a remembered request is never forgotten early, or it could be replayed |
 | No `playerConnecting` handler at all | admitted at once |
 
 The gate **fails closed**. Decisions are applied once per server tick, never
@@ -104,21 +111,55 @@ waits up to two minutes for an answer; it is always the server that decides.
 | Member | |
 |---|---|
 | `nickname` | the name the player asked to join under |
-| `steamId`, `discordId`, `discordName`, `hardwareId` | as reported by the client; empty when absent |
+| `accountId` | the account the player **proved** (section 5); the same value `player.accountId` reads once they are in |
+| `unverified` | frozen `{ steamId, epicId, discordId, discordName, hardwareId }`, as reported by the client; empty strings when absent |
 | `ticket` | the `ticket` of the client's launch link, untouched |
 | `ip` | remote address, no port |
 | `reject(reason?)` | refuse; reason up to 512 bytes |
 | `update(message)` | status line up to 256 bytes; restarts the timeout |
 | `isPending()` | false once decided or the player left |
 
-**Nothing in it is verified.** Every identifier is what the client said about
-itself; `steamId` is read from an environment variable the launcher sets and is
-not checked against Steam. A whitelist that must hold against a modified client
-should check the `ticket` with whatever issued it.
+**Only `accountId` is verified.** Everything under `unverified` is what the
+client said about itself: `steamId` is read from an environment variable the
+launcher sets and is not checked against Steam, and a Discord id is public, so a
+modified client can claim anyone's. Reading the old flat names
+(`connection.discordId`, `player.steamId`, ...) throws, pointing at
+`accountId`, so a script written against them fails where it trusted one.
 
 ---
 
-## 5. Passing a ticket
+## 5. Accounts
+
+A player's account is a key pair their client keeps, not an id it reports.
+
+- The client creates an Ed25519 key the first time it connects
+  (`InstanceOptions::accountKeyPath`, by default `<cacheRoot>/account.key`) and
+  signs every connection request with it: all the fields above, the time, and a
+  random nonce (`networking/account_key.h`).
+- The server checks the signature on the request as it arrived, before it
+  sanitizes anything or raises `playerConnecting`. It refuses a request signed
+  more than `AccountProofVerifier::kMaxClockSkewSeconds` (5 minutes) from its own
+  clock, and one it has already let through.
+- `accountId` is the first 128 bits of SHA-256 over the public key, as 32 hex
+  characters: the same on every server, and no client can produce it without the
+  private key.
+
+What it does not cover:
+
+- **Platform accounts.** It proves the player holds a key, not that they own a
+  Steam or Discord account. Link those to an `accountId` some other way (a
+  Discord OAuth flow on your website, an in-game code) before trusting the link.
+- **A lost key is a lost account.** Nothing recovers it. A project should tell
+  players where it is (`Instance::GetAccountKeyPath`) so they can back it up.
+- **The wire is not encrypted.** Someone who can intercept and block a player's
+  traffic can use the request before the player does, within its 5 minutes. So
+  can a malicious server the player is connecting to, by relaying the request
+  to another server live. Closing that needs an encrypted transport the
+  signature is bound to.
+
+---
+
+## 6. Passing a ticket
 
 The project puts it in `CurrentState::ticket` before `ConnectToServer`. KCDC
 takes it from its launch link:
@@ -133,13 +174,17 @@ rather than cut.
 
 ---
 
-## 6. Integrating a project
+## 7. Integrating a project
 
 - **Server**: nothing to do. `InstanceOptions::admissionTimeoutMs`,
-  `pendingConnections` and `pendingConnectionsPerAddress` tune it.
+  `pendingConnections` and `pendingConnectionsPerAddress` tune it, and
+  `connectionAttemptRate` / `connectionAttemptBurst` bound requests per address
+  (raise them when many players share one, as at a LAN event).
   `NetworkServer::SetSessionConfig` is still how a project publishes its session
   config; it is now sent with each accept.
-- **Client**: set `CurrentState::ticket` if the project has a launch link.
+- **Client**: point `InstanceOptions::accountKeyPath` somewhere players do not
+  clear to fix a download, and show them `GetAccountId()` so they can give it to
+  staff. Set `CurrentState::ticket` if the project has a launch link.
   Override `OnAdmissionStatus` to show the server's lines while waiting; KCDC
   draws a card with a Leave button over its menu backdrop. A refusal arrives as
   `DisconnectionReason::CONNECTION_REFUSED` with the server's text.

@@ -249,6 +249,7 @@ namespace Framework::Integrations::Server {
         Framework::Networking::AdmissionSettings admission;
         admission.pendingConnections           = _opts.pendingConnections;
         admission.pendingConnectionsPerAddress = _opts.pendingConnectionsPerAddress;
+        _accountProofs.emplace(Framework::Networking::AccountProofVerifier::kMaxRemembered, _opts.connectionAttemptRate, _opts.connectionAttemptBurst);
         admission.sessionTimeoutMs             = static_cast<uint32_t>(std::max(_opts.admissionTimeoutMs, 1)) + kAdmissionTimeoutMarginMs;
         // Downloading connections live beside the player slots: the transport takes them all, the join
         // (ClientJoin) is where maxPlayers is enforced.
@@ -851,6 +852,7 @@ namespace Framework::Integrations::Server {
             data.guid        = peerGuid;
             data.playerIndex = guid.systemIndex;
             data.nickname    = identity.name;
+            data.accountId   = Framework::Networking::AccountIdOf(identity.publicKey);
             data.hardwareID  = identity.hardwareId;
             data.steamId     = identity.steamId;
             data.epicId      = identity.epicId;
@@ -962,10 +964,29 @@ namespace Framework::Integrations::Server {
 
     void Instance::OnSessionRequest(MafiaNet::RakNetGUID guid, const std::optional<Framework::Networking::RPC::ClientIdentity> &request) {
         auto *net = _networkingEngine->GetNetworkServer();
+        const auto now = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+
+        // Its address before anything else, malformed requests included, so one address cannot spend
+        // the checks below or fill what they remember. Refused quietly: a flood is not worth a log line each.
+        if (!_accountProofs->Admit(net->GetAddress(guid))) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Refusing a connection request from guid {}: its address asked too often", guid.g);
+            net->RejectSession(guid, Framework::Networking::AccountProofVerifier::RefusalFor(Framework::Networking::AccountProofResult::RateLimited, {}, now).c_str());
+            return;
+        }
+
         if (!request) {
             // Not a framework client of this protocol: there is nobody to ask playerConnecting about.
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing a connection request from {} that carried no identity", guid.g);
             net->RejectSession(guid, kUnidentifiedReason);
+            return;
+        }
+
+        // The account next, on the request exactly as it arrived: sanitizing below rewrites fields
+        // the signature covers. Nothing about a request that fails is worth a script's time.
+        const auto accountProof = _accountProofs->Verify(*request, now);
+        if (accountProof != Framework::Networking::AccountProofResult::Valid) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing a connection request from guid {}: account proof failed ({})", guid.g, static_cast<int>(accountProof));
+            net->RejectSession(guid, Framework::Networking::AccountProofVerifier::RefusalFor(accountProof, *request, now).c_str());
             return;
         }
 
@@ -996,7 +1017,7 @@ namespace Framework::Integrations::Server {
         }
         net->SetPeerIdentity(guid, identity);
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {} is connecting", identity.name, guid.g, identity.hardwareId);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} account {} is connecting", identity.name, guid.g, Framework::Networking::AccountIdOf(identity.publicKey));
         // playerConnecting is raised where scripts run; the request waits in MafiaNet's pool meanwhile.
         PostToScripts([this, guid, identity, address = net->GetAddress(guid)] {
             if (!_connectionGate.Begin(guid, identity, address)) {

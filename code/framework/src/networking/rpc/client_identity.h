@@ -16,6 +16,7 @@
 #include <mafianet/bit_stream.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,6 +44,18 @@ namespace Framework::Networking::RPC {
         // The framework neither reads nor verifies it; it is handed to playerConnecting as is.
         std::string ticket;
 
+        // Proof of the account (networking/account_key.h). Everything above is a claim the client
+        // makes about itself; these let the server check one thing for certain: the request was
+        // signed by the holder of publicKey, recently, and only once.
+        static constexpr std::size_t kPublicKeyLength = 32; // Ed25519
+        static constexpr std::size_t kNonceLength     = 16;
+        static constexpr std::size_t kSignatureLength = 64;
+
+        std::string publicKey; // raw bytes
+        uint64_t issuedAt = 0; // Unix seconds, the client's clock
+        std::string nonce;     // raw bytes, fresh for every request
+        std::string signature; // raw bytes, over SigningPayload()
+
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, name);
             bs->Serialize(write, steamId);
@@ -51,6 +64,26 @@ namespace Framework::Networking::RPC {
             bs->Serialize(write, hardwareId);
             bs->Serialize(write, epicId);
             bs->Serialize(write, ticket);
+            bs->Serialize(write, publicKey);
+            bs->Serialize(write, issuedAt);
+            bs->Serialize(write, nonce);
+            bs->Serialize(write, signature);
+        }
+
+        // The bytes the signature covers: a tag naming the protocol, then every field but the
+        // signature, in wire order. Recomputed from the decoded values on the server, so any field
+        // changed on the way invalidates it.
+        std::string SigningPayload() const {
+            static constexpr char kTag[] = "MafiaHub-ClientIdentity-v1";
+            MafiaNet::BitStream bs;
+            std::string tag(kTag);
+            bs.Write(tag);
+            for (const std::string *field : {&name, &steamId, &discordId, &discordName, &hardwareId, &epicId, &ticket, &publicKey}) {
+                bs.Write(*field);
+            }
+            bs.Write(issuedAt);
+            bs.Write(nonce);
+            return std::string(reinterpret_cast<const char *>(bs.GetData()), bs.GetNumberOfBytesUsed());
         }
 
         // The session payload, as MafiaNet carries it.
@@ -68,7 +101,8 @@ namespace Framework::Networking::RPC {
             }
             MafiaNet::BitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(payload.data())), static_cast<unsigned int>(payload.size()), false);
             ClientIdentity identity;
-            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.discordName) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket)) {
+            if (!bs.Read(identity.name) || !bs.Read(identity.steamId) || !bs.Read(identity.discordId) || !bs.Read(identity.discordName) || !bs.Read(identity.hardwareId) || !bs.Read(identity.epicId) || !bs.Read(identity.ticket) || !bs.Read(identity.publicKey)
+                || !bs.Read(identity.issuedAt) || !bs.Read(identity.nonce) || !bs.Read(identity.signature)) {
                 return std::nullopt;
             }
             return identity;

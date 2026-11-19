@@ -33,6 +33,20 @@ namespace Framework::Utils::Crypto {
 
         using CipherContext = std::unique_ptr<EVP_CIPHER_CTX, CipherContextDeleter>;
 
+        struct PkeyDeleter {
+            void operator()(EVP_PKEY *key) const {
+                EVP_PKEY_free(key);
+            }
+        };
+        struct MdContextDeleter {
+            void operator()(EVP_MD_CTX *ctx) const {
+                EVP_MD_CTX_free(ctx);
+            }
+        };
+
+        using Pkey      = std::unique_ptr<EVP_PKEY, PkeyDeleter>;
+        using MdContext = std::unique_ptr<EVP_MD_CTX, MdContextDeleter>;
+
         int HexValue(char c) {
             if (c >= '0' && c <= '9') {
                 return c - '0';
@@ -242,6 +256,32 @@ namespace Framework::Utils::Crypto {
         }
         EVP_MD_CTX_free(ctx);
         return ToHex(digest, digestLen);
+    }
+
+    bool DerivePublicKey(const SigningSeed &seed, PublicKey &outPublicKey) {
+        const Pkey key(EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seed.data(), seed.size()));
+        size_t length = outPublicKey.size();
+        return key && EVP_PKEY_get_raw_public_key(key.get(), outPublicKey.data(), &length) == 1 && length == outPublicKey.size();
+    }
+
+    bool Sign(const SigningSeed &seed, const void *message, size_t len, Signature &outSignature) {
+        const Pkey key(EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, seed.data(), seed.size()));
+        const MdContext ctx(EVP_MD_CTX_new());
+        if (!key || !ctx || EVP_DigestSignInit(ctx.get(), nullptr, nullptr, nullptr, key.get()) != 1) {
+            return false;
+        }
+        // Ed25519 is one-shot: no digest, the whole message in a single call.
+        size_t length = outSignature.size();
+        return EVP_DigestSign(ctx.get(), outSignature.data(), &length, static_cast<const uint8_t *>(message), len) == 1 && length == outSignature.size();
+    }
+
+    bool Verify(const PublicKey &publicKey, const void *message, size_t len, const Signature &signature) {
+        const Pkey key(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, publicKey.data(), publicKey.size()));
+        const MdContext ctx(EVP_MD_CTX_new());
+        if (!key || !ctx || EVP_DigestVerifyInit(ctx.get(), nullptr, nullptr, nullptr, key.get()) != 1) {
+            return false;
+        }
+        return EVP_DigestVerify(ctx.get(), signature.data(), signature.size(), static_cast<const uint8_t *>(message), len) == 1;
     }
 
     bool ConstantTimeEquals(const std::string &a, const std::string &b) {

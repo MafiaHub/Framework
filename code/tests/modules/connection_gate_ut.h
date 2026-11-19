@@ -50,7 +50,9 @@ class ConnectionGateTestRig {
         std::ofstream(ResourcesPath() + "/gate/main.js") << R"(
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             Events.on("playerConnecting", async (connection) => {
-                globalThis.__seen = `${connection.nickname}|${connection.ticket}|${connection.ip}|${connection.steamId}`;
+                let moved = "readable";
+                try { void connection.steamId; } catch (e) { moved = "throws"; }
+                globalThis.__seen = `${connection.nickname}|${connection.ticket}|${connection.ip}|${connection.accountId}|${connection.unverified.steamId}|${moved}|${Object.isFrozen(connection.unverified)}|${Object.keys(connection).includes("steamId")}`;
                 switch (connection.nickname) {
                 case "admit": return;
                 case "refuse": connection.reject("Not on the whitelist"); return;
@@ -131,7 +133,8 @@ class ConnectionGateTestRig {
     static Framework::Networking::RPC::ClientIdentity Identity(const char *nickname) {
         Framework::Networking::RPC::ClientIdentity identity;
         identity.name    = nickname;
-        identity.steamId = "76561198000000000";
+        identity.steamId   = "76561198000000000";
+        identity.publicKey = std::string(Framework::Networking::RPC::ClientIdentity::kPublicKeyLength, '\x01');
         identity.ticket  = "one-time-ticket";
         return identity;
     }
@@ -183,7 +186,8 @@ MODULE(connection_gate, {
         });
 
         IT("hands the handler the identity, the ticket and the address", {
-            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__seen").c_str(), "admit|one-time-ticket|10.0.0.2|76561198000000000");
+            // accountId is the first 128 bits of SHA-256 over the 32 0x01 bytes of the identity's key.
+            STREQUALS(Rig::EvalString(module.GetEngine(), "globalThis.__seen").c_str(), "admit|one-time-ticket|10.0.0.2|72cd6e8422c407fb6d098690f1130b7d|76561198000000000|throws|true|false");
         });
 
         IT("refuses with the script's reason", {

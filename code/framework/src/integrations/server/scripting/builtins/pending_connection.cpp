@@ -11,10 +11,20 @@
 #include "../../connection_gate.h"
 
 #include <core_modules.h>
+#include <networking/account_key.h>
+#include <scripting/builtins/player.h>
 #include <scripting/engine_helpers.h>
 #include <scripting/scripting_catalog.h>
 
+#include <mafianet/bit_stream.h>
+#include <scripting/value_transfer.h>
 #include <v8pp/convert.hpp>
+
+#include <cstring>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace Framework::Integrations::Server::Scripting::Builtins {
     namespace {
@@ -37,19 +47,72 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
             const auto attributes = static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
             target->DefineOwnProperty(context, v8pp::to_v8(isolate, name), value, attributes).Check();
         }
+
+        // What a connection is rebuilt from in another resource, held on the object where scripts cannot reach it.
+        v8::Local<v8::Private> TransferKey(v8::Isolate *isolate) {
+            return v8::Private::ForApi(isolate, v8pp::to_v8(isolate, "Framework::PendingConnection"));
+        }
+
+        std::string EncodeTransfer(uint64_t guid, const Framework::Networking::RPC::ClientIdentity &identity, const std::string &address) {
+            MafiaNet::BitStream bs;
+            bs.Write(guid);
+            bs.Write(address);
+            auto copy = identity;
+            bs.Write(copy.Encode());
+            return std::string(reinterpret_cast<const char *>(bs.GetData()), bs.GetNumberOfBytesUsed());
+        }
+
+        void RegisterTransfer() {
+            static bool registered = false;
+            if (std::exchange(registered, true)) {
+                return;
+            }
+            Framework::Scripting::ValueTransfer::RegisterHostType(
+                "PendingConnection",
+                [](v8::Isolate *isolate, v8::Local<v8::Object> object, std::vector<uint8_t> &bytes) {
+                    v8::Local<v8::Value> held;
+                    if (!object->GetPrivate(isolate->GetCurrentContext(), TransferKey(isolate)).ToLocal(&held) || !held->IsArrayBuffer()) {
+                        return false;
+                    }
+                    const std::shared_ptr<v8::BackingStore> store = held.As<v8::ArrayBuffer>()->GetBackingStore();
+                    const auto *data                              = static_cast<const uint8_t *>(store->Data());
+                    bytes.assign(data, data + store->ByteLength());
+                    return true;
+                },
+                [](v8::Isolate *isolate, v8::Local<v8::Context> context, const std::vector<uint8_t> &bytes) -> v8::MaybeLocal<v8::Value> {
+                    MafiaNet::BitStream bs(const_cast<unsigned char *>(bytes.data()), static_cast<unsigned int>(bytes.size()), false);
+                    uint64_t guid = 0;
+                    std::string address;
+                    std::string encoded;
+                    if (!bs.Read(guid) || !bs.Read(address) || !bs.Read(encoded)) {
+                        return {};
+                    }
+                    const auto identity = Framework::Networking::RPC::ClientIdentity::Decode(encoded);
+                    if (!identity) {
+                        return {};
+                    }
+                    return PendingConnection::Create(isolate, context, guid, *identity, address);
+                });
+        }
     } // namespace
 
     v8::Local<v8::Object> PendingConnection::Create(v8::Isolate *isolate, v8::Local<v8::Context> context, uint64_t guid, const Framework::Networking::RPC::ClientIdentity &identity, const std::string &address) {
         v8::EscapableHandleScope handleScope(isolate);
-        v8::Local<v8::Object> connection = v8::Object::New(isolate);
+        // One internal field: the value transfer only offers objects with one to its host types.
+        const v8::Local<v8::ObjectTemplate> shape = v8::ObjectTemplate::New(isolate);
+        shape->SetInternalFieldCount(1);
+        v8::Local<v8::Object> connection = shape->NewInstance(context).ToLocalChecked();
 
+        using Framework::Scripting::Builtins::Player;
         DefineValue(isolate, context, connection, "nickname", v8pp::to_v8(isolate, identity.name));
-        DefineValue(isolate, context, connection, "steamId", v8pp::to_v8(isolate, identity.steamId));
-        DefineValue(isolate, context, connection, "epicId", v8pp::to_v8(isolate, identity.epicId));
-        DefineValue(isolate, context, connection, "discordId", v8pp::to_v8(isolate, identity.discordId));
-        DefineValue(isolate, context, connection, "discordName", v8pp::to_v8(isolate, identity.discordName));
-        DefineValue(isolate, context, connection, "hardwareId", v8pp::to_v8(isolate, identity.hardwareId));
+        DefineValue(isolate, context, connection, "accountId", v8pp::to_v8(isolate, Framework::Networking::AccountIdOf(identity.publicKey)));
+        DefineValue(isolate, context, connection, "unverified", Player::NewUnverifiedIdentity(isolate, context, &identity));
         DefineValue(isolate, context, connection, "ticket", v8pp::to_v8(isolate, identity.ticket));
+        // Non-enumerable, so spreading or serialising the connection does not trip them.
+        for (const char *field : Player::kMovedIdentityFields) {
+            const v8::Local<v8::Function> getter = Player::MovedIdentityGetter(isolate, field)->GetFunction(context).ToLocalChecked();
+            connection->SetAccessorProperty(v8pp::to_v8(isolate, field).As<v8::Name>(), getter, v8::Local<v8::Function>(), static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::DontDelete));
+        }
         DefineValue(isolate, context, connection, "ip", v8pp::to_v8(isolate, address));
 
         const v8::Local<v8::BigInt> data = v8::BigInt::NewFromUnsigned(isolate, guid);
@@ -59,6 +122,11 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         method("reject", &PendingConnection::JS_Reject);
         method("update", &PendingConnection::JS_Update);
         method("isPending", &PendingConnection::JS_IsPending);
+
+        const std::string transfer              = EncodeTransfer(guid, identity, address);
+        std::shared_ptr<v8::BackingStore> store = v8::ArrayBuffer::NewBackingStore(isolate, transfer.size());
+        std::memcpy(store->Data(), transfer.data(), transfer.size());
+        connection->SetPrivate(context, TransferKey(isolate), v8::ArrayBuffer::New(isolate, store)).Check();
 
         return handleScope.Escape(connection);
     }
@@ -102,6 +170,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
     }
 
     void PendingConnection::Register(v8::Isolate *isolate) {
+        RegisterTransfer();
         auto &catalog = Framework::Scripting::GetScriptingCatalog(isolate);
 
         catalog.data_type("EventMap")
@@ -110,13 +179,12 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                 "handler has returned and every Promise a handler returned has settled, then it is let in if a player slot is free (otherwise it is refused as full). `connection.reject()` turns it away instead, and so does a handler "
                 "that throws or rejects, or handlers that have not settled within the server's admission timeout (30 seconds by default, restarted by every `connection.update()`). With no handler at all, every request is let in at once.");
 
-        auto &type = catalog.data_type("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.");
+        Framework::Scripting::Builtins::Player::DocumentUnverifiedIdentity(isolate);
+        auto &type = catalog.data_type("PendingConnection",
+            "A player asking to join, handed to `playerConnecting`. `accountId` is proven: the server checked the request was signed with that account's key before raising the event. Everything else is what the player's client says about itself.");
         type.add_property("nickname", "string", "The name the player asked to join under.", true);
-        type.add_property("steamId", "string", "Steam identifier the client reported, or an empty string when it had none.", true);
-        type.add_property("epicId", "string", "Epic Games account identifier the client reported, or an empty string when it had none.", true);
-        type.add_property("discordId", "string", "Discord identifier the client reported, or an empty string when it had none.", true);
-        type.add_property("discordName", "string", "Discord username the client reported, or an empty string when it had none.", true);
-        type.add_property("hardwareId", "string", "Framework hardware identifier the client reported, or an empty string when it had none.", true);
+        type.add_property("accountId", "string", "The account the player proved, as `player.accountId` will read once they are in. Check bans and whitelists against it.", true);
+        type.add_property("unverified", "UnverifiedIdentity", "The Steam, Epic and Discord ids, Discord name and hardware id the client reported. Not proof of anything; see UnverifiedIdentity.", true);
         type.add_property("ticket", "string",
             "The string the client was launched with, as the `ticket` of its launch link, or an empty string. The framework passes it through untouched; checking it -- against a one-time join ticket your own launcher or website issued, typically -- is "
             "the script's job.",
