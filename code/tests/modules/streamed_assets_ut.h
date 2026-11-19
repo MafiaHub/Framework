@@ -12,6 +12,7 @@
 #include "integrations/server/asset_paks/asset_pak_builder.h"
 #include "networking/rpc/server_resources.h"
 #include "utils/crypto.h"
+#include "utils/path.h"
 #include "utils/streamed_assets/pak_archive.h"
 #include "utils/streamed_assets/policy.h"
 #include "utils/streamed_assets/transfer.h"
