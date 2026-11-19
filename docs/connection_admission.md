@@ -91,6 +91,8 @@ and the request waits for all of them:
 | The account proof is missing, malformed or does not verify | refused: "Your client could not prove its account. Update it and try again." -- before any script runs |
 | The request was signed more than 5 minutes from the server's clock | refused, telling the player how far their clock is off |
 | The same signed request arrives twice | refused: "This connection request was already used. Try again." |
+| One IP address asks more than `connectionAttemptBurst` (16) times at once, then more than `connectionAttemptRate` (0.2) a second | refused: "Too many connection attempts from your address. Wait a minute and try again." -- before the signature is checked |
+| The server already remembers 65536 requests still inside their 5 minutes | refused: "The server is busy checking connections. Try again in a minute." -- a remembered request is never forgotten early, or it could be replayed |
 | No `playerConnecting` handler at all | admitted at once |
 
 The gate **fails closed**. Decisions are applied once per server tick, never
@@ -175,7 +177,9 @@ rather than cut.
 ## 7. Integrating a project
 
 - **Server**: nothing to do. `InstanceOptions::admissionTimeoutMs`,
-  `pendingConnections` and `pendingConnectionsPerAddress` tune it.
+  `pendingConnections` and `pendingConnectionsPerAddress` tune it, and
+  `connectionAttemptRate` / `connectionAttemptBurst` bound requests per address
+  (raise them when many players share one, as at a LAN event).
   `NetworkServer::SetSessionConfig` is still how a project publishes its session
   config; it is now sent with each accept.
 - **Client**: point `InstanceOptions::accountKeyPath` somewhere players do not

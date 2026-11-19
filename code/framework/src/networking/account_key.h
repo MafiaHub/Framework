@@ -11,6 +11,7 @@
 #include "rpc/client_identity.h"
 
 #include <utils/crypto.h>
+#include <utils/token_bucket.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -20,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 
 // A player's account is a key pair the client keeps, not an identifier it reports. Every id in
@@ -80,6 +82,7 @@ namespace Framework::Networking {
         ClockBehind,  // issued longer ago than the skew allows
         Replayed,     // this exact request was already let through
         Busy,         // every remembered request is still live: taking another would forget one
+        RateLimited,  // the request's address asked too often (AccountProofVerifier::Admit)
     };
 
     // The server's half. Thread-safe.
@@ -94,7 +97,21 @@ namespace Framework::Networking {
         // that would let it in again: a verifier full of live ones refuses new requests as Busy.
         static constexpr std::size_t kMaxRemembered = 65536;
 
-        explicit AccountProofVerifier(std::size_t capacity = kMaxRemembered): _capacity(capacity) {}
+        // Requests one address may start at once, then a second. A request is cheap to sign with a new
+        // key and nonce, so without this one address could fill the remembered requests and leave
+        // every other player Busy. At these rates one address holds at most ~140 live requests.
+        static constexpr double kSourceBurst = 16.0;
+        static constexpr double kSourceRate  = 0.2;
+
+        // Addresses tracked at most. Past it, addresses idle long enough to be full again are dropped;
+        // if that frees nothing, new addresses are refused until it does.
+        static constexpr std::size_t kMaxSources = 16384;
+
+        explicit AccountProofVerifier(std::size_t capacity = kMaxRemembered, double sourceRate = kSourceRate, double sourceBurst = kSourceBurst): _capacity(capacity), _sourceRate(sourceRate), _sourceBurst(sourceBurst) {}
+
+        // Called with the request's address before Verify, which it spares: false refuses the request
+        // as RateLimited, before its signature is checked or it is remembered.
+        bool Admit(const std::string &source, Utils::TokenBucket::Clock::time_point now = Utils::TokenBucket::Clock::now());
 
         AccountProofResult Verify(const RPC::ClientIdentity &identity, uint64_t nowUnix);
 
@@ -104,8 +121,16 @@ namespace Framework::Networking {
       private:
         void Forget(uint64_t nowUnix);
 
+        struct Source {
+            Utils::TokenBucket bucket;
+            Utils::TokenBucket::Clock::time_point lastSeen;
+        };
+
         const std::size_t _capacity;
+        const double _sourceRate;
+        const double _sourceBurst;
         std::mutex _mutex;
+        std::unordered_map<std::string, Source> _sources;
         std::unordered_set<std::string> _seen;
         std::multimap<uint64_t, std::string> _byExpiry; // the last second each request could pass
     };

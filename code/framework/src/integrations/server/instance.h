@@ -176,6 +176,12 @@ namespace Framework::Integrations::Server {
         uint16_t pendingConnections           = 32;
         uint16_t pendingConnectionsPerAddress = 4;
 
+        // Connection requests one IP address may make: `connectionAttemptBurst` at once, then
+        // `connectionAttemptRate` a second. Checked before anything else, the account signature
+        // included. Raise them for many players behind one address (a LAN event); 0 rate: unlimited.
+        double connectionAttemptRate  = Framework::Networking::AccountProofVerifier::kSourceRate;
+        double connectionAttemptBurst = Framework::Networking::AccountProofVerifier::kSourceBurst;
+
         // MafiaHub Services
         struct Services {
             std::string apiUrl        = "https://api.mafiahub.dev";
@@ -290,8 +296,9 @@ namespace Framework::Integrations::Server {
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;
-        // Checks the account signature on every connection request, before the gate sees it.
-        Framework::Networking::AccountProofVerifier _accountProofs;
+        // Checks the account signature on every connection request, before the gate sees it. Built in
+        // Init, from the options' attempt limits.
+        std::optional<Framework::Networking::AccountProofVerifier> _accountProofs;
         // Reused every tick so the drain never allocates.
         std::vector<AdmissionDecision> _admissionDecisions;
 

@@ -372,6 +372,7 @@ namespace ServerPacketThreadTest {
             opts.backgroundThreads  = 1;
             // Several clients of the storm come from this one address at once.
             opts.pendingConnectionsPerAddress = 16;
+            opts.connectionAttemptBurst       = 1000.0;
             if (eventLimits[0] >= 0.0) {
                 opts.clientEventRate       = eventLimits[0];
                 opts.clientEventBurst      = eventLimits[1];

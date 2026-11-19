@@ -249,6 +249,7 @@ namespace Framework::Integrations::Server {
         Framework::Networking::AdmissionSettings admission;
         admission.pendingConnections           = _opts.pendingConnections;
         admission.pendingConnectionsPerAddress = _opts.pendingConnectionsPerAddress;
+        _accountProofs.emplace(Framework::Networking::AccountProofVerifier::kMaxRemembered, _opts.connectionAttemptRate, _opts.connectionAttemptBurst);
         admission.sessionTimeoutMs             = static_cast<uint32_t>(std::max(_opts.admissionTimeoutMs, 1)) + kAdmissionTimeoutMarginMs;
         // Downloading connections live beside the player slots: the transport takes them all, the join
         // (ClientJoin) is where maxPlayers is enforced.
@@ -972,8 +973,9 @@ namespace Framework::Integrations::Server {
 
         // The account first, on the request exactly as it arrived: sanitizing below rewrites fields
         // the signature covers. Nothing about a request that fails is worth a script's time.
+        // Its address first of all, so one address cannot spend the checks or fill what they remember.
         const auto now          = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-        const auto accountProof = _accountProofs.Verify(*request, now);
+        const auto accountProof = _accountProofs->Admit(net->GetAddress(guid)) ? _accountProofs->Verify(*request, now) : Framework::Networking::AccountProofResult::RateLimited;
         if (accountProof != Framework::Networking::AccountProofResult::Valid) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Refusing a connection request from guid {}: account proof failed ({})", guid.g, static_cast<int>(accountProof));
             net->RejectSession(guid, Framework::Networking::AccountProofVerifier::RefusalFor(accountProof, *request, now).c_str());

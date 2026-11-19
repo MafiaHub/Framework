@@ -11,6 +11,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -126,6 +127,21 @@ namespace Framework::Networking {
 
         // Moves the staged key into place only if there is no key there yet, in one step: the first key
         // to land is the account, whoever wrote it. Exists when another process got there first.
+        // Commits a directory's entries, so a name just made in it survives a crash. fsync() on a file
+        // does not. Windows has no equivalent to call: its write-through move commits the entry itself.
+        bool SyncDirectory([[maybe_unused]] const std::filesystem::path &directory) {
+#ifdef _WIN32
+            return true;
+#else
+            const int handle = open(directory.empty() ? "." : directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+            if (handle < 0) {
+                return false;
+            }
+            const bool synced = fsync(handle) == 0;
+            return close(handle) == 0 && synced;
+#endif
+        }
+
         WriteResult Publish(const std::filesystem::path &staging, const std::filesystem::path &path) {
 #ifdef _WIN32
             // Without MOVEFILE_REPLACE_EXISTING the move fails on an existing target; the DACL moves with it.
@@ -135,9 +151,10 @@ namespace Framework::Networking {
             const DWORD error = GetLastError();
             return error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS ? WriteResult::Exists : WriteResult::Failed;
 #else
-            // link() never replaces; there is no fallback to rename(), which would.
+            // link() never replaces; there is no fallback to rename(), which would. The new name is only
+            // durable once its directory is synced: a crash before that would cost the player the account.
             if (link(staging.c_str(), path.c_str()) == 0) {
-                return WriteResult::Written;
+                return SyncDirectory(path.parent_path()) ? WriteResult::Written : WriteResult::Failed;
             }
             return errno == EEXIST ? WriteResult::Exists : WriteResult::Failed;
 #endif
@@ -148,10 +165,24 @@ namespace Framework::Networking {
         WriteResult WriteKeyFile(const std::filesystem::path &path, const Utils::Crypto::SigningSeed &seed, std::string &outError) {
             std::error_code code;
             if (path.has_parent_path()) {
+                // Each folder this creates is a new entry in its parent, synced there like the key itself.
+                std::vector<std::filesystem::path> created;
+                for (auto folder = path.parent_path(); !folder.empty() && !std::filesystem::exists(folder, code); folder = folder.parent_path()) {
+                    created.push_back(folder);
+                    if (folder == folder.parent_path()) {
+                        break;
+                    }
+                }
                 std::filesystem::create_directories(path.parent_path(), code);
                 if (code) {
                     outError = fmt::format("could not create {}: {}", AccountKeyPathText(path.parent_path()), code.message());
                     return WriteResult::Failed;
+                }
+                for (const auto &folder : created) {
+                    if (!SyncDirectory(folder.parent_path())) {
+                        outError = fmt::format("could not commit {} to disk", AccountKeyPathText(folder));
+                        return WriteResult::Failed;
+                    }
                 }
             }
 
@@ -176,7 +207,7 @@ namespace Framework::Networking {
             // Gone after a move, still there after a link or a failure.
             std::filesystem::remove(staging, ignored);
             if (published == WriteResult::Failed) {
-                outError = fmt::format("could not move the new key to {}", AccountKeyPathText(path));
+                outError = fmt::format("could not put the new key in place at {}", AccountKeyPathText(path));
             }
             return published;
         }
@@ -271,6 +302,26 @@ namespace Framework::Networking {
         return true;
     }
 
+    bool AccountProofVerifier::Admit(const std::string &source, Utils::TokenBucket::Clock::time_point now) {
+        const std::lock_guard guard(_mutex);
+        auto it = _sources.find(source);
+        if (it == _sources.end()) {
+            if (_sources.size() >= kMaxSources) {
+                // An address idle this long has refilled: forgetting it loses nothing.
+                const auto refilled = std::chrono::duration_cast<Utils::TokenBucket::Clock::duration>(std::chrono::duration<double>(_sourceRate > 0.0 ? _sourceBurst / _sourceRate : 0.0));
+                std::erase_if(_sources, [&](const auto &entry) {
+                    return now - entry.second.lastSeen >= refilled;
+                });
+                if (_sources.size() >= kMaxSources) {
+                    return false;
+                }
+            }
+            it = _sources.emplace(source, Source {Utils::TokenBucket(_sourceRate, _sourceBurst, now), now}).first;
+        }
+        it->second.lastSeen = now;
+        return it->second.bucket.Take(now);
+    }
+
     AccountProofResult AccountProofVerifier::Verify(const RPC::ClientIdentity &identity, uint64_t nowUnix) {
         if (identity.publicKey.empty() || identity.signature.empty()) {
             return AccountProofResult::Missing;
@@ -329,6 +380,7 @@ namespace Framework::Networking {
         }
         case AccountProofResult::Replayed: return "This connection request was already used. Try again.";
         case AccountProofResult::Busy: return "The server is busy checking connections. Try again in a minute.";
+        case AccountProofResult::RateLimited: return "Too many connection attempts from your address. Wait a minute and try again.";
         case AccountProofResult::Missing:
         case AccountProofResult::Malformed:
         case AccountProofResult::BadSignature: break;

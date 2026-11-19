@@ -25,6 +25,7 @@
 #include <iterator>
 #include <optional>
 #include <string>
+#include <vector>
 
 // A player's account is the key that signs their connection request. What has to hold: only that
 // key's holder produces a request the server takes, any field changed on the way is caught, a
@@ -58,19 +59,56 @@ class AccountKeyTestRig {
         }
     };
 
-    // Created owner-only: a protected DACL on Windows, so nothing the folder grants is inherited;
-    // mode 0600 elsewhere, whatever the umask.
+    // Created owner-only: on Windows a protected DACL (nothing the folder grants is inherited) whose
+    // every grant is to this user or SYSTEM; mode 0600 elsewhere, whatever the umask.
     static bool OwnerOnly(const std::filesystem::path &path) {
 #ifdef _WIN32
+        std::vector<uint8_t> user;
+        {
+            HANDLE token = nullptr;
+            if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+                return false;
+            }
+            DWORD size = 0;
+            GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+            user.resize(size);
+            const bool ok = size > 0 && GetTokenInformation(token, TokenUser, user.data(), size, &size);
+            CloseHandle(token);
+            if (!ok) {
+                return false;
+            }
+        }
+        const PSID userSid = reinterpret_cast<TOKEN_USER *>(user.data())->User.Sid;
+        uint8_t system[SECURITY_MAX_SID_SIZE] {};
+        DWORD systemSize = sizeof(system);
+        if (!CreateWellKnownSid(WinLocalSystemSid, nullptr, system, &systemSize)) {
+            return false;
+        }
+
         PSECURITY_DESCRIPTOR descriptor = nullptr;
-        if (GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, nullptr, nullptr, &descriptor) != ERROR_SUCCESS) {
+        PACL dacl                       = nullptr;
+        if (GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl, nullptr, &descriptor) != ERROR_SUCCESS) {
             return false;
         }
         SECURITY_DESCRIPTOR_CONTROL control = 0;
         DWORD revision                      = 0;
-        const bool isProtected              = GetSecurityDescriptorControl(descriptor, &control, &revision) && (control & SE_DACL_PROTECTED) != 0;
+        bool ownerOnly                      = dacl != nullptr && GetSecurityDescriptorControl(descriptor, &control, &revision) && (control & SE_DACL_PROTECTED) != 0;
+        bool userGranted                    = false;
+        for (DWORD i = 0; ownerOnly && i < dacl->AceCount; ++i) {
+            ACE_HEADER *ace = nullptr;
+            if (!GetAce(dacl, i, reinterpret_cast<void **>(&ace))) {
+                ownerOnly = false;
+                break;
+            }
+            if (ace->AceType != ACCESS_ALLOWED_ACE_TYPE) {
+                continue;
+            }
+            const PSID grantee = &reinterpret_cast<ACCESS_ALLOWED_ACE *>(ace)->SidStart;
+            userGranted        = userGranted || EqualSid(grantee, userSid);
+            ownerOnly          = EqualSid(grantee, userSid) || EqualSid(grantee, system);
+        }
         LocalFree(descriptor);
-        return isProtected;
+        return ownerOnly && userGranted;
 #else
         return std::filesystem::status(path).permissions() == (std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
 #endif
@@ -225,6 +263,22 @@ MODULE(account_key, {
         EQUALS(verifier.Verify(identity, kNow) == AccountProofResult::Valid, true);
         // Forgotten only once its clock window has closed, so the replay is refused as stale.
         EQUALS(verifier.Verify(identity, kNow + AccountProofVerifier::kMaxClockSkewSeconds + 1) == AccountProofResult::ClockBehind, true);
+    });
+
+    IT("limits how often one address may ask, and no other address with it", {
+        using Clock = Framework::Utils::TokenBucket::Clock;
+        const Clock::time_point start {};
+        AccountProofVerifier verifier(AccountProofVerifier::kMaxRemembered, 1.0, 3.0);
+        EQUALS(verifier.Admit("10.0.0.1", start), true);
+        EQUALS(verifier.Admit("10.0.0.1", start), true);
+        EQUALS(verifier.Admit("10.0.0.1", start), true);
+        EQUALS(verifier.Admit("10.0.0.1", start), false);
+        // Another address has its own allowance.
+        EQUALS(verifier.Admit("10.0.0.2", start), true);
+        // The first earns one back a second later.
+        EQUALS(verifier.Admit("10.0.0.1", start + std::chrono::seconds(1)), true);
+        EQUALS(verifier.Admit("10.0.0.1", start + std::chrono::seconds(1)), false);
+        STREQUALS(AccountProofVerifier::RefusalFor(AccountProofResult::RateLimited, Rig::Identity(), kNow).c_str(), "Too many connection attempts from your address. Wait a minute and try again.");
     });
 
     IT("refuses as busy rather than forget a request that could still be replayed", {
