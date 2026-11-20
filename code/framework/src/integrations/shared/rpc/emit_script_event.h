@@ -46,7 +46,13 @@ namespace Framework::Integrations::Shared::RPC {
         }
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
-            // A field over its limit leaves both empty, which every receiver drops on the empty name.
+            // Senders check Fits first. One that did not sends a whole empty event, never a name without
+            // its payload; receivers drop it on the empty name.
+            if (write && !Fits(eventName, payload)) {
+                eventName.clear();
+                payload.clear();
+            }
+            // On a read, a field over its limit leaves both empty the same way.
             if (!SerializeField(bs, write, eventName, kMaxNameBytes) || !SerializeField(bs, write, payload, kMaxPayloadBytes)) {
                 eventName.clear();
                 payload.clear();
@@ -64,14 +70,13 @@ namespace Framework::Integrations::Shared::RPC {
       private:
         static bool SerializeField(MafiaNet::BitStream *bs, bool write, std::string &value, size_t limit) {
             if (write) {
-                // Senders check Fits first; this keeps the announced length and the body in step.
-                const auto length = static_cast<uint32_t>(value.size() <= limit ? value.size() : 0);
+                const auto length = static_cast<uint32_t>(value.size());
                 bs->Write(length);
                 // Only when there are bytes: an empty write still aligns, an empty read does not.
                 if (length > 0) {
                     bs->WriteAlignedBytes(reinterpret_cast<const unsigned char *>(value.data()), length);
                 }
-                return length == value.size();
+                return true;
             }
             uint32_t length = 0;
             if (!bs->Read(length) || length > limit) {
