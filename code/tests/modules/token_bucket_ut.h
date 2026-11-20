@@ -55,6 +55,18 @@ MODULE(token_bucket, {
         EQUALS(byDefault.Take(), true);
     });
 
+    IT("takes a cost of several tokens at once, and never one over its burst", {
+        const TokenBucket::Clock::time_point start {};
+        TokenBucket bucket(100.0, 1000.0, start);
+        EQUALS(bucket.Take(600.0, start), true);
+        EQUALS(bucket.Take(600.0, start), false);
+        EQUALS(bucket.Take(400.0, start), true);
+        // Two seconds refill two hundred.
+        EQUALS(bucket.Take(200.0, start + 2s), true);
+        EQUALS(bucket.Take(1.0, start + 2s), false);
+        EQUALS(bucket.Take(1001.0, start + 1h), false);
+    });
+
     IT("is not set back by a clock reading older than its last", {
         const TokenBucket::Clock::time_point start {};
         TokenBucket bucket(1.0, 1.0, start + 10s);
