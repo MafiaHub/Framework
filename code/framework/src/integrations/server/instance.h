@@ -109,6 +109,12 @@ namespace Framework::Integrations::Server {
         double clientEventBurst      = 200.0;
         double clientEventFloodRate  = 75.0;
         double clientEventFloodBurst = 300.0;
+        // The bytes those events may carry, names and payloads together: `clientEventByteRate` a second,
+        // bursts of up to `clientEventByteBurst`. Parsing them is the script thread's time. An event over
+        // it is dropped and counts against the flood limit like one over the event rate. Keep the burst
+        // at least EmitScriptEvent::kMaxPayloadBytes, or the largest events never get through.
+        double clientEventByteRate  = 1024.0 * 1024.0;
+        double clientEventByteBurst = 4.0 * 1024.0 * 1024.0;
 
         // Threads beside the tick thread (server.json "replication-threads" and "background-threads", or
         // the flags of the same names). Negative, the default, sizes them to the host's cores (see
@@ -282,6 +288,7 @@ namespace Framework::Integrations::Server {
         // where the events are handled and forgotten where the disconnection is.
         struct ClientEventLimit {
             Utils::TokenBucket events;
+            Utils::TokenBucket bytes;
             Utils::TokenBucket flood;
             // Dropped for flooding: what it had already sent is still in the queue, and gets nowhere.
             bool dropped = false;
@@ -292,7 +299,7 @@ namespace Framework::Integrations::Server {
         std::chrono::steady_clock::time_point _nextClientEventWarning {};
         // Whether this event of that connection may go on to the scripts; drops the connection when
         // it floods.
-        bool AllowClientEvent(Framework::Networking::Sender sender);
+        bool AllowClientEvent(Framework::Networking::Sender sender, size_t bytes);
 
         // Holds each authenticated connection until the playerConnecting handlers answer.
         ConnectionGate _connectionGate;

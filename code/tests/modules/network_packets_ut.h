@@ -9,6 +9,7 @@
 #pragma once
 
 #include "connection_admission_ut.h"
+#include "integrations/shared/rpc/emit_script_event.h"
 #include "networking/network_client.h"
 #include "networking/network_peer.h"
 #include "networking/network_server.h"
@@ -773,6 +774,76 @@ MODULE(network_packets, {
 
     IT("refuses a payload from something that is not a framework client", {
         EQUALS(RPC::ClientIdentity::Decode("{\"build\":\"m2o|1.2.3\"}").has_value(), false);
+    });
+
+    // RakString's 16-bit length once cut these: 65536 bytes came out empty, 70000 as its first 4464.
+    IT("round-trips script events past 64 KiB, up to the limit", {
+        using Framework::Integrations::Shared::RPC::EmitScriptEvent;
+        for (const size_t size : {size_t {0}, size_t {65535}, size_t {65536}, size_t {70000}, size_t {131072}, EmitScriptEvent::kMaxPayloadBytes}) {
+            std::string json = "\"" + std::string(size >= 2 ? size - 2 : 0, 'x') + "\"";
+            json.resize(size);
+            EmitScriptEvent out;
+            out.FromParameters("hmp:save", json);
+            MafiaNet::BitStream bs;
+            out.Serialize(&bs, true);
+            EmitScriptEvent in;
+            EQUALS(RPC::ReadChecked(&bs, in), true);
+            STREQUALS(in.GetEventName().c_str(), "hmp:save");
+            EQUALS(in.GetPayload().size(), size);
+            EQUALS(in.GetPayload() == json, true);
+        }
+    });
+
+    IT("says an event over a limit does not fit", {
+        using Framework::Integrations::Shared::RPC::EmitScriptEvent;
+        EQUALS(EmitScriptEvent::Fits("e", std::string(EmitScriptEvent::kMaxPayloadBytes, 'x')), true);
+        EQUALS(EmitScriptEvent::Fits("e", std::string(EmitScriptEvent::kMaxPayloadBytes + 1, 'x')), false);
+        EQUALS(EmitScriptEvent::Fits(std::string(EmitScriptEvent::kMaxNameBytes + 1, 'e'), "{}"), false);
+    });
+
+    IT("never sends part of an event over the limit", {
+        using Framework::Integrations::Shared::RPC::EmitScriptEvent;
+        EmitScriptEvent out;
+        out.FromParameters("e", std::string(EmitScriptEvent::kMaxPayloadBytes + 1, 'x'));
+        MafiaNet::BitStream bs;
+        out.Serialize(&bs, true);
+        EmitScriptEvent in;
+        EQUALS(RPC::ReadChecked(&bs, in), true);
+        EQUALS(in.GetEventName().empty() && in.GetPayload().empty(), true);
+    });
+
+    IT("refuses a script event whose length is over the limit or past what was sent", {
+        using Framework::Integrations::Shared::RPC::EmitScriptEvent;
+        {
+            // Announces 4 GiB: nothing is allocated, and the event comes out empty, which receivers drop.
+            MafiaNet::BitStream bs;
+            bs.Write(uint32_t {1});
+            bs.WriteAlignedBytes(reinterpret_cast<const unsigned char *>("e"), 1);
+            bs.Write(uint32_t {0xFFFFFFFF});
+            EmitScriptEvent in;
+            RPC::ReadChecked(&bs, in);
+            EQUALS(in.GetEventName().empty() && in.GetPayload().empty(), true);
+        }
+        {
+            // Announces a megabyte and carries ten bytes: the server's check sees the read run past the end.
+            MafiaNet::BitStream bs;
+            bs.Write(uint32_t {1});
+            bs.WriteAlignedBytes(reinterpret_cast<const unsigned char *>("e"), 1);
+            bs.Write(static_cast<uint32_t>(EmitScriptEvent::kMaxPayloadBytes));
+            bs.WriteAlignedBytes(reinterpret_cast<const unsigned char *>("0123456789"), 10);
+            EmitScriptEvent in;
+            EQUALS(RPC::ReadChecked(&bs, in), false);
+        }
+        {
+            // The same on the client, which decodes without the check: the read fails and leaves nothing.
+            MafiaNet::BitStream bs;
+            bs.Write(uint32_t {1});
+            bs.WriteAlignedBytes(reinterpret_cast<const unsigned char *>("e"), 1);
+            bs.Write(uint32_t {4096});
+            bs.WriteAlignedBytes(reinterpret_cast<const unsigned char *>("0123456789"), 10);
+            const EmitScriptEvent in = RPC::Read<EmitScriptEvent>(&bs);
+            EQUALS(in.GetEventName().empty() && in.GetPayload().empty(), true);
+        }
     });
 
     IT("round-trips a ServerResources payload with a resource list", {

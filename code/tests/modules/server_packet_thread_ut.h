@@ -130,12 +130,17 @@ namespace ServerPacketThreadTest {
         std::atomic<bool> claimForDemo {false};
         // Set before Start to replace the script-event limits: rate, burst, flood rate, flood burst.
         double eventLimits[4] = {-1.0, -1.0, -1.0, -1.0};
+        // Set before Start to replace the byte limit on script events: rate, burst.
+        double eventByteLimits[2] = {-1.0, -1.0};
         // Connection requests one address may make at once; high, since every test client shares one.
         double attemptBurst = 1000.0;
         // Client script events that got past the limit to where scripts handle them.
         std::atomic<int> clientEvents {0};
+        // The payload size of the last of them.
+        std::atomic<size_t> clientEventBytes {0};
 
-        void OnClientEvent(uint64_t, const std::string &, const std::string &) override {
+        void OnClientEvent(uint64_t, const std::string &, const std::string &payloadJson) override {
+            clientEventBytes = payloadJson.size();
             ++clientEvents;
         }
 
@@ -381,6 +386,10 @@ namespace ServerPacketThreadTest {
                 opts.clientEventFloodRate  = eventLimits[2];
                 opts.clientEventFloodBurst = eventLimits[3];
             }
+            if (eventByteLimits[0] >= 0.0) {
+                opts.clientEventByteRate  = eventByteLimits[0];
+                opts.clientEventByteBurst = eventByteLimits[1];
+            }
             opts.argc                         = 1;
             opts.argv                         = argv;
             auto result                       = Init(opts);
@@ -516,9 +525,9 @@ namespace ServerPacketThreadTest {
         }
 
         // A script event, as Events.emitServer sends one.
-        void Emit(const std::string &name) {
+        void Emit(const std::string &name, const std::string &payloadJson = "{}") {
             Framework::Integrations::Shared::RPC::EmitScriptEvent event;
-            event.FromParameters(name, "{}");
+            event.FromParameters(name, payloadJson);
             net.SendRPC(event, server);
         }
 
@@ -1228,6 +1237,44 @@ MODULE(server_packet_thread, {
         EQUALS(static_cast<uint64_t>(handled) + cut, static_cast<uint64_t>(70));
         EQUALS(noisy.disconnected, false);
         EQUALS(quiet.disconnected, false);
+        server.Stop();
+    });
+
+    IT("carries a script event past 64 KiB whole, and cuts a client over its byte budget", {
+        Server server;
+        // Two of the large events at once and none more for a while; the event count is no limit here.
+        server.eventByteLimits[0] = 1.0;
+        server.eventByteLimits[1] = 450000.0;
+        server.eventLimits[0]     = 100.0;
+        server.eventLimits[1]     = 100.0;
+        server.eventLimits[2]     = 1.0;
+        server.eventLimits[3]     = 1000.0;
+        const bool up             = server.Start("fw_packet_thread_event_bytes");
+        EQUALS(up, true);
+        if (!up) {
+            break;
+        }
+        Client client;
+        const bool in = Join(server, client);
+        EQUALS(in, true);
+        if (!in) {
+            break;
+        }
+        // RakString's 16-bit length once sent only the first 3392 bytes of this.
+        const std::string large = "\"" + std::string(199998, 'x') + "\"";
+        for (int i = 0; i < 3; ++i) {
+            client.Emit("save", large);
+        }
+        client.Send<Ping>(1);
+        EQUALS(Pump(server, {&client}, [&] {
+            return !client.pongs.empty();
+        }),
+            true);
+        PumpFor(server, {&client}, 100ms);
+        EQUALS(server.clientEvents.load(), 2);
+        EQUALS(server.clientEventBytes.load(), large.size());
+        EQUALS(server.ClientEventsDropped(), uint64_t {1});
+        EQUALS(client.disconnected, false);
         server.Stop();
     });
 

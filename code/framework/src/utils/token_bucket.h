@@ -24,6 +24,11 @@ namespace Framework::Utils {
 
         // Takes a token if there is one.
         bool Take(Clock::time_point now = Clock::now()) {
+            return Take(1.0, now);
+        }
+
+        // Takes `cost` tokens if there are that many; a cost over the burst never fits.
+        bool Take(double cost, Clock::time_point now = Clock::now()) {
             if (_rate <= 0.0) {
                 return true;
             }
@@ -31,10 +36,10 @@ namespace Framework::Utils {
                 _tokens = std::min(_burst, _tokens + std::chrono::duration<double>(now - _last).count() * _rate);
                 _last   = now;
             }
-            if (_tokens < 1.0) {
+            if (_tokens < cost) {
                 return false;
             }
-            _tokens -= 1.0;
+            _tokens -= cost;
             return true;
         }
 
