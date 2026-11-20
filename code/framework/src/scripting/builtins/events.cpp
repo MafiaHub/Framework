@@ -16,6 +16,7 @@
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
+#include <fmt/format.h>
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <logging/logger.h>
 #include <networking/network_peer.h>
@@ -185,13 +186,13 @@ namespace Framework::Scripting::Builtins {
             v8pp::metadata::docs("number", {v8pp::metadata::param("eventName", "string", false, "Shared event name to inspect.")}, "Counts persistent and one-shot shared handlers across resources.", "Number of matching handlers.")));
         if (isClient) {
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitServer",
-                v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Server-side client-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional payload. A string is sent as is and must already be JSON text: the server parses it and drops an event that does not parse. Other values are JSON-serialized.")},
-                    "Sends a named event from this client to the server's isolated onClient handlers.")));
+                v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Server-side client-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional payload. A string is sent as is and must already be JSON text: the server parses it and drops an event that does not parse. Other values are JSON-serialized. At most 1 MiB once serialized.")},
+                    "Sends a named event from this client to the server's isolated onClient handlers. Throws a RangeError when the name is over 1 KiB or the payload over 1 MiB.")));
         }
         else {
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("emitAllClients",
-                v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client shared-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional payload. A string is sent as is and must already be JSON text: each client parses it and drops an event that does not parse. Other values are JSON-serialized.")},
-                    "Broadcasts a named event to every connected client's shared Events handlers.")));
+                v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client shared-event name."), v8pp::metadata::param("payload", "unknown", true, "Optional payload. A string is sent as is and must already be JSON text: each client parses it and drops an event that does not parse. Other values are JSON-serialized. At most 1 MiB once serialized.")},
+                    "Broadcasts a named event to every connected client's shared Events handlers. Throws a RangeError when the name is over 1 KiB or the payload over 1 MiB.")));
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onClient",
                 clientHandlerDocs("Unsubscribe", "Registers a persistent server handler for events originating from clients; this namespace is isolated from native events.", "Function that removes this exact subscription.")));
             metadata.record(v8pp::metadata::function_of<v8::FunctionCallback>("onceClient", clientHandlerDocs("void", "Registers a one-shot server handler for a client-originated event.")));
@@ -250,13 +251,19 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
+        using Framework::Integrations::Shared::RPC::EmitScriptEvent;
+        if (!EmitScriptEvent::Fits(eventName, payload)) {
+            isolate->ThrowException(v8::Exception::RangeError(v8pp::to_v8(isolate, fmt::format("Events.{}: event '{}' is too large to send ({} byte name, {} byte payload; the limits are {} and {})", api, eventName.substr(0, 64), eventName.size(), payload.size(), EmitScriptEvent::kMaxNameBytes, EmitScriptEvent::kMaxPayloadBytes))));
+            return;
+        }
+
         auto *peer = CoreModules::GetNetworkPeer();
         if (!peer) {
             // Missing subsystem is a state error, not a stale receiver — throw (README idiom).
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, std::string("Events.") + api + ": network peer unavailable")));
             return;
         }
-        Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
+        EmitScriptEvent ev;
         ev.FromParameters(eventName, payload);
         peer->BroadcastRPC(ev);
     }
