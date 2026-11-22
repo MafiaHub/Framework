@@ -63,10 +63,16 @@ in a **pending pool** beside the player slots:
 - `maxPlayers` bounds connected players only. Waiting requests are not counted
   by `NumberOfConnections()`, so neither the masterlist nor the console shows
   them.
-- The pool bounds how many requests may wait (`pendingConnections`, 32 by
+- The pool bounds how many requests may wait (`pending-connections`, 32 by
   default) and how many one IP address may hold
-  (`pendingConnectionsPerAddress`, 4). A flood of stalled handshakes fills the
-  pool and is refused there; players keep their slots.
+  (`pending-connections-per-address`, 4; 0 for no bound). Both are config and
+  command-line keys (`InstanceOptions::pendingConnections`,
+  `pendingConnectionsPerAddress`). A flood of stalled handshakes fills the pool
+  and is refused there; players keep their slots.
+- The pool also bounds a script's queue: every queued player holds a place in
+  it, beside the handshakes still in flight, and players behind one address
+  share that address's bound. Each place reserves memory when the server
+  starts, as a player slot does.
 - A request may start while the server is full, which is what lets a script
   queue people. Letting one in still needs a free slot: a full server refuses it
   with "The server is full." -- and MafiaNet refuses an accept past

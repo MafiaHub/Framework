@@ -146,6 +146,17 @@ MODULE(connection_admission, {
         STREQUALS(rig.client->GetPeer()->GetMyBoundAddress().ToString(false), "127.0.0.1");
     });
 
+    IT("refuses a pending pool that is off or does not fit beside the player slots", {
+        Framework::Networking::AdmissionSettings admission;
+        admission.pendingConnections = 0;
+        Framework::Networking::NetworkServer withoutPool;
+        EQUALS(static_cast<bool>(withoutPool.Init("127.0.0.1", 42000, 2, "", admission)), false);
+
+        admission.pendingConnections = 65534;
+        Framework::Networking::NetworkServer pastIndexRange;
+        EQUALS(static_cast<bool>(pastIndexRange.Init("127.0.0.1", 42000, 2, "", admission)), false);
+    });
+
     IT("hands the server the identity and ticket the client connected with, before any connection", {
         Rig rig;
         EQUALS(rig.StartServer(true), true);

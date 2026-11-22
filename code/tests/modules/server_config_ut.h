@@ -13,6 +13,7 @@
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -204,6 +205,40 @@ MODULE(server_config, {
         EQUALS(resolve({}, {}).slowPacketHandlerWarnMs, 10);
         EQUALS(resolve({{"slow-packet-handler-ms", 0}}, {}).slowPacketHandlerWarnMs, 0);
         EQUALS(resolve({{"slow-packet-handler-ms", 25}}, {}).slowPacketHandlerWarnMs, 25);
+    });
+
+    IT("reads the pending-connection pool from the document and the command line", {
+        const auto defaults = resolve(nlohmann::json::object(), {});
+        EQUALS(defaults.pendingConnections, 32);
+        EQUALS(defaults.pendingConnectionsPerAddress, 4);
+
+        const auto fromFile = resolve({{"pending-connections", 64}, {"pending-connections-per-address", 0}}, {});
+        EQUALS(fromFile.pendingConnections, 64);
+        EQUALS(fromFile.pendingConnectionsPerAddress, 0);
+
+        const auto fromLine = resolve({{"pending-connections", 64}}, {"--pending-connections", "128", "--pending-connections-per-address", "8"});
+        EQUALS(fromLine.pendingConnections, 128);
+        EQUALS(fromLine.pendingConnectionsPerAddress, 8);
+    });
+
+    // Narrowed first, 4294967297 would have become 1 and passed Init's check.
+    IT("refuses a pool size in the document that MafiaNet cannot hold", {
+        const auto refuses = [&](const nlohmann::json &document) {
+            try {
+                resolve(document, {});
+            }
+            catch (const std::out_of_range &) {
+                return true;
+            }
+            return false;
+        };
+        EQUALS(refuses(nlohmann::json::parse(R"({"pending-connections": 4294967297})")), true);
+        EQUALS(refuses(nlohmann::json::parse(R"({"pending-connections-per-address": 18446744073709551615})")), true);
+        EQUALS(refuses({{"pending-connections", 70000}}), true);
+        EQUALS(refuses({{"pending-connections", 0}}), true);
+        EQUALS(refuses({{"pending-connections", 2.5}}), true);
+        EQUALS(refuses({{"pending-connections-per-address", -1}}), true);
+        EQUALS(refuses({{"pending-connections", 65535}, {"pending-connections-per-address", 0}}), false);
     });
 
     IT("leaves the thread counts to the machine unless the operator pins them", {
