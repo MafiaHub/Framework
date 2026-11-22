@@ -10,6 +10,7 @@
 #include "../scripting_catalog.h"
 
 #include <core_modules.h>
+#include <fmt/format.h>
 #include <integrations/shared/rpc/emit_script_event.h>
 #include <networking/account_key.h>
 #include <networking/network_peer.h>
@@ -18,6 +19,7 @@
 #include <utils/string_utils.h>
 
 #include <sstream>
+#include <stdexcept>
 
 namespace Framework::Scripting::Builtins {
     void Player::Kick(const std::string &reason) {
@@ -35,6 +37,10 @@ namespace Framework::Scripting::Builtins {
     void Player::Emit(const std::string &eventName, const std::string &payloadJson) {
         if (eventName.empty()) {
             return;
+        }
+        using Framework::Integrations::Shared::RPC::EmitScriptEvent;
+        if (!EmitScriptEvent::Fits(eventName, payloadJson)) {
+            throw std::length_error(fmt::format("Player.emit: event '{}' is too large to send ({} byte name, {} byte payload; the limits are {} and {})", eventName.substr(0, 64), eventName.size(), payloadJson.size(), EmitScriptEvent::kMaxNameBytes, EmitScriptEvent::kMaxPayloadBytes));
         }
         MafiaNet::PeerGuid owner = MafiaNet::UNASSIGNED_PEER_GUID;
         if (!ResolveOwner(owner)) {
@@ -186,8 +192,8 @@ namespace Framework::Scripting::Builtins {
             if (!IsClientScripting(isolate)) {
                 cls->function("kick", &Player::Kick, v8pp::metadata::docs("void", {v8pp::metadata::param("reason", "string", true, "Optional reason shown to the disconnected player; omitting it uses the generic kicked reason.")}, "Disconnects this player from the server."));
                 cls->function("emit", &Player::Emit,
-                    v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client event name."), v8pp::metadata::param("payloadJson", "string", true, "Optional JSON payload forwarded verbatim to the owning client.")},
-                        "Emits a named script event to this player's client connection."));
+                    v8pp::metadata::docs("void", {v8pp::metadata::param("eventName", "string", false, "Client event name."), v8pp::metadata::param("payloadJson", "string", true, "Optional JSON payload forwarded verbatim to the owning client, at most 1 MiB.")},
+                        "Emits a named script event to this player's client connection. Throws when the name is over 1 KiB or the payload over 1 MiB."));
                 cls->function("getIP", &Player::GetAddress, v8pp::metadata::docs("string", {}, "Returns this player's current remote network address.", "Address string, or an empty string when the player or peer is unavailable."));
                 cls->function("setNametagVisible", &Player::SetNametagVisible,
                     v8pp::metadata::docs("void", {v8pp::metadata::param("visible", "boolean", false, "True to show this player's nametag to everyone, false to hide it.")},
