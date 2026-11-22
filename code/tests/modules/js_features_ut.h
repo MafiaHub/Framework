@@ -1031,6 +1031,8 @@ MODULE(js_features, {
             "{ font: 'x'.repeat(65) }",
             "{ minDrawDistance: -1 }",
             "{ minFadeDistance: 'far' }",
+            "{ attachBone: 7 }",
+            "{ attachBone: 'b'.repeat(65) }",
         };
         for (const char *options : rejected) {
             STREQUALS(RunJSErrorName(engine, std::string("TextLabel.create(0, 0, 0, 'x', ") + options + ")").c_str(), "TypeError");
@@ -1088,6 +1090,16 @@ MODULE(js_features, {
                                       "return [o.minDrawDistance, o.minFadeDistance, o.font, copy.minDrawDistance, copy.font, l.minDrawDistance, l.minFadeDistance, JSON.stringify(l.font)].join(); })()")
                       .c_str(),
             "5,7,Inter,5,Inter,3,4,\"\"");
+        // The bone goes with the target: kept by update() and a re-attach through options, set by attachTo() (none when
+        // omitted), cleared by detaching.
+        STREQUALS(RunJSString(engine, "(() => { const t = TextLabel.create(0, 0, 0, 't'); const l = TextLabel.create(0, 0, 0, 'x', { attachTo: t, attachBone: 'head', offset: [0, 0, 5] }); const o = l.getOptions(); "
+                                      "l.update({ text: 'y' }); const kept = l.attachBone; l.update({ attachTo: t }); const reattached = l.attachBone; l.attachTo(t, [0, 0, 1], 'spine_03'); const viaCall = l.attachBone; "
+                                      "l.attachTo(t); const omitted = JSON.stringify(l.attachBone); l.update({ attachBone: 'Head' }); l.detach(); "
+                                      "return [o.attachBone, kept, reattached, viaCall, omitted, JSON.stringify(l.attachBone), JSON.stringify(l.getOptions().attachBone)].join(); })()")
+                      .c_str(),
+            "head,head,head,spine_03,\"\",\"\",\"\"");
+        STREQUALS(RunJSErrorName(engine, "const t3 = TextLabel.create(0, 0, 0, 't'); TextLabel.create(0, 0, 0, 'x').attachTo(t3, undefined, 5)").c_str(), "TypeError");
+
         // update() takes the label together with what it follows, before and after the options name it.
         STREQUALS(RunJSErrorName(engine, "const t2 = TextLabel.create(0, 0, 0, 't'); const l2 = TextLabel.create(0, 0, 0, 'x'); l2.update({ attachTo: t2, offset: [0, 0, 2] }); if (l2.getOptions().attachTo !== t2.id) throw new RangeError('not attached'); "
                                          "l2.update({ text: 'moved', hideForTarget: true }); if (l2.getOptions().attachTo !== t2.id || l2.getOptions().text !== 'moved') throw new RangeError('lost its target')")

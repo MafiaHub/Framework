@@ -328,6 +328,7 @@ namespace Framework::Networking::Replication {
         _pass.owner       = ownerGUID;
         _pass.world       = GetVirtualWorld();
         _pass.position    = position;
+        _pass.target      = streaming.targetGUID;
         _pass.unthrottled = streaming.alwaysVisible || streaming.targetGUID != MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
@@ -478,19 +479,29 @@ namespace Framework::Networking::Replication {
         return QueryRemoteConstruction_ServerConstruction(sourceConnection, IsServerPeer());
     }
 
+    bool NetworkEntity::SeenFrom(MafiaNet::VirtualWorldId world, MafiaNet::PeerGuid target, MafiaNet::Connection_RM3 *destinationConnection) {
+        // The target of setVisibleTo stands in for the dimension gate, as it does in the interest
+        // grid: gating it here too would have the grid offer what construction then refuses, and
+        // ReplicaManager3 records a refused construction as done, so it would never arrive.
+        if (target != MafiaNet::UNASSIGNED_PEER_GUID && target == MafiaNet::ToPeerGuid(destinationConnection->GetRakNetGUID())) {
+            return true;
+        }
+        return MafiaNet::VirtualWorldsCanSee(world, destinationConnection->GetVirtualWorld());
+    }
+
     MafiaNet::RM3ConstructionState NetworkEntity::QueryConstruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) {
         if (!IsServerPeer()) {
             return VirtualWorldReplica3::QueryConstruction(destinationConnection, replicaManager3);
         }
         // Not the pass's view (_pass): that is taken when the pass serializes, after it has
         // constructed, and a new entity has none yet.
-        MafiaNet::VirtualWorldId world = 0;
+        bool seen = false;
         {
             const Detail::EntityGuard guard(*this, false);
-            world = GetVirtualWorld();
+            seen = SeenFrom(GetVirtualWorld(), streaming.targetGUID, destinationConnection);
         }
         const MafiaNet::RM3ConstructionState within = QueryConstructionWithinWorld(destinationConnection, replicaManager3);
-        if (within == MafiaNet::RM3CS_SEND_CONSTRUCTION && !MafiaNet::VirtualWorldsCanSee(world, destinationConnection->GetVirtualWorld())) {
+        if (within == MafiaNet::RM3CS_SEND_CONSTRUCTION && !seen) {
             return MafiaNet::RM3CS_NO_ACTION;
         }
         return within;
@@ -500,13 +511,13 @@ namespace Framework::Networking::Replication {
         if (!IsServerPeer()) {
             return VirtualWorldReplica3::QueryDestruction(destinationConnection, replicaManager3);
         }
-        MafiaNet::VirtualWorldId world = 0;
+        bool seen = false;
         {
             const Detail::EntityGuard guard(*this, false);
-            world = GetVirtualWorld();
+            seen = SeenFrom(GetVirtualWorld(), streaming.targetGUID, destinationConnection);
         }
         const bool authoritative = QueryConstructionWithinWorld(destinationConnection, replicaManager3) == MafiaNet::RM3CS_SEND_CONSTRUCTION;
-        if (authoritative && !MafiaNet::VirtualWorldsCanSee(world, destinationConnection->GetVirtualWorld())) {
+        if (authoritative && !seen) {
             return MafiaNet::RM3DS_SEND_DESTRUCTION;
         }
         return QueryDestructionWithinWorld(destinationConnection, replicaManager3);
@@ -518,7 +529,7 @@ namespace Framework::Networking::Replication {
         }
         // The base's rule for an authority, which the server always is, against what the pass took
         // of this entity under its lock: this is asked once per connection, on their workers.
-        if (!MafiaNet::VirtualWorldsCanSee(_pass.world, destinationConnection->GetVirtualWorld())) {
+        if (!SeenFrom(_pass.world, _pass.target, destinationConnection)) {
             return MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE;
         }
         // Relay to everyone except the authoritative owner (no echo back to it).

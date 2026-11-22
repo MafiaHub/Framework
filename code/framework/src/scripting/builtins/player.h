@@ -43,6 +43,10 @@ namespace Framework::Scripting::Builtins {
         // Server-only; payloadJson is JSON.parsed on the client (pass JSON text, empty = no data).
         void Emit(const std::string &eventName, const std::string &payloadJson);
 
+        // The account the player proved when they connected (networking/account_key.h): the one
+        // identifier a script may key ownership or permissions on. Server-only; empty when gone.
+        std::string GetAccountId() const;
+
         // Client-announced identity (RPC::ClientIdentity). Server-only, unverified; empty when absent.
         std::string GetSteamId() const;
         std::string GetEpicId() const;

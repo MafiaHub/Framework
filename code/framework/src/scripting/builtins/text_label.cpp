@@ -53,6 +53,7 @@ namespace Framework::Scripting::Builtins {
             std::optional<glm::vec3> position;
             std::optional<uint64_t> attachTo; // 0 detaches
             std::optional<glm::vec3> offset;
+            std::optional<std::string> attachBone; // "" = the entity itself
             std::optional<float> fontSize;
             std::optional<Networking::Replication::Entities::TextLabelSizeMode> sizeMode;
             std::optional<float> minSize;
@@ -83,7 +84,7 @@ namespace Framework::Scripting::Builtins {
             std::vector<MafiaNet::PeerGuid> hideFromGuids;
         };
 
-        constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "fontSize", "font", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth",
+        constexpr std::string_view kOptionKeys[] {"text", "markup", "position", "attachTo", "offset", "attachBone", "fontSize", "font", "sizeMode", "minSize", "maxSize", "color", "opacity", "style", "outline", "shadow", "background", "align", "anchor", "lineSpacing", "maxWidth",
             "drawDistance", "fadeDistance", "minDrawDistance", "minFadeDistance", "occlusion", "virtualWorld", "showTo", "hideFrom", "hideForTarget"};
 
         constexpr std::pair<std::string_view, Networking::Replication::Entities::TextLabelStyle> kStyles[] {{"none", Networking::Replication::Entities::TextLabelStyle::None}, {"shadow", Networking::Replication::Entities::TextLabelStyle::Shadow},
@@ -223,6 +224,16 @@ namespace Framework::Scripting::Builtins {
             return static_cast<uint64_t>(n);
         }
 
+        // A bone or socket name for attachBone; null or "" follows the entity itself.
+        std::optional<std::string> BoneName(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
+            std::string bone = value->IsString() ? v8pp::from_v8<std::string>(isolate, value) : std::string();
+            if (value->IsNull() || (value->IsString() && bone.size() <= TextLabel::kMaxBoneBytes)) {
+                return bone;
+            }
+            Fail(isolate, name + " must be a bone or socket name of at most " + std::to_string(TextLabel::kMaxBoneBytes) + " bytes, or null");
+            return std::nullopt;
+        }
+
         // A player handle or network id. Unlike for attachTo, null is not one.
         std::optional<uint64_t> PlayerId(v8::Isolate *isolate, v8::Local<v8::Value> value, const std::string &name) {
             if (value->IsNullOrUndefined()) {
@@ -345,6 +356,9 @@ namespace Framework::Scripting::Builtins {
                 }
                 else if (key == "offset") {
                     ok = (options.offset = Vec3(isolate, value, name)).has_value();
+                }
+                else if (key == "attachBone") {
+                    ok = (options.attachBone = BoneName(isolate, value, name)).has_value();
                 }
                 else if (key == "fontSize") {
                     ok = number(TextLabel::kMinFontSize, TextLabel::kMaxFontSize, options.fontSize);
@@ -627,13 +641,14 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        void AttachLabel(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, Networking::Replication::NetworkEntity &target, const glm::vec3 &offset) {
+        void AttachLabel(Networking::Replication::ReplicationManager &replication, Networking::Replication::Entities::TextLabelEntity &label, Networking::Replication::NetworkEntity &target, const glm::vec3 &offset, const std::string &bone) {
             if (label.attachNetworkId == 0) {
                 label.ownPosition     = label.position;
                 label.ownVirtualWorld = label.GetVirtualWorld();
             }
             label.attachNetworkId = target.GetNetworkID();
             label.attachOffset    = offset;
+            label.attachBone      = bone;
             // From where the target is now, rather than from the next tick.
             Follow(replication, label, target);
         }
@@ -644,6 +659,7 @@ namespace Framework::Scripting::Builtins {
             }
             label.attachNetworkId = 0;
             label.attachOffset    = glm::vec3(0.0f);
+            label.attachBone.clear();
             label.position        = label.ownPosition;
             label.SetVirtualWorld(label.ownVirtualWorld);
             HideFromTarget(replication, label, nullptr);
@@ -667,11 +683,16 @@ namespace Framework::Scripting::Builtins {
                 }
                 else if (target) {
                     // Checked by the caller before anything was applied; gone since, it is left as it was.
-                    AttachLabel(replication, label, *target, options.offset.value_or(label.attachOffset));
+                    AttachLabel(replication, label, *target, options.offset.value_or(label.attachOffset), options.attachBone.value_or(label.attachBone));
                 }
             }
-            else if (options.offset) {
-                label.attachOffset = *options.offset;
+            else {
+                if (options.offset) {
+                    label.attachOffset = *options.offset;
+                }
+                if (options.attachBone) {
+                    label.attachBone = *options.attachBone;
+                }
             }
             if (options.fontSize) {
                 SetLabelFontSize(label, *options.fontSize);
@@ -841,6 +862,7 @@ namespace Framework::Scripting::Builtins {
                 put(out, "attachTo", v8::Null(isolate));
             }
             put(out, "offset", vec(label.attachOffset));
+            set(out, "attachBone", label.attachBone);
             set(out, "fontSize", label.fontSize);
             set(out, "font", label.font);
             set(out, "sizeMode", EnumName(label.sizeMode, kSizeModes));
@@ -1031,6 +1053,11 @@ namespace Framework::Scripting::Builtins {
         }
     }
 
+    std::string TextLabel::GetAttachBone() const {
+        const auto label = ResolveLabel();
+        return label ? label->attachBone : std::string();
+    }
+
     uint32_t TextLabel::GetStyle() const {
         const auto label = ResolveLabel();
         return label ? static_cast<uint32_t>(label->style) : 0;
@@ -1048,7 +1075,7 @@ namespace Framework::Scripting::Builtins {
         return networkId != _id && Lives(networkId);
     }
 
-    bool TextLabel::AttachTo(uint64_t networkId, const glm::vec3 &offset) {
+    bool TextLabel::AttachTo(uint64_t networkId, const glm::vec3 &offset, const std::string &bone) {
         if (networkId == 0 || networkId == _id) {
             return false;
         }
@@ -1057,7 +1084,9 @@ namespace Framework::Scripting::Builtins {
         if (!label || !label.target) {
             return false;
         }
-        AttachLabel(*CoreModules::GetReplication(), *label, *label.target, offset);
+        std::string name = bone;
+        Utils::StringUtils::TruncateUtf8(name, kMaxBoneBytes);
+        AttachLabel(*CoreModules::GetReplication(), *label, *label.target, offset, name);
         _attached.insert(_id);
         return true;
     }
@@ -1173,6 +1202,7 @@ namespace Framework::Scripting::Builtins {
                 .property("minDrawDistance", &TextLabel::GetMinDrawDistance, v8pp::metadata::property_docs("number", "Distance in world units up to which the label does not draw."))
                 .property("minFadeDistance", &TextLabel::GetMinFadeDistance, v8pp::metadata::property_docs("number", "Distance in world units where the label is fully faded in."))
                 .property("font", &TextLabel::GetFont, v8pp::metadata::property_docs("string", "The font family it asks for; empty is the game's font."))
+                .property("attachBone", &TextLabel::GetAttachBone, v8pp::metadata::property_docs("string", "The bone or socket of its target it follows; empty follows the entity."))
                 .property("style", &TextLabel::GetStyle, v8pp::metadata::property_docs("number", "The preset nearest the current look: 0 none, 1 shadow, 2 outline, 3 box."));
 
             // setColor accepts either a Color or byte components (r, g, b, a from 0-255), so scripts
@@ -1209,7 +1239,8 @@ namespace Framework::Scripting::Builtins {
             cls->prototype_function("attachTo", &TextLabel::JS_AttachTo,
                 v8pp::metadata::docs("void",
                     {v8pp::metadata::param("target", "Entity | number", false, "The entity to follow, or its network id."),
-                        v8pp::metadata::param("offset", "Vector3 | { x: number; y: number; z: number }", true, "Where to draw relative to it; the game decides the reference point (a player's head, say).")},
+                        v8pp::metadata::param("offset", "Vector3 | { x: number; y: number; z: number }", true, "Where to draw relative to it, in world axes; the game decides the reference point (a player's head, say) unless a bone is given."),
+                        v8pp::metadata::param("bone", "string | null", true, "A bone or socket of the target to follow every frame, at most 64 bytes; the offset counts from it. Omitted or null follows the entity.")},
                     "Follows another live entity instead of staying at the label's own position. It streams from where the target is, moves into its virtual world and is destroyed with it."));
             cls->prototype_function("getOptions", &TextLabel::JS_GetOptions, v8pp::metadata::docs("TextLabelOptions", {}, "The label's current look and placement, in the shape update() takes. The audience is left out: see getAudience()."));
             cls->prototype_function("getAudience", &TextLabel::JS_GetAudience,
@@ -1233,7 +1264,9 @@ namespace Framework::Scripting::Builtins {
         type.add_property("markup", optional("boolean"), "Parse inline tags: {#RRGGBB} / {#RRGGBBAA} colour, {#} back to `color`, {b}{/b}, {i}{/i}, {{ for a brace. Default false.");
         type.add_property("position", optional("Vector3 | { x: number; y: number; z: number }"), "Where the label stands while it is not attached, and returns to when detached.");
         type.add_property("attachTo", optional("Entity | number | null"), "Another live entity to follow, or its network id; null or 0 detaches. The label is destroyed with it.");
-        type.add_property("offset", optional("Vector3 | { x: number; y: number; z: number }"), "Relative to the attached entity; the game decides the reference point (a player's head, say).");
+        type.add_property("offset", optional("Vector3 | { x: number; y: number; z: number }"), "Relative to the attached entity, in world axes; the game decides the reference point (a player's head, say) unless attachBone names one.");
+        type.add_property("attachBone", optional("string | null"),
+            "A bone or socket of the attached entity (\"head\", say) that viewers' clients follow every frame, so the label keeps up with sitting, kneeling or riding; offset counts from it. The game resolves the name; for one the target lacks it typically keeps its usual reference point. Empty or null (default) follows the entity. At most 64 bytes. It stays through update(), even one that names another attachTo, and detaching clears it.");
         type.add_property("fontSize", optional("number"), "Pixels, 1-512. Default 16.");
         type.add_property("font", optional("string | null"), "A family viewers' clients registered with Fonts.register; {b} and {i} use its bold and italic faces. Empty or null (default), or a family a viewer's client never registered, is the game's font. At most 64 bytes.");
         type.add_property("sizeMode", optional("\"screen\" | \"world\""), "\"screen\" (default): fontSize pixels at any distance. \"world\": fontSize pixels at one metre on a 1080p view, shrinking with distance.");
@@ -1443,10 +1476,17 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
         }
+        std::optional<std::string> bone = std::string();
+        if (info.Length() > 2 && !info[2]->IsUndefined()) {
+            bone = BoneName(isolate, info[2], "bone");
+            if (!bone) {
+                return;
+            }
+        }
         if (*target == 0) {
             self->Detach();
         }
-        else if (!self->AttachTo(*target, *offset)) {
+        else if (!self->AttachTo(*target, *offset, *bone)) {
             Fail(isolate, "attachTo must be another live entity");
         }
     }

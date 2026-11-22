@@ -11,6 +11,7 @@
 #include "../../connection_gate.h"
 
 #include <core_modules.h>
+#include <networking/account_key.h>
 #include <scripting/engine_helpers.h>
 #include <scripting/scripting_catalog.h>
 
@@ -44,6 +45,7 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
         v8::Local<v8::Object> connection = v8::Object::New(isolate);
 
         DefineValue(isolate, context, connection, "nickname", v8pp::to_v8(isolate, identity.name));
+        DefineValue(isolate, context, connection, "accountId", v8pp::to_v8(isolate, Framework::Networking::AccountIdOf(identity.publicKey)));
         DefineValue(isolate, context, connection, "steamId", v8pp::to_v8(isolate, identity.steamId));
         DefineValue(isolate, context, connection, "epicId", v8pp::to_v8(isolate, identity.epicId));
         DefineValue(isolate, context, connection, "discordId", v8pp::to_v8(isolate, identity.discordId));
@@ -110,8 +112,11 @@ namespace Framework::Integrations::Server::Scripting::Builtins {
                 "handler has returned and every Promise a handler returned has settled, then it is let in if a player slot is free (otherwise it is refused as full). `connection.reject()` turns it away instead, and so does a handler "
                 "that throws or rejects, or handlers that have not settled within the server's admission timeout (30 seconds by default, restarted by every `connection.update()`). With no handler at all, every request is let in at once.");
 
-        auto &type = catalog.data_type("PendingConnection", "A player asking to join, handed to `playerConnecting`. Every identifier is reported by the player's own client and is not verified by the server.");
+        auto &type = catalog.data_type("PendingConnection",
+            "A player asking to join, handed to `playerConnecting`. `accountId` is proven: the server checked the request was signed with that account's key before raising the event. Every other identifier is reported by the player's own client "
+            "and is not verified by the server.");
         type.add_property("nickname", "string", "The name the player asked to join under.", true);
+        type.add_property("accountId", "string", "The account the player proved, as `player.accountId` will read once they are in. Check bans and whitelists against it.", true);
         type.add_property("steamId", "string", "Steam identifier the client reported, or an empty string when it had none.", true);
         type.add_property("epicId", "string", "Epic Games account identifier the client reported, or an empty string when it had none.", true);
         type.add_property("discordId", "string", "Discord identifier the client reported, or an empty string when it had none.", true);

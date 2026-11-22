@@ -696,6 +696,10 @@ MODULE(network_packets, {
         out.hardwareId = "hw-3";
         out.epicId     = "epic-4";
         out.ticket     = "one-time-ticket";
+        out.publicKey  = std::string(32, '\0');
+        out.issuedAt   = 1763500000;
+        out.nonce      = std::string("\x00\x01\x02", 3);
+        out.signature  = "sig";
 
         MafiaNet::BitStream bs;
         out.Serialize(&bs, true);
@@ -707,6 +711,22 @@ MODULE(network_packets, {
         STREQUALS(in.hardwareId.c_str(), "hw-3");
         STREQUALS(in.epicId.c_str(), "epic-4");
         STREQUALS(in.ticket.c_str(), "one-time-ticket");
+        // Raw bytes, NULs included: the key and nonce are binary.
+        EQUALS(in.publicKey == std::string(32, '\0'), true);
+        EQUALS(in.issuedAt, uint64_t {1763500000});
+        EQUALS(in.nonce == std::string("\x00\x01\x02", 3), true);
+        STREQUALS(in.signature.c_str(), "sig");
+    });
+
+    IT("refuses an identity cut off before its account proof", {
+        RPC::ClientIdentity out {};
+        out.name = "Jan";
+        MafiaNet::BitStream bs;
+        for (const std::string *field : {&out.name, &out.steamId, &out.discordId, &out.discordName, &out.hardwareId, &out.epicId, &out.ticket}) {
+            bs.Write(*field);
+        }
+        const std::string payload(reinterpret_cast<const char *>(bs.GetData()), bs.GetNumberOfBytesUsed());
+        EQUALS(RPC::ClientIdentity::Decode(payload).has_value(), false);
     });
 
     // The identity is the MafiaNet session payload: bytes the server decodes before any connection

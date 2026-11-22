@@ -12,6 +12,7 @@
 #include <http/webserver.h>
 #include <logging/logger.h>
 #include <utils/crypto.h>
+#include <utils/path.h>
 #include <utils/streamed_assets/transfer.h>
 
 #include <httplib.h>
@@ -262,7 +263,7 @@ namespace Framework::Integrations::Server {
     }
 
     bool AssetFileServer::WriteChunkList(const std::filesystem::path &file, const std::filesystem::path &list) {
-        const std::vector<Utils::StreamedAssets::Chunk> chunks = Utils::StreamedAssets::HashFileChunks(file.string());
+        const std::vector<Utils::StreamedAssets::Chunk> chunks = Utils::StreamedAssets::HashFileChunks(Utils::PathToUtf8(file));
         if (chunks.empty()) {
             return false;
         }

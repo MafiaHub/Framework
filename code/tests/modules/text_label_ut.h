@@ -103,6 +103,7 @@ MODULE(text_label, {
         sent.fadeDistance      = 1800.0f;
         sent.attachNetworkId   = 77;
         sent.attachOffset      = glm::vec3(0.0f, 0.0f, 25.0f);
+        sent.attachBone        = "head";
         sent.ownPosition       = glm::vec3(4.0f, 5.0f, 6.0f);
         sent.markup            = true;
         sent.sizeMode          = TextLabelSizeMode::World;
@@ -146,6 +147,7 @@ MODULE(text_label, {
         EQUALS((got.drawDistance == sent.drawDistance && got.fadeDistance == sent.fadeDistance), true);
         UEQUALS(got.attachNetworkId, sent.attachNetworkId);
         EQUALS((got.attachOffset == sent.attachOffset), true);
+        STREQUALS(got.attachBone.c_str(), "head");
         EQUALS(got.markup, true);
         EQUALS((got.sizeMode == TextLabelSizeMode::World), true);
         EQUALS((got.minSize == 8.0f && got.maxSize == 96.0f && got.opacity == 0.5f), true);

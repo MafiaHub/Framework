@@ -11,6 +11,7 @@
 
 #include <core_modules.h>
 #include <integrations/shared/rpc/emit_script_event.h>
+#include <networking/account_key.h>
 #include <networking/network_peer.h>
 #include <networking/replication/nametag_state.h>
 #include <networking/rpc/client_identity.h>
@@ -46,6 +47,11 @@ namespace Framework::Scripting::Builtins {
         Framework::Integrations::Shared::RPC::EmitScriptEvent ev;
         ev.FromParameters(eventName, payloadJson);
         peer->SendRPC(ev, MafiaNet::ToGuid(owner));
+    }
+
+    std::string Player::GetAccountId() const {
+        const auto identity = ResolveIdentity();
+        return identity ? Networking::AccountIdOf(identity->publicKey) : "";
     }
 
     std::string Player::GetSteamId() const {
@@ -191,11 +197,24 @@ namespace Framework::Scripting::Builtins {
                 cls->function("setNametagText", &Player::SetNametagText,
                     v8pp::metadata::docs("void", {v8pp::metadata::param("text", "string", true, "Text to show instead of the player's name, cut to 64 bytes; empty or omitted restores the name.")}, "Overrides the text drawn on this player's nametag."));
                 cls->function("setNametagColor", &Player::SetNametagColor, v8pp::metadata::docs("void", {v8pp::metadata::param("color", "number", false, "Packed 0xAARRGGBB color.")}, "Tints the text on this player's nametag."));
-                cls->property("steamId", &Player::GetSteamId, v8pp::metadata::property_docs("string", "Authenticated Steam identifier, or an empty string when unavailable."));
-                cls->property("epicId", &Player::GetEpicId, v8pp::metadata::property_docs("string", "Epic Games account identifier the client reported, not verified by the server, or an empty string when unavailable."));
-                cls->property("discordId", &Player::GetDiscordId, v8pp::metadata::property_docs("string", "Authenticated Discord identifier, or an empty string when unavailable."));
-                cls->property("discordName", &Player::GetDiscordName, v8pp::metadata::property_docs("string", "Discord username the client reported, not verified by the server, or an empty string when unavailable."));
-                cls->property("hardwareId", &Player::GetHardwareId, v8pp::metadata::property_docs("string", "Framework hardware identifier, or an empty string when unavailable."));
+                cls->property("accountId", &Player::GetAccountId,
+                    v8pp::metadata::property_docs("string", "The account this player proved when they connected: 32 hex characters, the same on every server and in every session, that no other client can claim. Key saved data, ownership, bans and permissions on it. "
+                                                            "It stands for a key the player's client keeps on their computer, so a player who loses that file starts a new account. Empty once the player has left."));
+                cls->property("steamId", &Player::GetSteamId,
+                    v8pp::metadata::property_docs("string",
+                        "Steam identifier, or an empty string when unavailable. Reported by the player's client and not verified: a modified client can send anyone's. Show it or log it; never key ownership, bans or permissions on it, which is what `accountId` is for."));
+                cls->property("epicId", &Player::GetEpicId,
+                    v8pp::metadata::property_docs("string",
+                        "Epic Games account identifier, or an empty string when unavailable. Reported by the player's client and not verified: a modified client can send anyone's. Show it or log it; never key ownership, bans or permissions on it, which is what `accountId` is for."));
+                cls->property("discordId", &Player::GetDiscordId,
+                    v8pp::metadata::property_docs("string",
+                        "Discord identifier, or an empty string when unavailable. Reported by the player's client and not verified: a modified client can send anyone's. Show it or log it; never key ownership, bans or permissions on it, which is what `accountId` is for. Discord ids are public."));
+                cls->property("discordName", &Player::GetDiscordName,
+                    v8pp::metadata::property_docs("string",
+                        "Discord username, or an empty string when unavailable. Reported by the player's client and not verified: a modified client can send anyone's. Show it or log it; never key ownership, bans or permissions on it, which is what `accountId` is for."));
+                cls->property("hardwareId", &Player::GetHardwareId,
+                    v8pp::metadata::property_docs("string",
+                        "Framework hardware identifier, or an empty string when unavailable. Reported by the player's client and not verified: a modified client can send anyone's. Show it or log it; never key ownership, bans or permissions on it, which is what `accountId` is for."));
                 cls->property("ping", &Player::GetPing, v8pp::metadata::property_docs("number", "Current round-trip latency in milliseconds, or -1 when unavailable."));
                 cls->property("ip", &Player::GetAddress, v8pp::metadata::property_docs("string", "Current remote network address, or an empty string when unavailable."));
             }
