@@ -42,6 +42,34 @@ namespace Framework::Utils {
         return std::fopen(std::string(utf8).c_str(), mode);
 #endif
     }
+
+    std::string PathForNarrowApi(std::string_view utf8) {
+        const auto isAscii = [](std::string_view text) {
+            for (const char c : text) {
+                if (static_cast<unsigned char>(c) >= 0x80) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        if (isAscii(utf8)) {
+            return std::string(utf8);
+        }
+#ifdef WIN32
+        const std::filesystem::path path = PathFromUtf8(utf8);
+        const DWORD length               = GetShortPathNameW(path.c_str(), nullptr, 0);
+        if (length == 0) {
+            return {};
+        }
+        std::wstring shortPath(length, L'\0');
+        shortPath.resize(GetShortPathNameW(path.c_str(), shortPath.data(), length));
+        const std::string result = PathToUtf8(shortPath);
+        return isAscii(result) ? result : std::string {};
+#else
+        return std::string(utf8);
+#endif
+    }
+
     std::wstring GetAbsolutePathW(const std::wstring &relative) {
 #ifdef WIN32
         static wchar_t executable_path[MAX_PATH] = {'\0'};
