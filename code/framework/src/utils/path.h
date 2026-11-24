@@ -22,6 +22,12 @@ namespace Framework::Utils {
     std::string PathToUtf8(const std::filesystem::path &path);
     // fopen for a UTF-8 path (_wfopen on Windows).
     std::FILE *OpenFileUtf8(std::string_view utf8, const char *mode);
+    // The spelling of a UTF-8 path for a narrow API outside the Framework's control (a game engine's
+    // char* file functions), which reads it in the process code page. An ASCII path is returned as
+    // it is; otherwise, on Windows, the 8.3 short name of the EXISTING path, which is ASCII. Empty
+    // when there is none (the path is absent, or short names are off on its volume). Elsewhere
+    // narrow APIs take UTF-8 and the path is returned as it is.
+    std::string PathForNarrowApi(std::string_view utf8);
 
     std::wstring GetAbsolutePathW(const std::wstring &);
     std::string GetAbsolutePathA(std::string_view relative);

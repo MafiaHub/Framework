@@ -52,6 +52,7 @@ void operator delete(void *block, std::size_t) noexcept {
 #include "modules/network_packets_ut.h"
 #include "modules/network_work_ut.h"
 #include "modules/persistent_config_ut.h"
+#include "modules/path_ut.h"
 #include "modules/playout_buffer_ut.h"
 #include "modules/replication_authority_ut.h"
 #include "modules/replication_parallel_ut.h"
@@ -127,6 +128,7 @@ int main() {
 
     UNIT_MODULE(asset_http);
     UNIT_MODULE(bitops);
+    UNIT_MODULE(path);
     UNIT_MODULE(string_utils);
     UNIT_MODULE(system_graphics);
     UNIT_MODULE(world_text);
