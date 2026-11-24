@@ -12,6 +12,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <random>
 #include <string>
 
 MODULE(path, {
@@ -21,9 +22,12 @@ MODULE(path, {
 
     IT("PathForNarrowApi gives an existing non-ASCII path an ASCII spelling a narrow API opens", {
         // Cyrillic plus a CJK character no single-byte code page holds: means the same on every system locale.
-        const std::filesystem::path base = std::filesystem::temp_directory_path() / std::u8string(u8"fw_\u041F\u041A_\u4E2D");
-        std::filesystem::remove_all(base);
-        std::filesystem::create_directories(base);
+        // A name of its own, created here: another test process cannot pick the same folder.
+        std::filesystem::path base;
+        std::random_device random;
+        do {
+            base = std::filesystem::temp_directory_path() / (std::u8string(u8"fw_\u041F\u041A_\u4E2D_") + std::filesystem::path(std::to_string(random())).u8string());
+        } while (!std::filesystem::create_directory(base));
         const std::string root = Framework::Utils::PathToUtf8(base);
         std::FILE *written     = Framework::Utils::OpenFileUtf8(root + "/x.sds", "wb");
         EQUALS(written != nullptr, true);
@@ -32,13 +36,19 @@ MODULE(path, {
             std::fclose(written);
         }
 
-        // On Windows the ASCII short name; elsewhere narrow APIs take UTF-8 and the path is kept.
+        // On Windows the ASCII short name; elsewhere narrow APIs take UTF-8 and the path is kept. A Windows
+        // volume with short names off has none to give: nothing to open then.
         const std::string narrow = Framework::Utils::PathForNarrowApi(root);
-        EQUALS(narrow.empty(), false);
-        std::FILE *read = std::fopen((narrow + "/x.sds").c_str(), "rb");
-        EQUALS(read != nullptr, true);
-        if (read) {
-            std::fclose(read);
+        const bool windows       = std::filesystem::path::preferred_separator == L'\\';
+        if (!windows) {
+            EQUALS(narrow == root, true);
+        }
+        if (!narrow.empty()) {
+            std::FILE *read = std::fopen((narrow + "/x.sds").c_str(), "rb");
+            EQUALS(read != nullptr, true);
+            if (read) {
+                std::fclose(read);
+            }
         }
         std::filesystem::remove_all(base);
     });
