@@ -68,6 +68,22 @@ namespace Framework::GUI {
     }
 
     View::~View() {
+        // CloseBrowser is async: CEF still calls these handlers until OnBeforeClose,
+        // after this View and its SDK are gone. Unhook them first.
+        if (_cefClient) {
+            _cefClient->Detach();
+        }
+        if (_loadHandler) {
+            _loadHandler->SetViewEventCallback(nullptr);
+        }
+        if (_displayHandler) {
+            _displayHandler->SetViewEventCallback(nullptr);
+        }
+        if (_lifeSpanHandler) {
+            _lifeSpanHandler->SetViewEventCallback(nullptr);
+            _lifeSpanHandler->SetOnBeforeBrowseCallback(nullptr);
+        }
+
         if (_browser) {
             _browser->GetHost()->CloseBrowser(true);
             _browser = nullptr;

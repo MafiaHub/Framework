@@ -62,6 +62,12 @@ namespace Framework::GUI::CEF {
             _onViewEvent = std::move(cb);
         }
 
+        // CEF keeps the client alive past its View; cut what points back into it.
+        void Detach() {
+            _onViewEvent = nullptr;
+            _sdk         = nullptr;
+        }
+
         IMPLEMENT_REFCOUNTING(Client);
     };
 } // namespace Framework::GUI::CEF
