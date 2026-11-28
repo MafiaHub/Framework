@@ -826,6 +826,11 @@ namespace Framework::Integrations::Client {
             if (auto *replication = net->GetReplicationManager()) {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(Framework::Utils::Time::SecondsToMs(_serverTickRate)));
+                // Scripting starts before this, with no replication to subscribe to: the subscription is made here.
+                Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
+                _stateBagEvents = Integrations::Shared::Scripting::InstallStateBagEvents([this](v8::Isolate *isolate, uint64_t networkId) {
+                    return WrapScriptEntity(isolate, networkId);
+                });
             }
             // Visibility is left alone: resources have already started, and a
             // Chat.setUIVisible(false) they issued must survive the session opening.
@@ -881,6 +886,7 @@ namespace Framework::Integrations::Client {
 
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
             // connection drops (QueryActionOnPopConnection_Client).
+            Integrations::Shared::Scripting::ReleaseStateBagEvents(_stateBagEvents);
             CoreModules::SetReplication(nullptr);
 
             _chatBox.SetSessionActive(false);
