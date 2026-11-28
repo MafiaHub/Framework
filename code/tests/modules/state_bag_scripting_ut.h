@@ -8,7 +8,10 @@
 
 #pragma once
 
+#include "core_modules.h"
 #include "integrations/shared/scripting/state_bag_events.h"
+#include "networking/network_server.h"
+#include "networking/replication/replication_manager.h"
 #include "networking/replication/state_bag.h"
 #include "scripting/builtins/state_bag.h"
 #include "scripting/node_engine.h"
@@ -40,6 +43,25 @@ MODULE(state_bag_scripting, {
                    return v8::Local<v8::Value>();
                }) == Framework::Networking::Replication::kInvalidStateChangeHandle,
             true);
+    });
+
+    // The client's scripting starts before its connection hands CoreModules a replication manager, so the
+    // subscription made then is the case above. One made once the manager is registered, as the client now
+    // makes it on connection ready, is a real one, and the disconnect's release drops it again.
+    IT("subscribes once replication is registered, and releases it again", {
+        Framework::Networking::NetworkServer peer;
+        auto *manager = peer.GetReplicationManager();
+        manager->Init(&peer, true);
+        Framework::CoreModules::SetReplication(manager);
+        auto handle = Events::InstallStateBagEvents([](v8::Isolate *, uint64_t) {
+            return v8::Local<v8::Value>();
+        });
+        const bool subscribed = handle != Framework::Networking::Replication::kInvalidStateChangeHandle;
+        Events::ReleaseStateBagEvents(handle);
+        const bool released = handle == Framework::Networking::Replication::kInvalidStateChangeHandle;
+        Framework::CoreModules::SetReplication(nullptr);
+        EQUALS(subscribed, true);
+        EQUALS(released, true);
     });
 
     IT("releasing an unset subscription does nothing", {
